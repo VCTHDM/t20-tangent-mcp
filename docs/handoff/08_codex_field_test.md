@@ -124,3 +124,14 @@ door: PASS
 清理还原: PASS
 env={'CMDDIA': 1, 'FILEDIA': 1, 'OSMODE': 0, 'CMDACTIVE': 0}
 ```
+
+## 9. 导出替代命令探测
+
+`scripts/itest_17_export_alternatives.py` 固化了以下探测，恢复只发 ESC，不使用 `WM_CLOSE`：
+
+- `TPartSaveAs`
+  - 空输入返回 ok，但无实体增量、无输出文件线索、无弹框；判断为 no-op，暂不封装。
+- `TGetXML`
+  - 空输入触发 `#32770` 弹框，标题：`天正模型导出到TGL`。
+  - ESC 后恢复成功，环境回到 `CMDACTIVE=0 / CMDDIA=1 / FILEDIA=1 / OSMODE=0`。
+  - 结论：不可静默封装。

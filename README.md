@@ -86,7 +86,7 @@ MCP 工具共 9 个：上游 8 个（drawing/entity/layer/block/annotation/pid/v
 | `docs/handoff/06_gpt_tmelev_crash_stop.md` | `TMElev` 试驱动后闪退停手记录 |
 | `docs/handoff/07_codex_branch_takeover.md` | Codex 接管本分支后的安全门禁与当前状态 |
 | `docs/handoff/08_codex_field_test.md` | Codex 本轮真机联调结果（bringup/E2E/elevation/opening props） |
-| `scripts/itest_01..16_*.py` | 可重复的真机联调管线（引导/探测/试驱动/E2E/恢复/清理） |
+| `scripts/itest_01..17_*.py` | 可重复的真机联调管线（引导/探测/试驱动/E2E/恢复/清理） |
 
 ## 分工规则（二人制：fable = 执行人/审查者，GPT = 辅助执行）
 
