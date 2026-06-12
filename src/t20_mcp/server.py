@@ -1,6 +1,6 @@
-"""AutoCAD MCP Server v3.1 — 8 consolidated tools with operation dispatch.
+"""AutoCAD MCP Server v3.1 — 9 consolidated tools with operation dispatch.
 
-Tools: drawing, entity, layer, block, annotation, pid, view, system
+Tools: drawing, entity, layer, block, annotation, pid, view, system, tangent (天正 T20)
 """
 
 from __future__ import annotations
@@ -15,6 +15,7 @@ from t20_mcp.client import (
     add_screenshot_if_available,
     get_backend,
 )
+from t20_mcp.tools.tangent import register_tangent_tool
 
 # FastMCP validates return types via Pydantic. Tools that may return
 # ImageContent (screenshot) alongside TextContent need a union return type.
@@ -23,6 +24,10 @@ ToolResult = str | list
 log = structlog.get_logger()
 
 mcp = FastMCP("autocad-mcp")
+
+# 天正 T20 建筑实体工具 (wall/dimension/door 真机已验证, 默认 dry-run;
+# 详见 docs/handoff/05_fable_field_test.md)。
+register_tangent_tool(mcp)
 
 
 # ==========================================================================
