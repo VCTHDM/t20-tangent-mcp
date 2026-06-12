@@ -8,7 +8,7 @@ from __future__ import annotations
 import structlog
 from mcp.server.fastmcp import FastMCP
 
-from autocad_mcp.client import (
+from t20_mcp.client import (
     _error,
     _json,
     _safe,
@@ -504,7 +504,7 @@ async def system(
         )
     elif operation == "init":
         # Force re-initialization
-        from autocad_mcp import client
+        from t20_mcp import client
         client._backend = None
         backend = await get_backend()
         result = await backend.status()
@@ -546,5 +546,5 @@ def main():
         ],
     )
 
-    log.info("autocad_mcp_starting", version="3.1.0")
+    log.info("t20_mcp_starting", version="3.1.0")
     mcp.run(transport="stdio")

@@ -1,10 +1,10 @@
 """File-based IPC backend for AutoCAD LT.
 
 Protocol:
-1. Python writes JSON command to C:/temp/autocad_mcp_cmd_{request_id}.json
+1. Python writes JSON command to C:/temp/t20_mcp_cmd_{request_id}.json
 2. Python types the fixed string "(c:mcp-dispatch)" + Enter
 3. LISP reads cmd, dispatches via command map, writes result to
-   C:/temp/autocad_mcp_result_{request_id}.json
+   C:/temp/t20_mcp_result_{request_id}.json
 4. Python polls for result file (100ms intervals, 10s timeout)
 """
 
@@ -20,8 +20,8 @@ from pathlib import Path
 
 import structlog
 
-from autocad_mcp.backends.base import AutoCADBackend, BackendCapabilities, CommandResult
-from autocad_mcp.config import IPC_DIR, IPC_TIMEOUT, LISP_DIR
+from t20_mcp.backends.base import AutoCADBackend, BackendCapabilities, CommandResult
+from t20_mcp.config import IPC_DIR, IPC_TIMEOUT, LISP_DIR
 
 log = structlog.get_logger()
 
@@ -90,7 +90,7 @@ class FileIPCBackend(AutoCADBackend):
 
         # Set up screenshot provider
         try:
-            from autocad_mcp.screenshot import Win32ScreenshotProvider
+            from t20_mcp.screenshot import Win32ScreenshotProvider
 
             self._screenshot_provider = Win32ScreenshotProvider(self._hwnd)
         except Exception:
@@ -140,8 +140,8 @@ class FileIPCBackend(AutoCADBackend):
     async def _dispatch_unlocked(self, command: str, params: dict) -> CommandResult:
         """Core IPC logic (must be called under _lock)."""
         request_id = uuid.uuid4().hex[:12]
-        cmd_file = self._ipc_dir / f"autocad_mcp_cmd_{request_id}.json"
-        result_file = self._ipc_dir / f"autocad_mcp_result_{request_id}.json"
+        cmd_file = self._ipc_dir / f"t20_mcp_cmd_{request_id}.json"
+        result_file = self._ipc_dir / f"t20_mcp_result_{request_id}.json"
         tmp_file = cmd_file.with_suffix(".tmp")
 
         try:
@@ -247,7 +247,7 @@ class FileIPCBackend(AutoCADBackend):
         """Remove stale IPC files from previous sessions."""
         try:
             now = time.time()
-            for pattern in ("autocad_mcp_*.json", "autocad_mcp_*.tmp", "autocad_mcp_lisp_*.lsp"):
+            for pattern in ("t20_mcp_*.json", "t20_mcp_*.tmp", "t20_mcp_lisp_*.lsp"):
                 for f in self._ipc_dir.glob(pattern):
                     if now - f.stat().st_mtime > STALE_THRESHOLD:
                         f.unlink(missing_ok=True)
@@ -302,7 +302,7 @@ class FileIPCBackend(AutoCADBackend):
         File persists for session; cleaned up by _cleanup_stale_files().
         """
         request_id = uuid.uuid4().hex[:12]
-        code_file = self._ipc_dir / f"autocad_mcp_lisp_{request_id}.lsp"
+        code_file = self._ipc_dir / f"t20_mcp_lisp_{request_id}.lsp"
         code_file.write_text(code, encoding="utf-8")
         return await self._dispatch("execute-lisp", {
             "code_file": str(code_file).replace("\\", "/")

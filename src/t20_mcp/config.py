@@ -78,7 +78,7 @@ def detect_backend() -> str:
     if backend_env in ("auto", "file_ipc"):
         if WIN32_AVAILABLE:
             try:
-                from autocad_mcp.backends.file_ipc import find_autocad_window
+                from t20_mcp.backends.file_ipc import find_autocad_window
 
                 hwnd = find_autocad_window()
                 if hwnd:

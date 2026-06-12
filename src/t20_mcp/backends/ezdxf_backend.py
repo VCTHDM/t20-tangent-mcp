@@ -10,8 +10,8 @@ from typing import Any
 import ezdxf
 import structlog
 
-from autocad_mcp.backends.base import AutoCADBackend, BackendCapabilities, CommandResult
-from autocad_mcp.screenshot import MatplotlibScreenshotProvider
+from t20_mcp.backends.base import AutoCADBackend, BackendCapabilities, CommandResult
+from t20_mcp.screenshot import MatplotlibScreenshotProvider
 
 log = structlog.get_logger()
 
@@ -610,7 +610,7 @@ class EzdxfBackend(AutoCADBackend):
 
     async def pid_list_symbols(self, category) -> CommandResult:
         """List CTO symbols from disk or built-in catalog."""
-        from autocad_mcp.pid.cto_library import CTO_ROOT, list_symbols
+        from t20_mcp.pid.cto_library import CTO_ROOT, list_symbols
         symbols = list_symbols(category)
         return CommandResult(ok=True, payload={"category": category, "symbols": symbols, "count": len(symbols)})
 

@@ -11,8 +11,8 @@ from typing import Any
 import structlog
 from mcp.types import ImageContent, TextContent
 
-from autocad_mcp.backends.base import AutoCADBackend, CommandResult
-from autocad_mcp.config import ONLY_TEXT_FEEDBACK, detect_backend
+from t20_mcp.backends.base import AutoCADBackend, CommandResult
+from t20_mcp.config import ONLY_TEXT_FEEDBACK, detect_backend
 
 log = structlog.get_logger()
 
@@ -42,11 +42,11 @@ async def get_backend() -> AutoCADBackend:
         backend_name = detect_backend()
 
         if backend_name == "file_ipc":
-            from autocad_mcp.backends.file_ipc import FileIPCBackend
+            from t20_mcp.backends.file_ipc import FileIPCBackend
 
             backend = FileIPCBackend()
         else:
-            from autocad_mcp.backends.ezdxf_backend import EzdxfBackend
+            from t20_mcp.backends.ezdxf_backend import EzdxfBackend
 
             backend = EzdxfBackend()
 

@@ -1,5 +1,5 @@
-"""Entry point: python -m autocad_mcp"""
+"""Entry point: python -m t20_mcp"""
 
-from autocad_mcp.server import main
+from t20_mcp.server import main
 
 main()
