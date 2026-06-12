@@ -81,17 +81,44 @@ MCP 工具共 9 个：上游 8 个（drawing/entity/layer/block/annotation/pid/v
 | `docs/handoff/05_fable_field_test.md` | **真机联调全记录**（发现/修复/崩溃教训/遗留 §6） |
 | `scripts/itest_01..14_*.py` | 可重复的真机联调管线（引导/探测/试驱动/E2E/恢复/清理） |
 
-## 路线图（按优先级）
+## 分工规则（二人制：fable = 执行人/审查者，GPT = 辅助执行）
 
-1. **window 完善**：找 TOpening 门/窗类型的 COM 切换属性与窗模式 `SillHeight`
-   （管线：`itest_10_opening_props.py` 改属性候选名重跑）。
-2. **更多实体封装**（照上面方法论）：标准柱 `TGColumn`、两点标注 `TDimTP`、
-   墙厚标注 `TDimWall`、标高标注 `TMElev`、单线变墙 `TSWall`、搜索房间 `TUpdSpace`。
-3. **轴网替代路径**：逐根轴线 + `TSingleAxisDim` 组合，或 UI 自动化填 `TRectAxis` 框。
-4. **导出替代路径**：调研 `TPartSaveAs`（局部导出）、`TGetXML`（BIM 导出）是否可静默。
-5. **TExplode + ezdxf 读取管线**：仅在临时副本上分解（破坏性！禁止动用户当前图纸）。
-6. **MCP 协议端到端冒烟**：以真实 MCP 客户端连 server 跑一遍 `tangent`。
-7. P1-2 防护补盲：探测天正 WPF（HwndWrapper）对话框。
+执行者读到这里先认领身份，按下面两条规则干活。commit 前缀：fable 用 `[fable]`，
+其他执行者一律 `[assist]`。
 
-> 待办的权威位置：本节（路线图）+ `docs/T20_COMMANDS.md` §3 + `docs/handoff/05_fable_field_test.md` §6。
+**规则 1 —— 以下情况必须 fable，GPT 不得动手：**
+- 改**基础设施**：`_prelude.lsp`、`file_ipc.py`、`mcp_dispatch.lsp`、编码契约相关的任何一行；
+- **疑难现场**：AutoCAD 崩溃/挂死、乱码、环境变量污染、IPC 超时反复出现；
+- **探索性决策**（没有现成管线可抄的）：轴网/导出替代路径选型、TExplode 管线设计；
+- 每批封装**合入前的 review** 与最终验收（MCP 协议冒烟）。
+
+**规则 2 —— 体力活给 GPT，但触发即停：**
+照「封装方法论」五步管线（见上文）可完成的活都归 GPT：批量封装、属性探测、
+文档回填、测试补全。**一旦遇到以下任一情况立即停手**，把现场（脚本输出、
+AutoCAD 命令行回显、最后一次 diff）写进 `docs/handoff/` 新文档后移交 fable，
+禁止自行硬试：
+- 命中规则 1 的任何条目（尤其：想改 prelude / 想强关对话框 / 想猜命令名）；
+- 同一命令试驱动 **2 轮**仍是假成功或 0 实体；
+- 出现弹框阻塞、ping 不通、或任何"教训"清单（见铁律一节）里的现象。
+
+## 待办（按优先级，标了执行人）
+
+**GPT（体力活，照管线抄作业）：**
+1. **window 完善**：`itest_10_opening_props.py` 改属性候选名重跑，找 TOpening
+   门/窗类型 COM 切换属性与窗模式 `SillHeight`；只回填文档与模板参数，不改骨架。
+2. **批量封装 6 命令**：标准柱 `TGColumn`、两点标注 `TDimTP`、墙厚标注 `TDimWall`、
+   标高标注 `TMElev`、单线变墙 `TSWall`、搜索房间 `TUpdSpace`——每条走五步管线，
+   产出模板 + 离线测试 + 文档回填，攒一批等 fable review。
+3. **导出替代探测**：`TPartSaveAs`/`TGetXML` 注册预检 + 最小试驱动；**弹框即记录停手**，
+   只产出调研结论，不做绕过尝试。
+4. 文档/测试补全、截图存档。
+
+**fable（审查与硬骨头）：**
+1. GPT 每批封装的 review + 合入（参照 `docs/handoff/03` 的审查模式）。
+2. **轴网替代路径**选型与实现（逐根轴线+`TSingleAxisDim` 组合 vs UI 自动化）。
+3. **TExplode + ezdxf 管线**设计实现（破坏性！仅临时副本，禁动用户图纸）。
+4. P1-2 防护补盲（天正 WPF/HwndWrapper 对话框探测）——涉及 `file_ipc.py`。
+5. **MCP 协议端到端冒烟**（最终验收，完成后更新完成度表）。
+
+> 待办的权威位置：本节 + `docs/T20_COMMANDS.md` §3 + `docs/handoff/05_fable_field_test.md` §6。
 > 完成一项请同步更新这三处与上方完成度表。
