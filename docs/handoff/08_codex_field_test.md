@@ -135,3 +135,21 @@ env={'CMDDIA': 1, 'FILEDIA': 1, 'OSMODE': 0, 'CMDACTIVE': 0}
   - 空输入触发 `#32770` 弹框，标题：`天正模型导出到TGL`。
   - ESC 后恢复成功，环境回到 `CMDACTIVE=0 / CMDDIA=1 / FILEDIA=1 / OSMODE=0`。
   - 结论：不可静默封装。
+
+## 10. axis_lines 轴网替代路径
+
+`TRectAxis` 仍然是模态对话框命令，不开放 execute。本轮新增 `axis_lines` 作为普通线轴网替代：
+
+```text
+uv run python scripts/itest_18_axis_lines.py
+```
+
+结果：
+
+- 输入：`hspacings=[3000,3000]`、`vspacings=[2000]`
+- 预期普通线数量：5
+- 实体增量：`0 -> 5`
+- UNDO 后实体数：`0`
+- 收尾环境：`CMDACTIVE=0 / CMDDIA=1 / FILEDIA=1 / OSMODE=0`
+
+注意：`axis_lines` 生成的是普通 `LINE`，不是天正 `TCH_*` 智能轴网对象。

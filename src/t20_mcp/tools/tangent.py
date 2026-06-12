@@ -275,6 +275,56 @@ def _gen_axis_grid(data: dict[str, Any]) -> str:
     )
 
 
+def _gen_axis_lines(data: dict[str, Any]) -> str:
+    """普通 LINE 轴线网格。data: {base_x, base_y, hspacings:[...], vspacings:[...], angle?, layer?}"""
+    base_x = _require_coord(data.get("base_x", 0.0), "base_x")
+    base_y = _require_coord(data.get("base_y", 0.0), "base_y")
+    hspacings = _require_spacings(data.get("hspacings"), "hspacings")
+    vspacings = _require_spacings(data.get("vspacings"), "vspacings")
+    angle = _require_range(data.get("angle", 0.0), "angle", *ANGLE_RANGE)
+
+    xs = [0.0]
+    for spacing in hspacings:
+        xs.append(xs[-1] + spacing)
+    ys = [0.0]
+    for spacing in vspacings:
+        ys.append(ys[-1] + spacing)
+
+    theta = math.radians(angle)
+    cos_a = math.cos(theta)
+    sin_a = math.sin(theta)
+
+    def transform(x: float, y: float) -> tuple[float, float]:
+        tx = base_x + x * cos_a - y * sin_a
+        ty = base_y + x * sin_a + y * cos_a
+        return _require_coord(tx, "axis_lines.x"), _require_coord(ty, "axis_lines.y")
+
+    segments: list[tuple[float, float, float, float]] = []
+    max_x = xs[-1]
+    max_y = ys[-1]
+    for x in xs:
+        x1, y1 = transform(x, 0.0)
+        x2, y2 = transform(x, max_y)
+        segments.append((x1, y1, x2, y2))
+    for y in ys:
+        x1, y1 = transform(0.0, y)
+        x2, y2 = transform(max_x, y)
+        segments.append((x1, y1, x2, y2))
+
+    segment_code = " ".join(
+        f"(list {_num(x1)} {_num(y1)} {_num(x2)} {_num(y2)})"
+        for x1, y1, x2, y2 in segments
+    )
+    return _render(
+        "axis_lines",
+        {
+            "SET_LAYER": _set_layer_cmd(data.get("layer")),
+            "SEGMENTS": segment_code,
+            "EXPECTED_COUNT": str(len(segments)),
+        },
+    )
+
+
 def _gen_wall(data: dict[str, Any]) -> str:
     """单段墙体。data: {x1,y1,x2,y2, left_width?, right_width?, height?, wall_type?, layer?}"""
     x1 = _require_coord(data.get("x1"), "x1")
@@ -417,6 +467,7 @@ def _gen_export_t3(data: dict[str, Any]) -> str:
 # 子命令 -> 生成器 映射
 _GENERATORS: dict[str, Callable[[dict[str, Any]], str]] = {
     "axis_grid": _gen_axis_grid,
+    "axis_lines": _gen_axis_lines,
     "wall": _gen_wall,
     "door": _gen_door,
     "window": _gen_window,
@@ -511,6 +562,7 @@ def register_tangent_tool(mcp: Any) -> None:
           door       — 普通门   [部分验证]。{ins_x, ins_y, width?, height?, sill_distance?, layer?}
           window     — 普通窗   [部分验证]。{ins_x, ins_y, width?, height?, sill_height?, layer?}
           axis_grid  — 直线轴网 [仅 dry-run]。{base_x?, base_y?, hspacings:[..], vspacings:[..], angle?, layer?}
+          axis_lines — 普通线轴网 [可执行替代]。{base_x?, base_y?, hspacings:[..], vspacings:[..], angle?, layer?}
           export_t3  — 导出天正3 [仅 dry-run]。{out_path, target_ver?}
 
         注: 验证记录详见 docs/T20_COMMANDS.md 与 docs/handoff/05_fable_field_test.md。

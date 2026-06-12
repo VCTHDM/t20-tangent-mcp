@@ -35,6 +35,14 @@ VALID_CASES: dict[str, dict] = {
         "angle": 0,
         "layer": "AXIS",
     },
+    "axis_lines": {
+        "base_x": 0,
+        "base_y": 0,
+        "hspacings": [3000, 3600, 3000],
+        "vspacings": [4500, 4500],
+        "angle": 0,
+        "layer": "AXIS",
+    },
     "wall": {
         "x1": 0, "y1": 0, "x2": 6000, "y2": 0,
         "left_width": 120, "right_width": 120, "height": 3000,
@@ -129,6 +137,28 @@ class TestParamInjection:
         assert "4500" in code                    # 进深序列
         assert '"30"' in code                    # 旋转角
         assert '"_.-LAYER" "_M" "AXIS"' in code  # 图层注入
+
+    def test_axis_lines_injects_line_segments(self) -> None:
+        code = generate_lisp("axis_lines", {
+            "base_x": 100, "base_y": 200,
+            "hspacings": [3000], "vspacings": [4500],
+            "angle": 0, "layer": "AXIS",
+        })
+        assert '"LINE"' in code
+        assert "(list 100 200 100 4700)" in code
+        assert "(list 3100 200 3100 4700)" in code
+        assert "(list 100 200 3100 200)" in code
+        assert "(list 100 4700 3100 4700)" in code
+        assert "{{" not in _strip_line_comments(code)
+
+    def test_axis_lines_applies_rotation(self) -> None:
+        code = generate_lisp("axis_lines", {
+            "base_x": 0, "base_y": 0,
+            "hspacings": [1000], "vspacings": [1000],
+            "angle": 90,
+        })
+        assert "(list 0 0 -1000 0)" in code
+        assert "(list 0 1000 -1000 1000)" in code
 
     def test_wall_injects_endpoints_and_widths(self) -> None:
         # 真机验证后的 wall 路线: TGWALL 两点画墙 + ActiveX 属性注入宽/高

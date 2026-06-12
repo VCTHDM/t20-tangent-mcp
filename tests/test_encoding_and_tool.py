@@ -251,6 +251,18 @@ class TestTangentDryRun:
         assert payload["dry_run"] is True
         assert "execute_disabled" in payload
 
+    def test_axis_lines_execute_allowed(self, monkeypatch) -> None:
+        backend = _FakeBackend()
+        fn = _register_with_fake_backend(monkeypatch, backend)
+        out = asyncio.run(fn(
+            operation="axis_lines",
+            data={"hspacings": [3000], "vspacings": [3000]},
+            execute=True,
+        ))
+        payload = json.loads(out)
+        assert payload["ok"] is True
+        assert len(backend.calls) == 1
+
     def test_elevation_execute_allowed_with_warning(self, monkeypatch) -> None:
         backend = _FakeBackend()
         fn = _register_with_fake_backend(monkeypatch, backend)
