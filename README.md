@@ -7,15 +7,18 @@ LISP 模板封装。
 
 > 本 README 面向接手者（人或 AI）。读完本页 + 「文档索引」即可继续开发。
 
+> 当前分支 `codex/safe-tangent-batch` 由 Codex 接管推进；不再等待 fable 额度。
+> 但真机安全门禁仍保留：未 E2E 或事故相关命令只允许 dry-run，不开放 execute。
+
 ## 当前完成度：约 60%
 
 | 领域 | 完成度 | 说明 |
 |---|---|---|
 | IPC 基础设施（编码链/窗口识别/模态防护/引导加载） | ~95% | 全部真机验收通过；遗留：天正 WPF 对话框探测盲区 |
 | 命令编目 | 100% | 官方表 454 条全部收录并真机探测注册状态（442/451） |
-| 天正实体封装 | ~25% | wall/dimension 已 E2E 验证，door 部分验证；轴网/导出受对话框阻碍；柱/楼梯/房间/屋顶等未动工 |
+| 天正实体封装 | ~30% | wall/dimension/elevation 已 E2E 验证，door 部分验证；轴网/导出受对话框阻碍；柱/楼梯/房间/屋顶等未动工 |
 | MCP server 集成 | ~90% | 9 工具已注册（含 `tangent`）；经 MCP 协议的端到端冒烟未做 |
-| 测试与联调管线 | ~85% | 离线 64 测试全绿；`scripts/itest_*.py` 可重复真机管线 |
+| 测试与联调管线 | ~85% | 离线测试全绿；`scripts/itest_*.py` 可重复真机管线 |
 
 ## 快速开始
 
@@ -40,6 +43,7 @@ MCP 工具共 9 个：上游 8 个（drawing/entity/layer/block/annotation/pid/v
 |---|---|---|
 | `wall` 墙体 | `TgWall` | ✅ E2E 验证（实体 + COM 属性回读） |
 | `dimension` 逐点标注 | `TDimMP` | ✅ E2E 验证 |
+| `elevation` 标高标注 | `TMElev` | ✅ 双点序列 E2E 验证（实体 `TCH_ELEVATION`）；execute 附 warning，严禁改成单点序列 |
 | `door` 门 | `TOpening` | 🟡 部分验证（execute 附 warning） |
 | `window` 窗 | `TOpening` | 🟡 类型随面板模式、窗台高未保证 |
 | `axis_grid` 轴网 | `TRectAxis` | ⛔ 模态对话框，execute 已禁用（仅 dry-run） |
@@ -79,7 +83,10 @@ MCP 工具共 9 个：上游 8 个（drawing/entity/layer/block/annotation/pid/v
 | `docs/handoff/03_fable_review.md` | 架构审查（P0/P1/P2 整改清单，已全部完成） |
 | `docs/handoff/04_gemini_fixes.md` | 整改记录 |
 | `docs/handoff/05_fable_field_test.md` | **真机联调全记录**（发现/修复/崩溃教训/遗留 §6） |
-| `scripts/itest_01..14_*.py` | 可重复的真机联调管线（引导/探测/试驱动/E2E/恢复/清理） |
+| `docs/handoff/06_gpt_tmelev_crash_stop.md` | `TMElev` 试驱动后闪退停手记录 |
+| `docs/handoff/07_codex_branch_takeover.md` | Codex 接管本分支后的安全门禁与当前状态 |
+| `docs/handoff/08_codex_field_test.md` | Codex 本轮真机联调结果（bringup/E2E/elevation/opening props） |
+| `scripts/itest_01..16_*.py` | 可重复的真机联调管线（引导/探测/试驱动/E2E/恢复/清理） |
 
 ## 分工规则（二人制：fable = 执行人/审查者，GPT = 辅助执行）
 
@@ -107,7 +114,8 @@ AutoCAD 命令行回显、最后一次 diff）写进 `docs/handoff/` 新文档�
 1. **window 完善**：`itest_10_opening_props.py` 改属性候选名重跑，找 TOpening
    门/窗类型 COM 切换属性与窗模式 `SillHeight`；只回填文档与模板参数，不改骨架。
 2. **批量封装 6 命令**：标准柱 `TGColumn`、两点标注 `TDimTP`、墙厚标注 `TDimWall`、
-   标高标注 `TMElev`、单线变墙 `TSWall`、搜索房间 `TUpdSpace`——每条走五步管线，
+   标高标注 `TMElev`（已在 `codex/safe-tangent-batch` E2E 验证）、
+   单线变墙 `TSWall`、搜索房间 `TUpdSpace`——每条走五步管线，
    产出模板 + 离线测试 + 文档回填，攒一批等 fable review。
 3. **导出替代探测**：`TPartSaveAs`/`TGetXML` 注册预检 + 最小试驱动；**弹框即记录停手**，
    只产出调研结论，不做绕过尝试。

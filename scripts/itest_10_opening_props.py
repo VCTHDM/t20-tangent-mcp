@@ -87,15 +87,17 @@ def acad_windows() -> set[int]:
 
 
 def dismiss_new_windows(baseline: set[int]) -> list[str]:
-    closed = []
+    dismissed = []
     for hwnd in acad_windows() - baseline:
-        closed.append(f"{win32gui.GetClassName(hwnd)!r}:{win32gui.GetWindowText(hwnd)!r}")
+        cls = win32gui.GetClassName(hwnd)
+        title = win32gui.GetWindowText(hwnd)
+        dismissed.append(f"{cls!r}:{title!r}")
         win32gui.PostMessage(hwnd, win32con.WM_KEYDOWN, win32con.VK_ESCAPE, 0)
         win32gui.PostMessage(hwnd, win32con.WM_KEYUP, win32con.VK_ESCAPE, 0)
         time.sleep(0.4)
         if win32gui.IsWindow(hwnd) and win32gui.IsWindowVisible(hwnd):
-            win32gui.PostMessage(hwnd, win32con.WM_CLOSE, 0, 0)
-    return closed
+            dismissed.append(f"still-visible:{cls!r}:{title!r}")
+    return dismissed
 
 
 async def count(backend: FileIPCBackend) -> int:

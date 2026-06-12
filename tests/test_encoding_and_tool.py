@@ -231,8 +231,8 @@ class TestTangentDryRun:
         payload = json.loads(out)
         assert "warning" not in payload
 
-    def test_dialog_only_subcommand_execute_refused(self, monkeypatch) -> None:
-        # 真机证实纯对话框命令 (axis_grid/export_t3): execute=True 被拒, 不触碰 backend。
+    def test_execute_disabled_subcommand_refused(self, monkeypatch) -> None:
+        # 高风险/待复核命令: execute=True 被拒, 不触碰 backend。
         backend = _FakeBackend()
         fn = _register_with_fake_backend(monkeypatch, backend)
         for op, data in (
@@ -244,9 +244,22 @@ class TestTangentDryRun:
             assert "execute 已禁用" in payload["error"]
         assert backend.calls == []  # 从未下发
 
-    def test_dialog_only_subcommand_dry_run_notes_disabled(self, monkeypatch) -> None:
+    def test_execute_disabled_subcommand_dry_run_notes_disabled(self, monkeypatch) -> None:
         fn = _register_with_fake_backend(monkeypatch, RuntimeError("unused"))
         out = asyncio.run(fn(operation="export_t3", data={"out_path": "C:/temp/out.dwg"}))
         payload = json.loads(out)
         assert payload["dry_run"] is True
         assert "execute_disabled" in payload
+
+    def test_elevation_execute_allowed_with_warning(self, monkeypatch) -> None:
+        backend = _FakeBackend()
+        fn = _register_with_fake_backend(monkeypatch, backend)
+        out = asyncio.run(fn(
+            operation="elevation",
+            data={"base_x": 0, "base_y": 0, "label_x": 1000, "label_y": 1000},
+            execute=True,
+        ))
+        payload = json.loads(out)
+        assert payload["ok"] is True
+        assert "warning" in payload["payload"]
+        assert len(backend.calls) == 1

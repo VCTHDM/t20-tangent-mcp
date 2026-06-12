@@ -369,6 +369,27 @@ def _gen_dimension(data: dict[str, Any]) -> str:
     )
 
 
+def _gen_elevation(data: dict[str, Any]) -> str:
+    """标高标注。data: {base_x,base_y,label_x?,label_y?,layer?}"""
+    base_x = _require_coord(data.get("base_x"), "base_x")
+    base_y = _require_coord(data.get("base_y"), "base_y")
+    # TMElev 真机试验中单点序列会挂起等待输入; 缺省给出第二点, 永远双点下发。
+    label_x = _require_coord(data.get("label_x", base_x + 1000.0), "label_x")
+    label_y = _require_coord(data.get("label_y", base_y + 1000.0), "label_y")
+    if base_x == label_x and base_y == label_y:
+        raise ParamError("标高基准点与标注放置点不能重合")
+    return _render(
+        "elevation",
+        {
+            "SET_LAYER": _set_layer_cmd(data.get("layer")),
+            "BASE_X": _num(base_x),
+            "BASE_Y": _num(base_y),
+            "LABEL_X": _num(label_x),
+            "LABEL_Y": _num(label_y),
+        },
+    )
+
+
 _ALLOWED_T3_VERSIONS: dict[str, str] = {"t3": "3", "天正3": "3", "3": "3"}
 
 
@@ -400,20 +421,30 @@ _GENERATORS: dict[str, Callable[[dict[str, Any]], str]] = {
     "door": _gen_door,
     "window": _gen_window,
     "dimension": _gen_dimension,
+    "elevation": _gen_elevation,
     "export_t3": _gen_export_t3,
 }
 
 SUBCOMMANDS: tuple[str, ...] = tuple(_GENERATORS)
 
 # 真机部分验证的子命令 (2026-06-12, T20 V10 / AutoCAD 2024):
-# door/window 经 TOPENING 插入, 但门/窗类型取决于天正门窗面板当前模式 (默认门),
-# 类型强制切换与窗台高注入待验证 —— execute=True 下发时附 warning。
-LOW_CONFIDENCE_SUBCOMMANDS: frozenset[str] = frozenset({"door", "window"})
+# execute=True 下发时附 warning。
+LOW_CONFIDENCE_WARNINGS: dict[str, str] = {
+    "door": (
+        "部分行为未经真机完全验证: 门/窗类型取决于天正门窗面板当前模式 (默认插门), "
+        "窗台高注入待窗模式验证 (见 docs/T20_COMMANDS.md)"
+    ),
+    "window": (
+        "部分行为未经真机完全验证: 门/窗类型取决于天正门窗面板当前模式 (默认插门), "
+        "窗台高注入待窗模式验证 (见 docs/T20_COMMANDS.md)"
+    ),
+    "elevation": (
+        "TMElev 已验证双点序列可生成 TCH_ELEVATION; "
+        "不要改成单点序列, 点不足曾导致 IPC 超时并触发 AutoCAD 闪退事故"
+    ),
+}
 
-_UNVERIFIED_WARNING: str = (
-    "部分行为未经真机完全验证: 门/窗类型取决于天正门窗面板当前模式 (默认插门), "
-    "窗台高注入待窗模式验证 (见 docs/T20_COMMANDS.md)"
-)
+LOW_CONFIDENCE_SUBCOMMANDS: frozenset[str] = frozenset(LOW_CONFIDENCE_WARNINGS)
 
 # 真机证实「纯对话框、不可命令行驱动」的子命令: 禁止 execute, 仅 dry-run。
 # axis_grid: TAXISGRID 弹模态框 (#32770), 强关曾致 AutoCAD 致命错误;
@@ -470,12 +501,13 @@ def register_tangent_tool(mcp: Any) -> None:
         **execute (默认 False = dry-run)**: 默认只返回渲染后的 LISP 代码而**不**
         下发到 AutoCAD (不产生任何 IPC 文件); 传 execute=True 才经 execute_lisp
         真正执行。axis_grid 与 export_t3 经真机证实为纯对话框命令, **禁止 execute**
-        (会阻塞 IPC), 仅可 dry-run。door/window 执行成功也会附 warning 字段
+        (会阻塞 IPC), 仅可 dry-run。door/window/elevation 执行成功也会附 warning 字段
         (门/窗类型取决于天正门窗面板当前模式)。
 
         Operations (data 字段) — 真机验证状态 (T20 V10 / AutoCAD 2024):
           wall       — 单段墙体 [已验证]。{x1, y1, x2, y2, left_width?, right_width?, height?, wall_type?, layer?}
           dimension  — 逐点标注 [已验证]。{p1_x, p1_y, p2_x, p2_y, pos_x?, pos_y?, layer?}
+          elevation  — 标高标注 [已验证双点序列]。{base_x, base_y, label_x?, label_y?, layer?}
           door       — 普通门   [部分验证]。{ins_x, ins_y, width?, height?, sill_distance?, layer?}
           window     — 普通窗   [部分验证]。{ins_x, ins_y, width?, height?, sill_height?, layer?}
           axis_grid  — 直线轴网 [仅 dry-run]。{base_x?, base_y?, hspacings:[..], vspacings:[..], angle?, layer?}
@@ -501,7 +533,7 @@ def register_tangent_tool(mcp: Any) -> None:
                 "hint": "传 execute=True 才会真正下发到 AutoCAD 执行",
             }
             if low_conf:
-                payload["warning"] = _UNVERIFIED_WARNING
+                payload["warning"] = LOW_CONFIDENCE_WARNINGS[operation]
             if disabled_reason:
                 payload["execute_disabled"] = disabled_reason
             return _json(payload)
@@ -516,9 +548,9 @@ def register_tangent_tool(mcp: Any) -> None:
         if low_conf and result.ok:
             base = result.payload
             if isinstance(base, dict):
-                base = {**base, "warning": _UNVERIFIED_WARNING}
+                base = {**base, "warning": LOW_CONFIDENCE_WARNINGS[operation]}
             else:
-                base = {"result": base, "warning": _UNVERIFIED_WARNING}
+                base = {"result": base, "warning": LOW_CONFIDENCE_WARNINGS[operation]}
             result = CommandResult(ok=True, payload=base)
         return await add_screenshot_if_available(result, include_screenshot)
 

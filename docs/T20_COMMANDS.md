@@ -42,6 +42,7 @@
 |---|---|---|---|---|
 | 绘制墙体 | `TgWall` | 起点→终点→回车（面板记忆值）；左/右宽、高、材料经 COM 注入 `LeftWidth/RightWidth/Height/Style` | `TCH_WALL` | **高** (E2E) |
 | 逐点标注 | `TDimMP` | 尺寸线位置点→点1→点2→回车（顺序错则 0 实体假成功） | `TCH_DIMENSION2` | **高** (E2E) |
+| 标高标注 | `TMElev` | 标高基准点→标注放置点→回车；单点序列会挂起等待输入，严禁改成单点序列 | `TCH_ELEVATION` | **高** (E2E) |
 | 门窗 | `TOpening` | 墙上插入点→回车（非模态面板不阻塞）；`Width/Height/DoorSill` 可 COM 注入 | `TCH_OPENING` | **中**：插入类型随面板当前模式（默认门）；窗模式/`SillHeight` 待验证 |
 | 绘制轴网(直线) | `TRectAxis` | **不可命令行驱动**：模态对话框 (#32770)。工具层已禁止 execute | — | **禁** (仅 dry-run) |
 | 图形导出(T3) | `TSaveAs` | **不可静默**：天正自绘导出框 (WPF)，无视 FILEDIA=0。工具层已禁止 execute | — | **禁** (仅 dry-run) |
@@ -53,7 +54,7 @@
 | 分解对象 | `TExplode` | 注册已验证。**破坏性**：仅可在临时副本上执行（先 SAVEAS 副本→副本上分解→ezdxf 读取），禁止分解用户当前图纸 |
 | 两点标注 | `TDimTP` | 或比 TDimMP 更贴合两点场景，序列待试 |
 | 墙厚标注 | `TDimWall` / 门窗标注 `TDim3` | 待序列验证 |
-| 标高标注 | `TMElev` | 待序列验证 |
+| 标高标注 | `TMElev` | 已封装为 `elevation`；双点序列 E2E 验证，单点序列禁用 |
 | 局部导出 | `TPartSaveAs` | 导出替代路径之一，待验证是否同样弹框 |
 | BIM导出 | `TGetXML` | 结构化导出线索，值得优先调研 |
 | 标准柱 | `TGColumn` | 预计同 wall 模式（点取+COM 注参），待验证 |
@@ -70,6 +71,7 @@
 |---|---|---|---|
 | `wall` | `wall.lsp` | TgWall | **已验证** (E2E: 实体+COM 回读) |
 | `dimension` | `dimension.lsp` | TDimMP | **已验证** (E2E) |
+| `elevation` | `elevation.lsp` | TMElev | **已验证** (双点序列生成 TCH_ELEVATION；execute 附 warning) |
 | `door` | `door.lsp` | TOpening | **部分验证** (execute 附 warning) |
 | `window` | `window.lsp` | TOpening | **部分验证** (类型/窗台高未保证, execute 附 warning) |
 | `axis_grid` | `axis_grid.lsp` | TRectAxis | **仅 dry-run** (execute 已禁用) |
@@ -79,8 +81,10 @@
 
 ## 3. 后续待办
 
-1. **窗模式驱动**：TOpening 面板处于窗模式时验证 `SillHeight` 等属性，
-   找门/窗类型的 COM 切换属性（候选再探 `Kind/OpType` 等）。
+1. **窗模式驱动**：当前门模式下已验证 `Width/Height/DoorSill` 可写；
+   `SillHeight/WindowSillHeight/OpType/Kind/Type/WinType` 均不可读/不可写
+   （见 `scripts/itest_16_opening_props_safe.py`）。下一步需先把 TOpening 面板切到窗模式，
+   再重跑属性探测。
 2. **轴网/导出替代路径**：
    - 轴网：评估逐根画轴线（原生 LINE + 轴号 `TSingleAxisDim`）或 UI 自动化填对话框；
    - 导出：评估 `TPartSaveAs`、`TGetXML`，或 UI 自动化。

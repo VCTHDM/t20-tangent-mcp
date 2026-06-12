@@ -43,6 +43,7 @@ VALID_CASES: dict[str, dict] = {
     "door": {"ins_x": 1500, "ins_y": 0, "width": 900, "height": 2100},
     "window": {"ins_x": 3000, "ins_y": 0, "width": 1500, "height": 1500, "sill_height": 900},
     "dimension": {"p1_x": 0, "p1_y": 0, "p2_x": 6000, "p2_y": 0},
+    "elevation": {"base_x": 0, "base_y": 0, "label_x": 1000, "label_y": 1000},
     "export_t3": {"out_path": "C:/temp/out_t3.dwg", "target_ver": "t3"},
 }
 
@@ -153,6 +154,17 @@ class TestParamInjection:
         p1 = code.index("t20mcp:pt 0 0")
         assert pos < p1  # 位置点在标注点之前
 
+    def test_elevation_uses_tmelev_two_points(self) -> None:
+        # TMElev 真机试验: 双点序列可生成 TCH_ELEVATION; 单点序列会挂起等待输入。
+        code = generate_lisp("elevation", {
+            "base_x": 0, "base_y": 0, "label_x": 1000, "label_y": 1000,
+        })
+        assert '"TMELEV"' in code
+        base = code.index("t20mcp:pt 0 0")
+        label = code.index("t20mcp:pt 1000 1000")
+        assert base < label
+        assert '"")' in code
+
     def test_float_formatting_is_compact(self) -> None:
         # 整数值不应带小数点; 小数值应保留
         code = generate_lisp("door", {"ins_x": 1500.0, "ins_y": 0, "width": 912.5, "height": 2100})
@@ -229,6 +241,12 @@ class TestInvalidParamsRejected:
     def test_dimension_coincident_points_rejected(self) -> None:
         with pytest.raises(ParamError):
             generate_lisp("dimension", {"p1_x": 1, "p1_y": 1, "p2_x": 1, "p2_y": 1})
+
+    def test_elevation_coincident_points_rejected(self) -> None:
+        with pytest.raises(ParamError):
+            generate_lisp("elevation", {
+                "base_x": 1, "base_y": 1, "label_x": 1, "label_y": 1,
+            })
 
     def test_axis_grid_empty_spacings_rejected(self) -> None:
         with pytest.raises(ParamError):

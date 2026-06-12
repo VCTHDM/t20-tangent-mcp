@@ -1,8 +1,11 @@
-"""真机联调 Step 8 — 诊断并关闭阻塞会话的天正对话框.
+"""真机联调 Step 8 — 诊断并尝试 ESC 恢复阻塞会话.
 
   1. 枚举 acad.exe 进程的全部可见顶层窗口, 打印类名/标题 (P1-2 判据情报)
-  2. 对疑似对话框 (非主窗) 发送 ESC / WM_CLOSE 取消
+  2. 对疑似对话框 (非主窗) 仅发送 ESC 取消
   3. ping 验证会话恢复
+
+注意: 严禁对天正 ARX 对话框发送 WM_CLOSE, 真机曾因此 AutoCAD 致命错误。
+若 ESC 后仍阻塞, 改用 scripts/itest_11_force_recover.py 点击取消按钮。
 
 用法: uv run python scripts/itest_08_dialog_recover.py
 """
@@ -53,13 +56,12 @@ async def main() -> int:
             dialogs.append(hwnd)
 
     for hwnd in dialogs:
-        print(f"关闭对话框 hwnd={hwnd}: 发送 ESC + WM_CLOSE")
+        print(f"尝试恢复 hwnd={hwnd}: 仅发送 ESC")
         win32gui.PostMessage(hwnd, win32con.WM_KEYDOWN, win32con.VK_ESCAPE, 0)
         win32gui.PostMessage(hwnd, win32con.WM_KEYUP, win32con.VK_ESCAPE, 0)
         time.sleep(0.5)
         if win32gui.IsWindow(hwnd) and win32gui.IsWindowVisible(hwnd):
-            win32gui.PostMessage(hwnd, win32con.WM_CLOSE, 0, 0)
-            time.sleep(0.5)
+            print(f"  仍可见: hwnd={hwnd}; 请运行 itest_11_force_recover.py 点取消按钮")
 
     backend = FileIPCBackend()
     init = await backend.initialize()
