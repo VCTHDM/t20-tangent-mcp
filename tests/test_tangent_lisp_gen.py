@@ -1,0 +1,241 @@
+"""离线测试: tangent 子命令的 LISP 生成。
+
+不连接 AutoCAD / 天正, 仅断言:
+  1. 生成的 LISP 字符串括号平衡 (含字符串/注释内括号的正确忽略)。
+  2. 参数被正确注入到 LISP 文本中。
+  3. 非法参数 (类型错误 / 越界 / 缺失 / 注入逃逸) 被拒绝 (抛 ParamError)。
+
+运行: ``uv run pytest tests/test_tangent_lisp_gen.py``
+"""
+
+from __future__ import annotations
+
+import pytest
+
+from t20_mcp.tools.tangent import (
+    ParamError,
+    SUBCOMMANDS,
+    generate_lisp,
+    is_paren_balanced,
+)
+
+# ---------------------------------------------------------------------------
+# 各子命令的一组合法参数 (用于通用性质测试)
+# ---------------------------------------------------------------------------
+
+VALID_CASES: dict[str, dict] = {
+    "axis_grid": {
+        "base_x": 0,
+        "base_y": 0,
+        "hspacings": [3000, 3600, 3000],
+        "vspacings": [4500, 4500],
+        "angle": 0,
+        "layer": "AXIS",
+    },
+    "wall": {
+        "x1": 0, "y1": 0, "x2": 6000, "y2": 0,
+        "left_width": 120, "right_width": 120, "height": 3000,
+        "wall_type": "砖墙", "layer": "WALL",
+    },
+    "door": {"ins_x": 1500, "ins_y": 0, "width": 900, "height": 2100},
+    "window": {"ins_x": 3000, "ins_y": 0, "width": 1500, "height": 1500, "sill_height": 900},
+    "dimension": {"p1_x": 0, "p1_y": 0, "p2_x": 6000, "p2_y": 0},
+    "export_t3": {"out_path": "C:/temp/out_t3.dwg", "target_ver": "t3"},
+}
+
+
+# ---------------------------------------------------------------------------
+# is_paren_balanced 自身的单元测试
+# ---------------------------------------------------------------------------
+
+
+class TestParenBalance:
+    @pytest.mark.parametrize("code", [
+        "(a (b c) d)",
+        "()",
+        "",
+        '(princ "())(")',          # 括号在字符串内, 应忽略
+        "(setq x 1) ; (注释里的括号)",  # 括号在注释内, 应忽略
+        '(strcat "he said \\"(\\"")',  # 转义引号
+    ])
+    def test_balanced(self, code: str) -> None:
+        assert is_paren_balanced(code) is True
+
+    @pytest.mark.parametrize("code", [
+        "(a (b c) d",   # 缺右括号
+        "(a)) ",        # 多右括号
+        ")(",           # 顺序错误
+        '(princ "未闭合字符串)',  # 字符串未闭合
+    ])
+    def test_unbalanced(self, code: str) -> None:
+        assert is_paren_balanced(code) is False
+
+
+# ---------------------------------------------------------------------------
+# 通用性质: 所有子命令在合法参数下生成平衡的 LISP
+# ---------------------------------------------------------------------------
+
+
+class TestAllSubcommandsGenerateBalanced:
+    def test_subcommand_set(self) -> None:
+        assert set(SUBCOMMANDS) == set(VALID_CASES)
+
+    @pytest.mark.parametrize("sub", SUBCOMMANDS)
+    def test_generates_balanced_lisp(self, sub: str) -> None:
+        code = generate_lisp(sub, VALID_CASES[sub])
+        assert is_paren_balanced(code), f"{sub} 生成的 LISP 括号不平衡"
+        # 应是可加载的 defun + 调用结构
+        assert "defun" in code
+        assert "T20MCP-OK" in code
+        # 无残留占位符
+        assert "{{" not in code and "}}" not in code
+
+    def test_unknown_subcommand_rejected(self) -> None:
+        with pytest.raises(ParamError):
+            generate_lisp("nonexistent", {})
+
+
+# ---------------------------------------------------------------------------
+# 参数注入正确性
+# ---------------------------------------------------------------------------
+
+
+class TestParamInjection:
+    def test_axis_grid_injects_spacings_and_base(self) -> None:
+        code = generate_lisp("axis_grid", {
+            "base_x": 100, "base_y": 200,
+            "hspacings": [3000, 3600], "vspacings": [4500],
+            "angle": 30, "layer": "AXIS",
+        })
+        assert "100,200" in code                 # 基点
+        assert "3000 3600" in code               # 开间序列
+        assert "4500" in code                    # 进深序列
+        assert '"30"' in code                    # 旋转角
+        assert '"_.-LAYER" "_M" "AXIS"' in code  # 图层注入
+
+    def test_wall_injects_endpoints_and_widths(self) -> None:
+        code = generate_lisp("wall", {
+            "x1": 0, "y1": 0, "x2": 6000, "y2": 1200,
+            "left_width": 100, "right_width": 140, "height": 2900,
+        })
+        assert "0,0" in code
+        assert "6000,1200" in code
+        assert '"L" "100"' in code
+        assert '"R" "140"' in code
+        assert '"H" "2900"' in code
+
+    def test_float_formatting_is_compact(self) -> None:
+        # 整数值不应带小数点; 小数值应保留
+        code = generate_lisp("door", {"ins_x": 1500.0, "ins_y": 0, "width": 912.5, "height": 2100})
+        assert "1500,0" in code      # 1500.0 -> 1500
+        assert "912.5" in code       # 保留小数
+
+    def test_no_layer_means_no_layer_command(self) -> None:
+        code = generate_lisp("door", {"ins_x": 1500, "ins_y": 0})
+        assert "_.-LAYER" not in code
+
+    def test_export_t3_injects_path_and_version(self) -> None:
+        code = generate_lisp("export_t3", {"out_path": "D:/dwg/proj.dwg", "target_ver": "天正3"})
+        assert "D:/dwg/proj.dwg" in code
+        assert '"3"' in code
+
+    def test_string_escaping_keeps_balance(self) -> None:
+        # 含反斜杠与引号的路径应被转义且不破坏括号平衡
+        code = generate_lisp("export_t3", {"out_path": 'C:\\a\\b"c.dwg'})
+        assert is_paren_balanced(code)
+        assert "C:\\\\a\\\\b" in code      # 反斜杠被转义
+        assert '\\"c.dwg' in code          # 引号被转义
+
+    def test_layer_name_injection_balanced(self) -> None:
+        # 图层名含特殊字符不应破坏平衡
+        code = generate_lisp("wall", {
+            "x1": 0, "y1": 0, "x2": 1000, "y2": 0,
+            "layer": 'WALL"X',
+        })
+        assert is_paren_balanced(code)
+
+
+# ---------------------------------------------------------------------------
+# 非法参数拒绝
+# ---------------------------------------------------------------------------
+
+
+class TestInvalidParamsRejected:
+    def test_missing_required_coord(self) -> None:
+        with pytest.raises(ParamError):
+            generate_lisp("wall", {"x1": 0, "y1": 0, "x2": 1000})  # 缺 y2
+
+    def test_string_where_number_expected(self) -> None:
+        with pytest.raises(ParamError):
+            generate_lisp("door", {"ins_x": "abc", "ins_y": 0})
+
+    def test_bool_rejected_as_number(self) -> None:
+        # bool 是 int 子类, 必须被显式拒绝
+        with pytest.raises(ParamError):
+            generate_lisp("door", {"ins_x": True, "ins_y": 0})
+
+    def test_nan_and_inf_rejected(self) -> None:
+        with pytest.raises(ParamError):
+            generate_lisp("door", {"ins_x": float("nan"), "ins_y": 0})
+        with pytest.raises(ParamError):
+            generate_lisp("door", {"ins_x": float("inf"), "ins_y": 0})
+
+    def test_coord_out_of_range(self) -> None:
+        with pytest.raises(ParamError):
+            generate_lisp("door", {"ins_x": 1e12, "ins_y": 0})
+
+    def test_wall_width_out_of_range(self) -> None:
+        with pytest.raises(ParamError):
+            generate_lisp("wall", {"x1": 0, "y1": 0, "x2": 1000, "y2": 0, "left_width": 99999})
+
+    def test_wall_zero_length_rejected(self) -> None:
+        with pytest.raises(ParamError):
+            generate_lisp("wall", {"x1": 5, "y1": 5, "x2": 5, "y2": 5})
+
+    def test_dimension_coincident_points_rejected(self) -> None:
+        with pytest.raises(ParamError):
+            generate_lisp("dimension", {"p1_x": 1, "p1_y": 1, "p2_x": 1, "p2_y": 1})
+
+    def test_axis_grid_empty_spacings_rejected(self) -> None:
+        with pytest.raises(ParamError):
+            generate_lisp("axis_grid", {"hspacings": [], "vspacings": [3000]})
+
+    def test_axis_grid_spacings_not_list(self) -> None:
+        with pytest.raises(ParamError):
+            generate_lisp("axis_grid", {"hspacings": "3000", "vspacings": [3000]})
+
+    def test_axis_grid_spacing_value_out_of_range(self) -> None:
+        with pytest.raises(ParamError):
+            generate_lisp("axis_grid", {"hspacings": [0], "vspacings": [3000]})
+
+    def test_axis_grid_too_many_spacings(self) -> None:
+        with pytest.raises(ParamError):
+            generate_lisp("axis_grid", {"hspacings": [3000] * 201, "vspacings": [3000]})
+
+    def test_angle_out_of_range(self) -> None:
+        with pytest.raises(ParamError):
+            generate_lisp("axis_grid", {"hspacings": [3000], "vspacings": [3000], "angle": 999})
+
+    def test_export_t3_bad_extension(self) -> None:
+        with pytest.raises(ParamError):
+            generate_lisp("export_t3", {"out_path": "C:/temp/out.dxf"})
+
+    def test_export_t3_bad_version(self) -> None:
+        with pytest.raises(ParamError):
+            generate_lisp("export_t3", {"out_path": "C:/temp/out.dwg", "target_ver": "t5"})
+
+    def test_export_t3_empty_path(self) -> None:
+        with pytest.raises(ParamError):
+            generate_lisp("export_t3", {"out_path": ""})
+
+    def test_control_char_in_string_rejected(self) -> None:
+        # 换行注入企图破坏单行 LISP 字符串 / 命令序列
+        with pytest.raises(ParamError):
+            generate_lisp("wall", {
+                "x1": 0, "y1": 0, "x2": 1000, "y2": 0,
+                "layer": "WALL\n(command \"erase\")",
+            })
+
+    def test_layer_too_long_rejected(self) -> None:
+        with pytest.raises(ParamError):
+            generate_lisp("door", {"ins_x": 0, "ins_y": 0, "layer": "L" * 300})
