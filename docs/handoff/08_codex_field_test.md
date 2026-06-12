@@ -90,3 +90,37 @@ uv run python -m compileall -q src scripts tests
 ```
 
 均通过。
+
+## 7. 后续命令探测
+
+以下命令已按“两轮不成即停”原则探测，均未留下实体，环境复位干净：
+
+- `TGColumn`
+  - 点→回车：0 实体
+  - 点→点→回车：0 实体
+- `TDimWall`
+  - 先创建 `TCH_WALL`，选择墙体→回车：0 新实体
+  - 选择墙体→回车→标注位置→回车：0 新实体
+- `TSWall`
+  - 先创建原生 `LINE`，选择线→回车：未转换，仅保留原 `LINE`
+  - 选择线→回车→`240`→回车：未转换，仅保留原 `LINE`
+
+结论：以上命令不进入 `tangent` 子命令，等待新的可靠交互序列或官方 API 线索。
+
+## 8. E2E 清理修正
+
+`scripts/itest_12_e2e.py` 已修正收尾逻辑：
+
+- 删除测试图层改用 COM 删除，避免命令行残留。
+- 清理后执行 `CMDACTIVE` 退栈循环并复位 `CMDDIA/FILEDIA/OSMODE`。
+- 验收条件新增环境干净断言。
+
+复跑结果：
+
+```text
+wall: PASS
+dimension: PASS
+door: PASS
+清理还原: PASS
+env={'CMDDIA': 1, 'FILEDIA': 1, 'OSMODE': 0, 'CMDACTIVE': 0}
+```

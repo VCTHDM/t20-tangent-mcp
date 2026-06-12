@@ -20,6 +20,18 @@ from t20_mcp.tools.tangent import generate_lisp
 
 LAST_TYPE = '(if (entlast) (cdr (assoc 0 (entget (entlast)))) "none")'
 
+RESET_ENV = """
+(progn
+  (setq n 0)
+  (while (and (< n 6) (> (getvar "CMDACTIVE") 0))
+    (command)
+    (setq n (1+ n)))
+  (setvar "CMDDIA" 1)
+  (setvar "FILEDIA" 1)
+  (setvar "OSMODE" 0)
+  "env-reset")
+"""
+
 READBACK = """
 (setq t20mcp:obj (vlax-ename->vla-object (entlast)))
 (setq t20mcp:r "")
@@ -103,8 +115,13 @@ async def main() -> int:
         await backend.undo()
     final_count = await count(backend)
     await backend.execute_lisp(
-        '(progn (setvar "CMDDIA" 1) (setvar "FILEDIA" 1) '
-        '(command "_.-LAYER" "_D" "T20MCP测试图层" "") (princ))')
+        '(progn '
+        '(setq t20mcp:layers (vla-get-Layers (vla-get-ActiveDocument (vlax-get-acad-object)))) '
+        '(vl-catch-all-apply '
+        "  '(lambda () (vla-Delete (vla-Item t20mcp:layers \"T20MCP测试图层\")))) "
+        '"layer-cleanup")'
+    )
+    await backend.execute_lisp(RESET_ENV)
     env = await backend.drawing_get_variables(["CMDDIA", "FILEDIA", "OSMODE", "CMDACTIVE"])
     print(f"[cleanup] entities={final_count} env={env.payload}")
 
@@ -112,8 +129,15 @@ async def main() -> int:
     print("=== Step12 端到端验收 ===")
     for name, ok in results.items():
         print(f"  {name}: {'PASS' if ok else 'FAIL'}")
-    print(f"  清理还原: {'PASS' if final_count == 0 else 'FAIL'}")
-    return 0 if all(results.values()) and final_count == 0 else 1
+    clean_env = (
+        env.ok
+        and env.payload.get("CMDACTIVE") == 0
+        and env.payload.get("CMDDIA") == 1
+        and env.payload.get("FILEDIA") == 1
+        and env.payload.get("OSMODE") == 0
+    )
+    print(f"  清理还原: {'PASS' if final_count == 0 and clean_env else 'FAIL'}")
+    return 0 if all(results.values()) and final_count == 0 and clean_env else 1
 
 
 if __name__ == "__main__":
