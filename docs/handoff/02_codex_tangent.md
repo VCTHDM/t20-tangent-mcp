@@ -4,8 +4,9 @@
 
 ## 1. 任务范围
 
-天正 T20 命令的**脚本化编目**与**封装骨架**。明确约束：**未改动 dispatcher 与 IPC 层**，
-仅新增 LISP 模板生成与 `tangent` consolidated 工具，复用现有 `execute_lisp` 通道下发。
+天正 T20 命令的**脚本化编目**与**封装骨架**。明确约束：**未改动 dispatcher、IPC 层与
+`server.py`**，仅新增 LISP 模板生成与 `tangent` consolidated 工具（独立模块，按需挂载），
+复用现有 `execute_lisp` 通道下发。
 
 ## 2. 交付物
 
@@ -16,8 +17,12 @@
 | `src/t20_mcp/tools/tangent.py` | `tangent` 工具 + 纯生成逻辑（`generate_lisp` / `is_paren_balanced`）+ 全量参数类型/范围校验 |
 | `src/t20_mcp/tools/__init__.py` | 子包导出 |
 | `tests/test_tangent_lisp_gen.py` | 43 个离线测试，不连 AutoCAD |
-| `src/t20_mcp/server.py` | **仅追加 1 处**：`register_tangent_tool(mcp)`（非 dispatcher/IPC 改动） |
 | `pyproject.toml` | 追加 dev 组 `pytest` 与 `[tool.pytest.ini_options]`（`pythonpath=src`） |
+
+> **注**：`tangent.py` 完全独立，**未改动 `server.py`**（dispatcher/IPC 自然也未动）。
+> 需要挂载到 MCP server 时，在 `server.py` 调用一次
+> `from t20_mcp.tools.tangent import register_tangent_tool; register_tangent_tool(mcp)` 即可，
+> 该函数已就绪但默认不自动注册。
 
 ## 3. 设计要点
 
