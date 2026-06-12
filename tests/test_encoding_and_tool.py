@@ -29,7 +29,7 @@ class TestDecodeResultBytes:
         # 模拟 AutoLISP (write-line) 在中文 Windows 写出的 GBK 结果文件
         data = {"request_id": "abc", "ok": True, "payload": {"层": "墙体", "msg": "砖墙已绘制"}}
         raw = json.dumps(data, ensure_ascii=False).encode("gbk")
-        text = _decode_result_bytes(raw)
+        text = _decode_result_bytes(raw, ansi="cp936")
         back = json.loads(text)
         assert back["payload"]["层"] == "墙体"
         assert back["payload"]["msg"] == "砖墙已绘制"
@@ -38,9 +38,16 @@ class TestDecodeResultBytes:
         raw = b'{"request_id": "x", "ok": true, "payload": null}'
         assert json.loads(_decode_result_bytes(raw))["request_id"] == "x"
 
-    def test_utf8_payload_still_works(self) -> None:
-        raw = '{"v": "café 测试"}'.encode("utf-8")
-        assert json.loads(_decode_result_bytes(raw))["v"] == "café 测试"
+    def test_gbk_utf8_collision_char_not_mojibaked(self) -> None:
+        # 真机E2E回归: "砖" 的 GBK 字节 D7A9 恰是合法 UTF-8 (U+05E9 ש)。
+        # ANSI 优先解码链必须解出 "砖" 而非希伯来字母。
+        raw = '{"v": "砖"}'.encode("gbk")
+        assert json.loads(_decode_result_bytes(raw, ansi="cp936"))["v"] == "砖"
+
+    def test_utf8_fallback_when_ansi_decode_fails(self) -> None:
+        # "€" 的 UTF-8 字节 E282AC 不是合法 GBK 序列 → 回退 utf-8 解码。
+        raw = '{"v": "€"}'.encode("utf-8")
+        assert json.loads(_decode_result_bytes(raw, ansi="cp936"))["v"] == "€"
 
 
 # ---------------------------------------------------------------------------
@@ -213,7 +220,7 @@ class TestTangentDryRun:
 
     def test_low_confidence_dry_run_has_warning(self, monkeypatch) -> None:
         fn = _register_with_fake_backend(monkeypatch, RuntimeError("unused"))
-        out = asyncio.run(fn(operation="axis_grid", data={"hspacings": [3000], "vspacings": [3000]}))
+        out = asyncio.run(fn(operation="window", data={"ins_x": 1500, "ins_y": 0}))
         payload = json.loads(out)
         assert payload["dry_run"] is True
         assert "warning" in payload
@@ -223,3 +230,23 @@ class TestTangentDryRun:
         out = asyncio.run(fn(operation="wall", data={"x1": 0, "y1": 0, "x2": 6000, "y2": 0}))
         payload = json.loads(out)
         assert "warning" not in payload
+
+    def test_dialog_only_subcommand_execute_refused(self, monkeypatch) -> None:
+        # 真机证实纯对话框命令 (axis_grid/export_t3): execute=True 被拒, 不触碰 backend。
+        backend = _FakeBackend()
+        fn = _register_with_fake_backend(monkeypatch, backend)
+        for op, data in (
+            ("axis_grid", {"hspacings": [3000], "vspacings": [3000]}),
+            ("export_t3", {"out_path": "C:/temp/out.dwg"}),
+        ):
+            out = asyncio.run(fn(operation=op, data=data, execute=True))
+            payload = json.loads(out)
+            assert "execute 已禁用" in payload["error"]
+        assert backend.calls == []  # 从未下发
+
+    def test_dialog_only_subcommand_dry_run_notes_disabled(self, monkeypatch) -> None:
+        fn = _register_with_fake_backend(monkeypatch, RuntimeError("unused"))
+        out = asyncio.run(fn(operation="export_t3", data={"out_path": "C:/temp/out.dwg"}))
+        payload = json.loads(out)
+        assert payload["dry_run"] is True
+        assert "execute_disabled" in payload

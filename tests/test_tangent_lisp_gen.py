@@ -130,15 +130,28 @@ class TestParamInjection:
         assert '"_.-LAYER" "_M" "AXIS"' in code  # 图层注入
 
     def test_wall_injects_endpoints_and_widths(self) -> None:
+        # 真机验证后的 wall 路线: TGWALL 两点画墙 + ActiveX 属性注入宽/高
         code = generate_lisp("wall", {
             "x1": 0, "y1": 0, "x2": 6000, "y2": 1200,
             "left_width": 100, "right_width": 140, "height": 2900,
         })
         assert "t20mcp:pt 0 0" in code
         assert "t20mcp:pt 6000 1200" in code
-        assert '"L" "100"' in code
-        assert '"R" "140"' in code
-        assert '"H" "2900"' in code
+        assert '"TGWALL"' in code
+        assert '(cons "LeftWidth" (float 100))' in code
+        assert '(cons "RightWidth" (float 140))' in code
+        assert '(cons "Height" (float 2900))' in code
+
+    def test_dimension_uses_tdimmp_pos_first(self) -> None:
+        # 真机验证: TDIMMP, 顺序 = 尺寸线位置点 -> 点1 -> 点2 -> 回车
+        code = generate_lisp("dimension", {
+            "p1_x": 0, "p1_y": 0, "p2_x": 6000, "p2_y": 0,
+            "pos_x": 3000, "pos_y": 1000,
+        })
+        assert '"TDIMMP"' in code
+        pos = code.index("t20mcp:pt 3000 1000")
+        p1 = code.index("t20mcp:pt 0 0")
+        assert pos < p1  # 位置点在标注点之前
 
     def test_float_formatting_is_compact(self) -> None:
         # 整数值不应带小数点; 小数值应保留

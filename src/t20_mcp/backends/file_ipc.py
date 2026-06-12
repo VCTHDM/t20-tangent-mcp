@@ -32,22 +32,28 @@ TIMEOUT = IPC_TIMEOUT  # seconds (configurable via AUTOCAD_MCP_IPC_TIMEOUT)
 STALE_THRESHOLD = 60.0  # clean up files older than this
 
 
-def _decode_result_bytes(raw: bytes) -> str:
+def _decode_result_bytes(raw: bytes, ansi: str | None = None) -> str:
     """Decode an AutoLISP-written result file under the编码契约.
 
-    Order: utf-8 (ASCII / utf-8 writers) → cp936 (Chinese-Windows ANSI, the
-    real encoding for 中文 payloads) → the OS preferred ANSI page → cp1252.
-    cp1252 is strictly last: it decodes almost any byte sequence without
-    raising, so trying it early would silently accept mojibake instead of the
-    correct GBK text. See _prelude.lsp 编码契约 §3.
+    Order: the OS ANSI code page (cp936 on Chinese Windows — what AutoLISP
+    (write-line) actually produces, per _prelude.lsp 编码契约 §3) → utf-8 →
+    cp936 (if ANSI differed) → cp1252.
+
+    ANSI must come BEFORE utf-8: 真机E2E发现 "砖" 的 GBK 字节 D7A9 恰是合法
+    UTF-8 (U+05E9 ש), utf-8 优先会把正确的 GBK 文本静默解成 mojibake。结果
+    文件按契约必然是 ANSI 写出, ASCII 内容在 ANSI 下解码结果相同, 因此 ANSI
+    优先无回归。cp1252 strictly last: it decodes almost any byte sequence
+    without raising, so trying it early would silently accept mojibake.
     """
-    candidates = ["utf-8", "cp936"]
-    try:
-        preferred = locale.getpreferredencoding(False)
-    except Exception:
-        preferred = ""
-    if preferred and preferred.lower().replace("-", "") not in ("utf8", "cp936"):
-        candidates.append(preferred)
+    if ansi is None:
+        try:
+            ansi = locale.getpreferredencoding(False) or "cp936"
+        except Exception:
+            ansi = "cp936"
+
+    candidates = [ansi, "utf-8"]
+    if ansi.lower().replace("-", "") != "cp936":
+        candidates.append("cp936")
     candidates.append("cp1252")
 
     for enc in candidates:
@@ -290,12 +296,10 @@ class FileIPCBackend(AutoCADBackend):
                     try:
                         # AutoLISP (write-line) writes the result file in the
                         # system ANSI code page. On Chinese Windows that is
-                        # cp936 (GBK), NOT Windows-1252. Decode order:
-                        #   utf-8  — covers pure-ASCII and any utf-8 writers
-                        #   cp936 / locale ANSI — the real encoding for 中文 payloads
-                        #   cp1252 — last resort only; it almost never raises
-                        #            UnicodeDecodeError, so trying it earlier would
-                        #            silently turn GBK 中文 into mojibake.
+                        # cp936 (GBK), NOT Windows-1252. Decode order: ANSI
+                        # first (真机证实 GBK 字节可能恰为合法 UTF-8, 如 "砖"
+                        # = D7A9 = ש), then utf-8, then cp1252 strictly last.
+                        # See _decode_result_bytes.
                         text = _decode_result_bytes(result_file.read_bytes())
                         data = json.loads(text)
                         # Verify request_id matches

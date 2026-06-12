@@ -286,7 +286,8 @@ def _gen_wall(data: dict[str, Any]) -> str:
     left_width = _require_range(data.get("left_width", 120.0), "left_width", *WALL_WIDTH_RANGE)
     right_width = _require_range(data.get("right_width", 120.0), "right_width", *WALL_WIDTH_RANGE)
     height = _require_range(data.get("height", 3000.0), "height", *HEIGHT_RANGE)
-    wall_type = _require_str(data.get("wall_type", "砖墙"), "wall_type", max_len=32)
+    # wall_type 注入 TCH_WALL 的 Style (墙体材料) 属性; 真机回读默认值为 "砖"。
+    wall_type = _require_str(data.get("wall_type", "砖"), "wall_type", max_len=32)
     return _render(
         "wall",
         {
@@ -404,11 +405,29 @@ _GENERATORS: dict[str, Callable[[dict[str, Any]], str]] = {
 
 SUBCOMMANDS: tuple[str, ...] = tuple(_GENERATORS)
 
-# 综合置信度为「低」的子命令: 命令名/交互序列均为推测, 真机未验证。
-# execute=True 下发时附 warning, 提醒结果可能不符合预期 (见 docs/T20_COMMANDS.md)。
-LOW_CONFIDENCE_SUBCOMMANDS: frozenset[str] = frozenset({"axis_grid", "door", "window"})
+# 真机部分验证的子命令 (2026-06-12, T20 V10 / AutoCAD 2024):
+# door/window 经 TOPENING 插入, 但门/窗类型取决于天正门窗面板当前模式 (默认门),
+# 类型强制切换与窗台高注入待验证 —— execute=True 下发时附 warning。
+LOW_CONFIDENCE_SUBCOMMANDS: frozenset[str] = frozenset({"door", "window"})
 
-_UNVERIFIED_WARNING: str = "未经真机验证: 该天正命令名与交互序列为推测值, 执行结果可能不符合预期"
+_UNVERIFIED_WARNING: str = (
+    "部分行为未经真机完全验证: 门/窗类型取决于天正门窗面板当前模式 (默认插门), "
+    "窗台高注入待窗模式验证 (见 docs/T20_COMMANDS.md)"
+)
+
+# 真机证实「纯对话框、不可命令行驱动」的子命令: 禁止 execute, 仅 dry-run。
+# axis_grid: TAXISGRID 弹模态框 (#32770), 强关曾致 AutoCAD 致命错误;
+# export_t3: TSAVEAS 弹天正自绘导出框 (WPF), 不理会 FILEDIA=0 (编目 §0 坑 1)。
+EXECUTE_DISABLED_SUBCOMMANDS: dict[str, str] = {
+    "axis_grid": (
+        "TAXISGRID 为模态对话框命令 (真机证实), 不可命令行驱动, 下发会阻塞 IPC; "
+        "仅支持 dry-run, 请人工绘制轴网或等待 UI 自动化方案"
+    ),
+    "export_t3": (
+        "TSAVEAS 弹出天正自绘导出框且不理会 FILEDIA=0 (真机证实), 下发会阻塞 IPC; "
+        "仅支持 dry-run, 导出请人工操作"
+    ),
+}
 
 
 def generate_lisp(subcommand: str, data: dict[str, Any] | None = None) -> str:
@@ -448,21 +467,21 @@ def register_tangent_tool(mcp: Any) -> None:
         所有子命令均生成对应 AutoLISP 模板代码 (前置 _prelude.lsp 防御性骨架),
         参数在注入前做类型与范围校验, 非法参数会被拒绝。
 
-        **execute (默认 False = dry-run)**: 因多数子命令的天正命令名与交互序列
-        尚未真机验证, 默认只返回渲染后的 LISP 代码而**不**下发到 AutoCAD
-        (不产生任何 IPC 文件)。确认无误后传 execute=True 才经 execute_lisp 真正执行。
-        置信度为「低」的子命令 (axis_grid/door/window) 即使 execute=True, 返回
-        payload 也会附 warning 字段提示未经真机验证。
+        **execute (默认 False = dry-run)**: 默认只返回渲染后的 LISP 代码而**不**
+        下发到 AutoCAD (不产生任何 IPC 文件); 传 execute=True 才经 execute_lisp
+        真正执行。axis_grid 与 export_t3 经真机证实为纯对话框命令, **禁止 execute**
+        (会阻塞 IPC), 仅可 dry-run。door/window 执行成功也会附 warning 字段
+        (门/窗类型取决于天正门窗面板当前模式)。
 
-        Operations (data 字段):
-          axis_grid  — 直线轴网。{base_x?, base_y?, hspacings:[..], vspacings:[..], angle?, layer?}
-          wall       — 单段墙体。{x1, y1, x2, y2, left_width?, right_width?, height?, wall_type?, layer?}
-          door       — 普通门。  {ins_x, ins_y, width?, height?, sill_distance?, layer?}
-          window     — 普通窗。  {ins_x, ins_y, width?, height?, sill_height?, layer?}
-          dimension  — 逐点标注。{p1_x, p1_y, p2_x, p2_y, pos_x?, pos_y?, layer?}
-          export_t3  — 导出天正3。{out_path, target_ver?}
+        Operations (data 字段) — 真机验证状态 (T20 V10 / AutoCAD 2024):
+          wall       — 单段墙体 [已验证]。{x1, y1, x2, y2, left_width?, right_width?, height?, wall_type?, layer?}
+          dimension  — 逐点标注 [已验证]。{p1_x, p1_y, p2_x, p2_y, pos_x?, pos_y?, layer?}
+          door       — 普通门   [部分验证]。{ins_x, ins_y, width?, height?, sill_distance?, layer?}
+          window     — 普通窗   [部分验证]。{ins_x, ins_y, width?, height?, sill_height?, layer?}
+          axis_grid  — 直线轴网 [仅 dry-run]。{base_x?, base_y?, hspacings:[..], vspacings:[..], angle?, layer?}
+          export_t3  — 导出天正3 [仅 dry-run]。{out_path, target_ver?}
 
-        注: 标注 "待真机验证" 的条目详见 docs/T20_COMMANDS.md。
+        注: 验证记录详见 docs/T20_COMMANDS.md 与 docs/handoff/05_fable_field_test.md。
         """
         try:
             code = generate_lisp(operation, data or {})
@@ -470,6 +489,7 @@ def register_tangent_tool(mcp: Any) -> None:
             return _json({"error": f"[tangent.{operation}] {e}"})
 
         low_conf = operation in LOW_CONFIDENCE_SUBCOMMANDS
+        disabled_reason = EXECUTE_DISABLED_SUBCOMMANDS.get(operation)
 
         # 默认 dry-run: 仅返回渲染后的 LISP, 不接触 backend / 不产生 IPC 文件。
         if not execute:
@@ -482,7 +502,13 @@ def register_tangent_tool(mcp: Any) -> None:
             }
             if low_conf:
                 payload["warning"] = _UNVERIFIED_WARNING
+            if disabled_reason:
+                payload["execute_disabled"] = disabled_reason
             return _json(payload)
+
+        # 真机证实的纯对话框命令: 拒绝下发, 避免阻塞 IPC / 崩溃风险。
+        if disabled_reason:
+            return _json({"error": f"[tangent.{operation}] execute 已禁用: {disabled_reason}"})
 
         backend = await get_backend()
         result = await backend.execute_lisp(code)
