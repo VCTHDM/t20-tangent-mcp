@@ -12,9 +12,12 @@ from __future__ import annotations
 
 import pytest
 
+import t20_mcp.tools.tangent as tangent
 from t20_mcp.tools.tangent import (
     ParamError,
     SUBCOMMANDS,
+    _render,
+    _strip_line_comments,
     generate_lisp,
     is_paren_balanced,
 )
@@ -86,13 +89,26 @@ class TestAllSubcommandsGenerateBalanced:
         assert is_paren_balanced(code), f"{sub} 生成的 LISP 括号不平衡"
         # 应是可加载的 defun + 调用结构
         assert "defun" in code
+        # OK 标记由 prelude 的 t20mcp:end 打印
         assert "T20MCP-OK" in code
-        # 无残留占位符
-        assert "{{" not in code and "}}" not in code
+        # 模板已迁移到 prelude 骨架: 含 t20mcp:begin, 不含裸 setvar (P0-4)
+        assert "t20mcp:begin" in code
+        assert 'setvar "CMDDIA"' not in code
+        # 无残留占位符 (注释里的 {{TOKEN}} 说明文字除外)
+        assert "{{" not in _strip_line_comments(code)
 
     def test_unknown_subcommand_rejected(self) -> None:
         with pytest.raises(ParamError):
             generate_lisp("nonexistent", {})
+
+    def test_block_comment_template_rejected(self) -> None:
+        # P2-2: 含 ;| ... |; 块注释的模板渲染时被明确拒绝 (is_paren_balanced 不识别)。
+        tangent._TEMPLATE_CACHE["_fake_block"] = "(princ) ;| 块注释里的 ( |;\n"
+        try:
+            with pytest.raises(ParamError, match="块注释"):
+                _render("_fake_block", {})
+        finally:
+            tangent._TEMPLATE_CACHE.pop("_fake_block", None)
 
 
 # ---------------------------------------------------------------------------
@@ -107,7 +123,7 @@ class TestParamInjection:
             "hspacings": [3000, 3600], "vspacings": [4500],
             "angle": 30, "layer": "AXIS",
         })
-        assert "100,200" in code                 # 基点
+        assert "t20mcp:pt 100 200" in code       # 基点 (经 t20mcp:pt 转命令行点)
         assert "3000 3600" in code               # 开间序列
         assert "4500" in code                    # 进深序列
         assert '"30"' in code                    # 旋转角
@@ -118,8 +134,8 @@ class TestParamInjection:
             "x1": 0, "y1": 0, "x2": 6000, "y2": 1200,
             "left_width": 100, "right_width": 140, "height": 2900,
         })
-        assert "0,0" in code
-        assert "6000,1200" in code
+        assert "t20mcp:pt 0 0" in code
+        assert "t20mcp:pt 6000 1200" in code
         assert '"L" "100"' in code
         assert '"R" "140"' in code
         assert '"H" "2900"' in code
@@ -127,8 +143,8 @@ class TestParamInjection:
     def test_float_formatting_is_compact(self) -> None:
         # 整数值不应带小数点; 小数值应保留
         code = generate_lisp("door", {"ins_x": 1500.0, "ins_y": 0, "width": 912.5, "height": 2100})
-        assert "1500,0" in code      # 1500.0 -> 1500
-        assert "912.5" in code       # 保留小数
+        assert "t20mcp:pt 1500 0" in code  # 1500.0 -> 1500
+        assert "912.5" in code             # 保留小数
 
     def test_no_layer_means_no_layer_command(self) -> None:
         code = generate_lisp("door", {"ins_x": 1500, "ins_y": 0})
@@ -140,11 +156,16 @@ class TestParamInjection:
         assert '"3"' in code
 
     def test_string_escaping_keeps_balance(self) -> None:
-        # 含反斜杠与引号的路径应被转义且不破坏括号平衡
-        code = generate_lisp("export_t3", {"out_path": 'C:\\a\\b"c.dwg'})
+        # 含引号的内容应被转义且不破坏括号平衡 (反斜杠路径见 P2-3 归一化测试)
+        code = generate_lisp("export_t3", {"out_path": 'C:/a/b"c.dwg'})
         assert is_paren_balanced(code)
-        assert "C:\\\\a\\\\b" in code      # 反斜杠被转义
         assert '\\"c.dwg' in code          # 引号被转义
+
+    def test_export_path_backslash_normalized_to_slash(self) -> None:
+        # P2-3: 反斜杠路径在渲染产物中应统一为正斜杠
+        code = generate_lisp("export_t3", {"out_path": "C:\\dwg\\proj.dwg"})
+        assert "C:/dwg/proj.dwg" in code
+        assert "C:\\dwg" not in code
 
     def test_layer_name_injection_balanced(self) -> None:
         # 图层名含特殊字符不应破坏平衡
@@ -239,3 +260,17 @@ class TestInvalidParamsRejected:
     def test_layer_too_long_rejected(self) -> None:
         with pytest.raises(ParamError):
             generate_lisp("door", {"ins_x": 0, "ins_y": 0, "layer": "L" * 300})
+
+    def test_non_gbk_layer_rejected_with_field(self) -> None:
+        # P1-3: GBK 外字符 (emoji) 应在参数层被拒, 报错含字段名。
+        with pytest.raises(ParamError, match="layer"):
+            generate_lisp("wall", {
+                "x1": 0, "y1": 0, "x2": 1000, "y2": 0, "layer": "测试🔥",
+            })
+
+    def test_gbk_chinese_layer_accepted(self) -> None:
+        # 常规中文图层名 (GBK 可编码) 不应被误拒。
+        code = generate_lisp("wall", {
+            "x1": 0, "y1": 0, "x2": 1000, "y2": 0, "layer": "墙体",
+        })
+        assert "墙体" in code

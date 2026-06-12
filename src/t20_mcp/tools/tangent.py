@@ -24,6 +24,8 @@ from typing import Any, Callable
 
 _TEMPLATE_DIR: Path = Path(__file__).resolve().parent.parent / "lisp_templates" / "tangent"
 
+_PRELUDE_NAME: str = "_prelude"
+
 _TEMPLATE_CACHE: dict[str, str] = {}
 
 
@@ -32,13 +34,20 @@ class ParamError(ValueError):
 
 
 def _load_template(name: str) -> str:
-    """读取并缓存模板文件内容。"""
+    """读取并缓存模板文件内容 (仓库内统一 UTF-8 存储)。"""
     if name not in _TEMPLATE_CACHE:
         path = _TEMPLATE_DIR / f"{name}.lsp"
         if not path.is_file():
             raise ParamError(f"模板缺失: {path}")
         _TEMPLATE_CACHE[name] = path.read_text(encoding="utf-8")
     return _TEMPLATE_CACHE[name]
+
+
+def _load_prelude() -> str:
+    """加载防御性前置 (_prelude.lsp): 环境保存/静默/恢复、局部 *error*、UNDO
+    回滚、命令存在性预检与 vl-cmdf 防级联。所有 tangent 模板共享这套骨架,
+    渲染时拼接在模板之前 (重复加载幂等)。"""
+    return _load_template(_PRELUDE_NAME)
 
 
 # ---------------------------------------------------------------------------
@@ -96,6 +105,16 @@ def _require_str(value: Any, field: str, *, max_len: int) -> str:
     # 控制字符 (换行/制表/回车等) 会破坏 LISP 单行字符串与命令序列。
     if any(ord(ch) < 0x20 for ch in value):
         raise ParamError(f"参数 {field} 含非法控制字符")
+    # GBK 可编码校验 (P1-3): 天正/AutoCAD 按 GBK 加载 .lsp, GBK 外字符(emoji、
+    # 部分扩展区汉字)会在传输层 errors="strict" 处报错; 这里提前给出带字段名的
+    # 友好提示, 作为第一道防线。
+    try:
+        value.encode("gbk")
+    except UnicodeEncodeError as e:
+        bad = value[e.start:e.end]
+        raise ParamError(
+            f"参数 {field} 含 GBK 无法编码的字符 {bad!r} (天正按 GBK 加载, 请避免 emoji/扩展区字符)"
+        )
     return value
 
 
@@ -171,13 +190,61 @@ def is_paren_balanced(code: str) -> bool:
     return depth == 0 and not in_string
 
 
+def _strip_line_comments(code: str) -> str:
+    """把 ``;`` 行注释区域替换为空白 (字符串字面量内的 ``;`` 不算注释)。
+
+    用于残留占位符自检: 模板头注释里合法地写有 ``{{TOKEN}}`` 说明文字,
+    不应被误判为未注入占位符; 而字符串字面量内的 ``"{{WIDTH}}"`` 必须仍被检出。
+    """
+    out: list[str] = []
+    in_string = False
+    in_comment = False
+    escaped = False
+    for ch in code:
+        if in_comment:
+            out.append("\n" if ch == "\n" else " ")
+            if ch == "\n":
+                in_comment = False
+            continue
+        if in_string:
+            out.append(ch)
+            if escaped:
+                escaped = False
+            elif ch == "\\":
+                escaped = True
+            elif ch == '"':
+                in_string = False
+            continue
+        if ch == '"':
+            in_string = True
+            out.append(ch)
+        elif ch == ";":
+            in_comment = True
+            out.append(" ")
+        else:
+            out.append(ch)
+    return "".join(out)
+
+
 def _render(template_name: str, tokens: dict[str, str]) -> str:
-    """加载模板并替换 ``{{TOKEN}}`` 占位符, 校验无残留占位符与括号平衡。"""
-    code = _load_template(template_name)
+    """加载模板并替换 ``{{TOKEN}}`` 占位符, 拼接 _prelude.lsp 骨架于产物之前,
+    校验无残留占位符与括号平衡。
+
+    prelude 提供 t20mcp:begin / on-error / call / end / fail / pt 等函数;
+    模板必须长成 _prelude.lsp 文末描述的骨架形态 (局部 *error* + t20mcp:call)。
+    传输层会把整体 (prelude + 模板) 一并转码为 GBK 写盘下发。
+    """
+    body = _load_template(template_name)
+    # 模板含 ;| ... |; 块注释会骗过 is_paren_balanced (它只识别 ; 行注释)。
+    # prelude 已规范禁止块注释, 这里再加一道 lint 拦截 (P2-2)。
+    if ";|" in body:
+        raise ParamError(f"模板 {template_name} 含禁止的 ;| |; 块注释")
     for key, val in tokens.items():
-        code = code.replace("{{" + key + "}}", val)
-    if "{{" in code:
+        body = body.replace("{{" + key + "}}", val)
+    # 残留占位符自检: 忽略注释里的 {{TOKEN}} 说明文字, 字符串内的占位符仍检出。
+    if "{{" in _strip_line_comments(body):
         raise ParamError(f"模板 {template_name} 渲染后仍存在未注入占位符")
+    code = _load_prelude() + "\n" + body
     if not is_paren_balanced(code):
         raise ParamError(f"模板 {template_name} 渲染后括号不平衡")
     return code
@@ -309,6 +376,8 @@ def _gen_export_t3(data: dict[str, Any]) -> str:
     out_path = _require_str(data.get("out_path"), "out_path", max_len=512)
     if not out_path.lower().endswith(".dwg"):
         raise ParamError("out_path 必须以 .dwg 结尾")
+    # P2-3: 统一为正斜杠, 消除 FILEDIA=0 命令行交互下反斜杠的转义/分隔歧义。
+    out_path = out_path.replace("\\", "/")
     ver_key = str(data.get("target_ver", "t3")).lower()
     if ver_key not in _ALLOWED_T3_VERSIONS:
         raise ParamError(
@@ -335,6 +404,12 @@ _GENERATORS: dict[str, Callable[[dict[str, Any]], str]] = {
 
 SUBCOMMANDS: tuple[str, ...] = tuple(_GENERATORS)
 
+# 综合置信度为「低」的子命令: 命令名/交互序列均为推测, 真机未验证。
+# execute=True 下发时附 warning, 提醒结果可能不符合预期 (见 docs/T20_COMMANDS.md)。
+LOW_CONFIDENCE_SUBCOMMANDS: frozenset[str] = frozenset({"axis_grid", "door", "window"})
+
+_UNVERIFIED_WARNING: str = "未经真机验证: 该天正命令名与交互序列为推测值, 执行结果可能不符合预期"
+
 
 def generate_lisp(subcommand: str, data: dict[str, Any] | None = None) -> str:
     """根据子命令与参数生成已校验、括号平衡的 AutoLISP 代码字符串。
@@ -357,6 +432,7 @@ def generate_lisp(subcommand: str, data: dict[str, Any] | None = None) -> str:
 def register_tangent_tool(mcp: Any) -> None:
     """在传入的 FastMCP 实例上注册 ``tangent`` consolidated 工具。"""
     # 延迟导入, 避免与 client 的循环依赖, 并保持纯生成逻辑可离线测试。
+    from t20_mcp.backends.base import CommandResult
     from t20_mcp.client import _json, _safe, add_screenshot_if_available, get_backend
 
     @mcp.tool(annotations={"title": "Tangent (天正 T20) Operations", "readOnlyHint": False})
@@ -364,12 +440,19 @@ def register_tangent_tool(mcp: Any) -> None:
     async def tangent(  # type: ignore[reportUnusedFunction]
         operation: str,
         data: dict | None = None,
+        execute: bool = False,
         include_screenshot: bool = False,
     ) -> str | list:
         """天正 T20 建筑实体封装 (LISP 模板 + 参数注入)。
 
-        所有子命令均生成对应 AutoLISP 模板代码, 经现有 execute_lisp 通道下发。
+        所有子命令均生成对应 AutoLISP 模板代码 (前置 _prelude.lsp 防御性骨架),
         参数在注入前做类型与范围校验, 非法参数会被拒绝。
+
+        **execute (默认 False = dry-run)**: 因多数子命令的天正命令名与交互序列
+        尚未真机验证, 默认只返回渲染后的 LISP 代码而**不**下发到 AutoCAD
+        (不产生任何 IPC 文件)。确认无误后传 execute=True 才经 execute_lisp 真正执行。
+        置信度为「低」的子命令 (axis_grid/door/window) 即使 execute=True, 返回
+        payload 也会附 warning 字段提示未经真机验证。
 
         Operations (data 字段):
           axis_grid  — 直线轴网。{base_x?, base_y?, hspacings:[..], vspacings:[..], angle?, layer?}
@@ -379,16 +462,38 @@ def register_tangent_tool(mcp: Any) -> None:
           dimension  — 逐点标注。{p1_x, p1_y, p2_x, p2_y, pos_x?, pos_y?, layer?}
           export_t3  — 导出天正3。{out_path, target_ver?}
 
-        注: 多个子命令的天正命令名与交互序列为推测值, 详见 docs/T20_COMMANDS.md
-            标注 "待真机验证" 的条目。
+        注: 标注 "待真机验证" 的条目详见 docs/T20_COMMANDS.md。
         """
         try:
             code = generate_lisp(operation, data or {})
         except ParamError as e:
             return _json({"error": f"[tangent.{operation}] {e}"})
 
+        low_conf = operation in LOW_CONFIDENCE_SUBCOMMANDS
+
+        # 默认 dry-run: 仅返回渲染后的 LISP, 不接触 backend / 不产生 IPC 文件。
+        if not execute:
+            payload: dict[str, Any] = {
+                "operation": operation,
+                "dry_run": True,
+                "executed": False,
+                "lisp": code,
+                "hint": "传 execute=True 才会真正下发到 AutoCAD 执行",
+            }
+            if low_conf:
+                payload["warning"] = _UNVERIFIED_WARNING
+            return _json(payload)
+
         backend = await get_backend()
         result = await backend.execute_lisp(code)
+        # 低置信子命令: 在成功 payload 上附 warning (失败结果保持原 error 不动)。
+        if low_conf and result.ok:
+            base = result.payload
+            if isinstance(base, dict):
+                base = {**base, "warning": _UNVERIFIED_WARNING}
+            else:
+                base = {"result": base, "warning": _UNVERIFIED_WARNING}
+            result = CommandResult(ok=True, payload=base)
         return await add_screenshot_if_available(result, include_screenshot)
 
     return None

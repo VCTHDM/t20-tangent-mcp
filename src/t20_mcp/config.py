@@ -12,7 +12,17 @@ log = structlog.get_logger()
 
 # Paths
 LISP_DIR = Path(__file__).resolve().parent.parent.parent / "lisp-code"
-IPC_DIR = Path(os.environ.get("AUTOCAD_MCP_IPC_DIR", "C:/temp"))
+# IPC 目录默认放在 %TEMP%/t20_mcp (避免要求 C:\ 根写权限); 可用 env 覆盖。
+# dispatcher (lisp-code/mcp_dispatch.lsp) 用同样规则解析, 两端必须一致。
+IPC_DIR = Path(
+    os.environ.get(
+        "AUTOCAD_MCP_IPC_DIR",
+        str(Path(os.environ.get("TEMP") or os.environ.get("TMP") or "C:/temp") / "t20_mcp"),
+    )
+)
+
+# 主窗识别: 进程映像名为主判据 (天正启动器可能改标题, 标题判据不可靠)。
+ACAD_PROCESS_NAME = os.environ.get("AUTOCAD_MCP_ACAD_PROCESS", "acad.exe").strip().lower()
 
 # Backend selection
 BACKEND_DEFAULT = "auto"  # auto | file_ipc | ezdxf

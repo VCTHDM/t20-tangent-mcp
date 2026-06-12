@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import locale
 import os
 import sys
 import time
@@ -21,7 +22,7 @@ from pathlib import Path
 import structlog
 
 from t20_mcp.backends.base import AutoCADBackend, BackendCapabilities, CommandResult
-from t20_mcp.config import IPC_DIR, IPC_TIMEOUT, LISP_DIR
+from t20_mcp.config import ACAD_PROCESS_NAME, IPC_DIR, IPC_TIMEOUT, LISP_DIR
 
 log = structlog.get_logger()
 
@@ -31,26 +32,119 @@ TIMEOUT = IPC_TIMEOUT  # seconds (configurable via AUTOCAD_MCP_IPC_TIMEOUT)
 STALE_THRESHOLD = 60.0  # clean up files older than this
 
 
+def _decode_result_bytes(raw: bytes) -> str:
+    """Decode an AutoLISP-written result file under the编码契约.
+
+    Order: utf-8 (ASCII / utf-8 writers) → cp936 (Chinese-Windows ANSI, the
+    real encoding for 中文 payloads) → the OS preferred ANSI page → cp1252.
+    cp1252 is strictly last: it decodes almost any byte sequence without
+    raising, so trying it early would silently accept mojibake instead of the
+    correct GBK text. See _prelude.lsp 编码契约 §3.
+    """
+    candidates = ["utf-8", "cp936"]
+    try:
+        preferred = locale.getpreferredencoding(False)
+    except Exception:
+        preferred = ""
+    if preferred and preferred.lower().replace("-", "") not in ("utf8", "cp936"):
+        candidates.append(preferred)
+    candidates.append("cp1252")
+
+    for enc in candidates:
+        try:
+            return raw.decode(enc)
+        except (UnicodeDecodeError, LookupError):
+            continue
+    # Final fallback: never lose the bytes entirely.
+    return raw.decode("cp1252", errors="replace")
+
+
+def _process_image_name(pid: int) -> str:
+    """Return the lowercased basename of the process image (e.g. 'acad.exe').
+
+    Uses QueryFullProcessImageNameW with PROCESS_QUERY_LIMITED_INFORMATION so it
+    works without elevated rights (Vista+). Returns "" on any failure.
+    """
+    try:
+        import ctypes
+        from ctypes import wintypes
+
+        PROCESS_QUERY_LIMITED_INFORMATION = 0x1000
+        k32 = ctypes.windll.kernel32
+        h = k32.OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, False, pid)
+        if not h:
+            return ""
+        try:
+            buf_len = wintypes.DWORD(1024)
+            buf = ctypes.create_unicode_buffer(buf_len.value)
+            if k32.QueryFullProcessImageNameW(h, 0, buf, ctypes.byref(buf_len)):
+                return os.path.basename(buf.value).lower()
+            return ""
+        finally:
+            k32.CloseHandle(h)
+    except Exception:
+        return ""
+
+
 def find_autocad_window() -> int | None:
-    """Find the AutoCAD LT window handle by checking window titles."""
+    """Find the AutoCAD/T20 main window handle.
+
+    Primary criterion is the process image name (default ``acad.exe``, override
+    via ``AUTOCAD_MCP_ACAD_PROCESS``): the T20 launcher may rewrite the window
+    title to "T20天正建筑 Vxx…" which contains no "autocad", so a title-only
+    match is unreliable. Title ("autocad"/"天正"/"tarch") is a secondary signal
+    used only to disambiguate. When several acad.exe windows match, prefer the
+    one whose title contains ".dwg" and log a multi-instance warning.
+    """
     if sys.platform != "win32":
         return None
     try:
         import win32gui
-
-        windows: list[int] = []
-
-        def callback(hwnd, result):
-            if win32gui.IsWindowVisible(hwnd):
-                text = win32gui.GetWindowText(hwnd).lower()
-                if "autocad" in text and ("drawing" in text or ".dwg" in text):
-                    result.append(hwnd)
-            return True
-
-        win32gui.EnumWindows(callback, windows)
-        return windows[0] if windows else None
+        import win32process
     except ImportError:
         return None
+
+    title_hints = ("autocad", "天正", "tarch")
+    primary: list[tuple[int, str]] = []   # process-name matches: (hwnd, title)
+    secondary: list[tuple[int, str]] = []  # title-only matches (fallback)
+
+    def callback(hwnd, _):
+        if not win32gui.IsWindowVisible(hwnd):
+            return True
+        try:
+            title = win32gui.GetWindowText(hwnd) or ""
+        except Exception:
+            title = ""
+        tlow = title.lower()
+        try:
+            _, pid = win32process.GetWindowThreadProcessId(hwnd)
+        except Exception:
+            pid = 0
+        image = _process_image_name(pid) if pid else ""
+        if image == ACAD_PROCESS_NAME:
+            primary.append((hwnd, tlow))
+        elif any(h in tlow for h in title_hints):
+            secondary.append((hwnd, tlow))
+        return True
+
+    win32gui.EnumWindows(callback, None)
+
+    candidates = primary or secondary
+    if not candidates:
+        return None
+
+    # Prefer a window whose title names a .dwg (the active drawing window).
+    with_dwg = [hwnd for hwnd, t in candidates if ".dwg" in t]
+    chosen = with_dwg[0] if with_dwg else candidates[0][0]
+    if len(candidates) > 1:
+        log.warning(
+            "multiple_autocad_windows",
+            count=len(candidates),
+            used_process_match=bool(primary),
+            chose_dwg_title=bool(with_dwg),
+            chosen_hwnd=chosen,
+        )
+    return chosen
 
 
 class FileIPCBackend(AutoCADBackend):
@@ -62,6 +156,9 @@ class FileIPCBackend(AutoCADBackend):
         self._ipc_dir = Path(IPC_DIR)
         self._screenshot_provider = None
         self._lock = asyncio.Lock()  # Single in-flight command
+        # P1-2: only inject ESC cancel after a previous request timed out, so we
+        # don't clobber a user's in-progress command on every dispatch.
+        self._needs_cancel = False
 
     @property
     def name(self) -> str:
@@ -86,7 +183,13 @@ class FileIPCBackend(AutoCADBackend):
         """Find AutoCAD window and verify dispatcher is loaded."""
         self._hwnd = find_autocad_window()
         if not self._hwnd:
-            return CommandResult(ok=False, error="AutoCAD LT window not found")
+            return CommandResult(
+                ok=False,
+                error=(
+                    f"AutoCAD/T20 window not found (no '{ACAD_PROCESS_NAME}' process window). "
+                    "Start AutoCAD + T20 and open a .dwg, or set AUTOCAD_MCP_ACAD_PROCESS."
+                ),
+            )
 
         # Set up screenshot provider
         try:
@@ -113,7 +216,7 @@ class FileIPCBackend(AutoCADBackend):
             return CommandResult(
                 ok=False,
                 error=(
-                    "AutoCAD LT detected but mcp_dispatch.lsp not loaded.\n"
+                    "AutoCAD/T20 detected but mcp_dispatch.lsp not loaded.\n"
                     f'In AutoCAD command line, type:\n  (load "{lisp_path}")\n'
                     "Or add lisp-code/ to trusted paths for auto-loading."
                 ),
@@ -144,6 +247,16 @@ class FileIPCBackend(AutoCADBackend):
         result_file = self._ipc_dir / f"t20_mcp_result_{request_id}.json"
         tmp_file = cmd_file.with_suffix(".tmp")
 
+        # P1-2: refuse to dispatch while AutoCAD is blocked by a modal dialog.
+        # Sending the trigger then would be swallowed by the dialog's message
+        # loop (only a timeout, no diagnostic), and a stray ESC could cancel the
+        # user's in-progress operation.
+        if self._autocad_modal_dialog_present():
+            return CommandResult(
+                ok=False,
+                error="AutoCAD 正被对话框阻塞，请关闭后重试",
+            )
+
         try:
             # Strip None values — the simple LISP JSON parser can't handle null
             clean_params = {k: v for k, v in params.items() if v is not None}
@@ -154,23 +267,36 @@ class FileIPCBackend(AutoCADBackend):
                 "params": clean_params,
                 "ts": time.time(),
             }
-            tmp_file.write_text(json.dumps(payload), encoding="utf-8")
+            # P2-1: ensure_ascii=False keeps 中文 as real characters (not \uXXXX,
+            # which the dispatcher's minimal JSON parser can't decode), and the
+            # command file is written GBK to match the encoding contract — AutoCAD
+            # reads .json command files in the system ANSI page (cp936) just like
+            # .lsp. errors="replace" keeps a stray non-GBK char from aborting the
+            # whole dispatch (param-layer GBK validation is the real gate).
+            cmd_json = json.dumps(payload, ensure_ascii=False)
+            tmp_file.write_bytes(cmd_json.encode("gbk", errors="replace"))
             tmp_file.rename(cmd_file)
 
-            # Type the fixed dispatch trigger
-            self._type_dispatch_trigger()
+            # Type the fixed dispatch trigger. Only inject ESC cancel when the
+            # previous request timed out (it may have left AutoCAD at a command
+            # prompt); on the normal path ESC would disturb the user's state.
+            self._type_dispatch_trigger(send_cancel=self._needs_cancel)
+            self._needs_cancel = False
 
             # Poll for result
             deadline = time.time() + TIMEOUT
             while time.time() < deadline:
                 if result_file.exists():
                     try:
-                        # AutoCAD LISP writes files in Windows-1252 encoding;
-                        # try UTF-8 first (covers ASCII), fall back to cp1252
-                        try:
-                            text = result_file.read_text(encoding="utf-8")
-                        except UnicodeDecodeError:
-                            text = result_file.read_text(encoding="cp1252")
+                        # AutoLISP (write-line) writes the result file in the
+                        # system ANSI code page. On Chinese Windows that is
+                        # cp936 (GBK), NOT Windows-1252. Decode order:
+                        #   utf-8  — covers pure-ASCII and any utf-8 writers
+                        #   cp936 / locale ANSI — the real encoding for 中文 payloads
+                        #   cp1252 — last resort only; it almost never raises
+                        #            UnicodeDecodeError, so trying it earlier would
+                        #            silently turn GBK 中文 into mojibake.
+                        text = _decode_result_bytes(result_file.read_bytes())
                         data = json.loads(text)
                         # Verify request_id matches
                         if data.get("request_id") == request_id:
@@ -183,6 +309,8 @@ class FileIPCBackend(AutoCADBackend):
                         pass  # File may be partially written, retry
                 await asyncio.sleep(POLL_INTERVAL)
 
+            # Timed out: arm ESC cancel for the next dispatch's first attempt.
+            self._needs_cancel = True
             return CommandResult(ok=False, error=f"Timeout waiting for result (request_id={request_id})")
 
         finally:
@@ -213,11 +341,51 @@ class FileIPCBackend(AutoCADBackend):
         except Exception:
             return None
 
-    def _type_dispatch_trigger(self):
+    def _autocad_modal_dialog_present(self) -> bool:
+        """Best-effort check whether AutoCAD is blocked by a modal dialog.
+
+        Looks for a standard dialog (class ``#32770``) that is either the main
+        window's active popup or a visible window on the main UI thread. T20's
+        own ObjectARX dialogs may not use ``#32770``, so this is advisory: on any
+        error or uncertainty it returns False and the dispatch proceeds.
+        """
+        if sys.platform != "win32" or not self._hwnd:
+            return False
+        try:
+            import win32gui
+            import win32process
+
+            popup = win32gui.GetLastActivePopup(self._hwnd)
+            if (
+                popup
+                and popup != self._hwnd
+                and win32gui.IsWindowVisible(popup)
+                and win32gui.GetClassName(popup) == "#32770"
+            ):
+                return True
+
+            tid, _ = win32process.GetWindowThreadProcessId(self._hwnd)
+            found: list[int] = []
+
+            def cb(hwnd, _):
+                try:
+                    if win32gui.IsWindowVisible(hwnd) and win32gui.GetClassName(hwnd) == "#32770":
+                        found.append(hwnd)
+                except Exception:
+                    pass
+                return True
+
+            win32gui.EnumThreadWindows(tid, cb, None)
+            return bool(found)
+        except Exception:
+            return False
+
+    def _type_dispatch_trigger(self, send_cancel: bool = False):
         """Post '(c:mcp-dispatch)' + Enter via WM_CHAR to MDIClient — no focus steal.
 
-        Sends ESC keystrokes first to cancel any stale pending command
-        (e.g. from a previous timeout leaving AutoCAD in a command prompt).
+        When ``send_cancel`` is True (only after a previous timeout), injects ESC
+        first to clear a stale pending command. On the normal path ESC is skipped
+        so we never cancel a user's in-progress operation.
         """
         try:
             import ctypes
@@ -229,11 +397,12 @@ class FileIPCBackend(AutoCADBackend):
             target = self._command_hwnd or self._hwnd
             post = ctypes.windll.user32.PostMessageW
 
-            # Cancel any pending command (2x ESC for nested commands)
-            for _ in range(2):
-                post(target, WM_KEYDOWN, VK_ESCAPE, 0)
-                post(target, WM_KEYUP, VK_ESCAPE, 0)
-            time.sleep(0.05)
+            if send_cancel:
+                # Cancel any stale pending command (2x ESC for nested commands)
+                for _ in range(2):
+                    post(target, WM_KEYDOWN, VK_ESCAPE, 0)
+                    post(target, WM_KEYUP, VK_ESCAPE, 0)
+                time.sleep(0.05)
 
             for ch in "(c:mcp-dispatch)":
                 post(target, WM_CHAR, ord(ch), 0)
@@ -300,10 +469,27 @@ class FileIPCBackend(AutoCADBackend):
         """Execute arbitrary AutoLISP code via temp file.
 
         File persists for session; cleaned up by _cleanup_stale_files().
+
+        编码契约 (见 _prelude.lsp §2): AutoCAD (load) 在 2021 之前只按系统
+        ANSI 代码页解码 .lsp; 中文 Windows 上 = GBK(cp936)。仓库内模板是
+        UTF-8, 转码只发生在这里 —— 写盘前整体转为 GBK, 不带 BOM。
+        errors="strict": GBK 表示不了的字符 (emoji/扩展区汉字) 直接报错,
+        而不是写出乱码导致命令找不到/参数错却无报错。
         """
         request_id = uuid.uuid4().hex[:12]
         code_file = self._ipc_dir / f"t20_mcp_lisp_{request_id}.lsp"
-        code_file.write_text(code, encoding="utf-8")
+        try:
+            gbk_bytes = code.encode("gbk", errors="strict")
+        except UnicodeEncodeError as e:
+            bad = code[e.start:e.end]
+            return CommandResult(
+                ok=False,
+                error=(
+                    f"LISP 代码含 GBK 无法编码的字符 {bad!r} (位置 {e.start}); "
+                    "天正/AutoCAD 按 GBK 加载 .lsp, 请移除 emoji 或扩展区字符。"
+                ),
+            )
+        code_file.write_bytes(gbk_bytes)
         return await self._dispatch("execute-lisp", {
             "code_file": str(code_file).replace("\\", "/")
         })
