@@ -153,3 +153,18 @@ uv run python scripts/itest_18_axis_lines.py
 - 收尾环境：`CMDACTIVE=0 / CMDDIA=1 / FILEDIA=1 / OSMODE=0`
 
 注意：`axis_lines` 生成的是普通 `LINE`，不是天正 `TCH_*` 智能轴网对象。
+
+## 11. MCP stdio 冒烟
+
+```text
+uv run python scripts/itest_19_mcp_stdio_smoke.py
+```
+
+结果：
+
+- server 启动命令：`python -m t20_mcp`
+- 工具列表：`tangent/drawing/entity/layer/block/annotation/pid/view/system`
+- `tangent(axis_lines, execute=False)` dry-run：PASS
+
+修正：README 中原 `uv run python -m t20_mcp.server` 不会调用 `main()`，已改为
+`uv run python -m t20_mcp`。
