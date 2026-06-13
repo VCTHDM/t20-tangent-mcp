@@ -354,6 +354,26 @@ def _gen_wall(data: dict[str, Any]) -> str:
     )
 
 
+def _gen_column(data: dict[str, Any]) -> str:
+    """标准柱。data: {x,y, angle?, layer?}
+
+    截面尺寸由天正标准柱面板当前记忆值决定; angle 仅尝试常见 COM 属性名,
+    属性不存在时模板会吞掉错误, 不影响已验证的点序列建柱路径。
+    """
+    x = _require_coord(data.get("x"), "x")
+    y = _require_coord(data.get("y"), "y")
+    angle = _require_range(data.get("angle", 0.0), "angle", *ANGLE_RANGE)
+    return _render(
+        "column",
+        {
+            "SET_LAYER": _set_layer_cmd(data.get("layer")),
+            "X": _num(x),
+            "Y": _num(y),
+            "ANGLE": _num(angle),
+        },
+    )
+
+
 def _gen_door(data: dict[str, Any]) -> str:
     """普通门。data: {ins_x, ins_y, width?, height?, sill_distance?, layer?}"""
     ins_x = _require_coord(data.get("ins_x"), "ins_x")
@@ -608,6 +628,7 @@ _GENERATORS: dict[str, Callable[[dict[str, Any]], str]] = {
     "axis_grid": _gen_axis_grid,
     "axis_lines": _gen_axis_lines,
     "wall": _gen_wall,
+    "column": _gen_column,
     "door": _gen_door,
     "window": _gen_window,
     "dimension": _gen_dimension,
@@ -704,6 +725,7 @@ def register_tangent_tool(mcp: Any) -> None:
           wall_thickness_dimension — 墙厚标注 [已验证]。{p1_x, p1_y, p2_x, p2_y, layer?}
           opening_dimension — 门窗标注 [已验证]。{p1_x, p1_y, p2_x, p2_y, layer?}
           elevation  — 标高标注 [已验证双点序列]。{base_x, base_y, label_x?, label_y?, layer?}
+          column     — 标准柱   [已验证最小点序列]。{x, y, angle?, layer?}
           door       — 普通门   [部分验证]。{ins_x, ins_y, width?, height?, sill_distance?, layer?}
           window     — 普通窗   [部分验证]。{ins_x, ins_y, width?, height?, sill_height?, layer?}
           axis_grid  — 直线轴网 [仅 dry-run]。{base_x?, base_y?, hspacings:[..], vspacings:[..], angle?, layer?}

@@ -48,6 +48,7 @@ VALID_CASES: dict[str, dict] = {
         "left_width": 120, "right_width": 120, "height": 3000,
         "wall_type": "砖墙", "layer": "WALL",
     },
+    "column": {"x": 0, "y": 0},
     "door": {"ins_x": 1500, "ins_y": 0, "width": 900, "height": 2100},
     "window": {"ins_x": 3000, "ins_y": 0, "width": 1500, "height": 1500, "sill_height": 900},
     "dimension": {"p1_x": 0, "p1_y": 0, "p2_x": 6000, "p2_y": 0},
@@ -176,6 +177,14 @@ class TestParamInjection:
         assert '(cons "LeftWidth" (float 100))' in code
         assert '(cons "RightWidth" (float 140))' in code
         assert '(cons "Height" (float 2900))' in code
+
+    def test_column_uses_tgcolumn_point_sequence(self) -> None:
+        code = generate_lisp("column", {"x": 1200, "y": 2400, "angle": 30, "layer": "COL"})
+        assert '"TGCOLUMN"' in code
+        assert "t20mcp:pt 1200 2400" in code
+        assert '"_.-LAYER" "_M" "COL"' in code
+        assert '(float 30)' in code
+        assert '"TCH_COLUMN"' in code
 
     def test_dimension_uses_tdimmp_pos_first(self) -> None:
         # 真机验证: TDIMMP, 顺序 = 尺寸线位置点 -> 点1 -> 点2 -> 回车
