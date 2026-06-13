@@ -16,7 +16,7 @@ LISP 模板封装。
 |---|---|---|
 | IPC 基础设施（编码链/窗口识别/模态防护/引导加载） | 100% | 全部真机验收通过；WPF 对话框探测盲区已补（Handoff 09，itest_21） |
 | 命令编目 | 100% | 官方表 454 条全部收录并真机探测注册状态（442/451） |
-| 天正实体封装 | ~42% | wall/dimension/wall_thickness_dimension/opening_dimension/elevation/explode_read 已 E2E 验证，axis_lines 普通线轴网替代可执行，door 部分验证；导出受对话框阻碍；柱/楼梯/房间/屋顶等未动工 |
+| 天正实体封装 | ~46% | wall/dimension/wall_thickness_dimension/opening_dimension/elevation/explode_read/search_room 已 E2E 验证，axis_lines 普通线轴网替代可执行，door 部分验证；导出受对话框阻碍；柱/楼梯/屋顶等未动工 |
 | MCP server 集成 | ~95% | 9 工具已注册（含 `tangent`）；MCP stdio dry-run 冒烟已通过 |
 | 测试与联调管线 | ~88% | 离线测试全绿；`scripts/itest_*.py` 可重复真机管线，E2E 收尾环境已校验 |
 
@@ -50,6 +50,7 @@ MCP 工具共 9 个：上游 8 个（drawing/entity/layer/block/annotation/pid/v
 | `window` 窗 | `TOpening` | 🟡 类型随面板模式、窗台高未保证 |
 | `axis_lines` 普通线轴网 | 原生 `LINE` | 🟡 可执行替代路径，生成普通线，不是天正智能轴网 |
 | `explode_read` 几何读回 | 原生 `EXPLODE` | ✅ E2E 验证（副本分解+回滚，非破坏；墙体起点侧有已知 T20 缺陷，见 Handoff 10） |
+| `search_room` 搜索房间 | `TUpdSpace` | ✅ E2E 验证（全选墙体+回车，生成 `TCH_SPACE`） |
 | `axis_grid` 轴网 | `TRectAxis` | ⛔ 模态对话框，execute 已禁用（仅 dry-run） |
 | `export_t3` 导出T3 | `TSaveAs` | ⛔ WPF 导出框无视 FILEDIA=0，execute 已禁用 |
 
@@ -92,8 +93,9 @@ MCP 工具共 9 个：上游 8 个（drawing/entity/layer/block/annotation/pid/v
 | `docs/handoff/08_gpt_field_test.md` | GPT 本轮真机联调结果（bringup/E2E/elevation/opening props） |
 | `docs/handoff/09_fable_wpf_guard.md` | P1-2 补盲：模态对话框探测（IsWindowEnabled 信号，itest_21 验收） |
 | `docs/handoff/10_fable_explode_read.md` | explode_read 几何读回管线（选型/教训/T20 缺陷/对话框自动化） |
+| `docs/handoff/11_fable_search_room.md` | search_room 封装（TUpdSpace 一轮通过）+ LASTPROMPT 捕获法失败记录 |
 | `docs/research/2026-06-13_*.md` | GPT 调研：网搜与安装目录提示词检索（结论：需真机提示捕获） |
-| `scripts/itest_01..25_*.py` | 可重复的联调管线（引导/探测/试驱动/E2E/MCP stdio/恢复/清理） |
+| `scripts/itest_01..27_*.py` | 可重复的联调管线（引导/探测/试驱动/E2E/MCP stdio/恢复/清理） |
 
 ## 分工规则（二人制：fable = 执行人/审查者，GPT = 辅助执行）
 
@@ -120,10 +122,11 @@ AutoCAD 命令行回显、最后一次 diff）写进 `docs/handoff/` 新文档�
 **GPT（体力活，照管线抄作业）：**
 1. **window 完善**：`itest_10_opening_props.py` 改属性候选名重跑，找 TOpening
    门/窗类型 COM 切换属性与窗模式 `SillHeight`；只回填文档与模板参数，不改骨架。
-2. **批量封装 6 命令**：标准柱 `TGColumn`、两点标注 `TDimTP`、墙厚标注 `TDimWall`、
-   标高标注 `TMElev`（已完成 E2E 验证）、
-   单线变墙 `TSWall`、搜索房间 `TUpdSpace`——每条走五步管线，
-   产出模板 + 离线测试 + 文档回填，攒一批等 fable review。
+2. **批量封装 6 命令**——进度：墙厚标注 `TDimWall`、标高标注 `TMElev`、
+   搜索房间 `TUpdSpace`（→`search_room`，Handoff 11）均已完成 E2E；
+   标准柱 `TGColumn`、两点标注 `TDimTP`、单线变墙 `TSWall` 两轮失败 +
+   网搜/安装目录调研无线索 + LASTPROMPT 捕获法失效（Handoff 11 §2），
+   维持待验证，等新线索（reactor 捕获或人工录提示）。
 3. **导出替代探测**：`TPartSaveAs`/`TGetXML` 注册预检 + 最小试驱动；**弹框即记录停手**，
    只产出调研结论，不做绕过尝试。
 4. 文档/测试补全、截图存档。

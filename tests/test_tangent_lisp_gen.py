@@ -55,6 +55,7 @@ VALID_CASES: dict[str, dict] = {
     "opening_dimension": {"p1_x": -200, "p1_y": 600, "p2_x": 3200, "p2_y": 600},
     "elevation": {"base_x": 0, "base_y": 0, "label_x": 1000, "label_y": 1000},
     "explode_read": {"handle": "1a3f", "offset_x": 1_000_000, "offset_y": 1_000_000},
+    "search_room": {"layer": "SPACE"},
     "export_t3": {"out_path": "C:/temp/out_t3.dwg", "target_ver": "t3"},
 }
 

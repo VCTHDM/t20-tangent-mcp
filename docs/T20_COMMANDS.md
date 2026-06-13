@@ -50,6 +50,7 @@
 | 门窗 | `TOpening` | 墙上插入点→回车（非模态面板不阻塞）；`Width/Height/DoorSill` 可 COM 注入 | `TCH_OPENING` | **中**：插入类型随面板当前模式（默认门）；窗模式/`SillHeight` 待验证 |
 | 普通线轴网 | 原生 `LINE` | `axis_lines` 替代路径：按开间/进深生成普通线网格，可旋转；不生成天正智能轴网 | `LINE` | **中** (替代路径) |
 | 几何读回 | 原生 `EXPLODE` | `explode_read`：COPY 副本到暂存区→分解副本→序列化产物→UNDO 回滚，非破坏。TEXPLODE 弹「分解对象」框被弃用（可白名单点击驱动，见 dialog_automation）。已知 T20 缺陷：墙体产物起点侧顶点归零（Handoff 10 §4） | `LINE` 等 | **高** (E2E) |
+| 搜索房间 | `TUpdSpace` | `search_room`：全图选择 `TCH_WALL` → 选择集 → 回车；闭合墙体围合区域生成房间对象 | `TCH_SPACE` | **高** (E2E) |
 | 绘制轴网(直线) | `TRectAxis` | **不可命令行驱动**：模态对话框 (#32770)。工具层已禁止 execute | — | **禁** (仅 dry-run) |
 | 图形导出(T3) | `TSaveAs` | **不可静默**：天正自绘导出框 (WPF)，无视 FILEDIA=0。工具层已禁止 execute | — | **禁** (仅 dry-run) |
 
@@ -65,7 +66,7 @@
 | BIM导出 | `TGetXML` | 空输入弹 `#32770` “天正模型导出到TGL”，不可静默封装 |
 | 标准柱 | `TGColumn` | 两轮点序列均 0 实体，暂不封装 |
 | 单线变墙 | `TSWall` | 两轮选择 LINE 序列均未转换，仅保留原 LINE，暂不封装 |
-| 搜索房间 | `TUpdSpace`(见全表) | 待验证 |
+| 搜索房间 | `TUpdSpace` | **已封装为 `search_room`**（Handoff 11，E2E 验证） |
 
 > 其余 ~440 条见 `docs/T20_OFFICIAL_COMMANDS.md`（含真机注册标记）。
 > 未注册的 9 条集中在渲染/动画模块（延迟加载 ARX）与官方表笔误
@@ -84,6 +85,7 @@
 | `window` | `window.lsp` | TOpening | **部分验证** (类型/窗台高未保证, execute 附 warning) |
 | `axis_lines` | `axis_lines.lsp` | 原生 LINE | **替代路径** (普通线网格，可 execute) |
 | `explode_read` | `explode_read.lsp` | 原生 EXPLODE | **已验证** (E2E: 副本分解+回滚; 墙体起点侧缺陷见 Handoff 10) |
+| `search_room` | `search_room.lsp` | TUpdSpace | **已验证** (E2E: 闭合墙生成 TCH_SPACE) |
 | `axis_grid` | `axis_grid.lsp` | TRectAxis | **仅 dry-run** (execute 已禁用) |
 | `export_t3` | `export_t3.lsp` | TSaveAs | **仅 dry-run** (execute 已禁用) |
 

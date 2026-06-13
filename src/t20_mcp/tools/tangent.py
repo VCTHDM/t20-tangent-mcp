@@ -483,6 +483,15 @@ def _gen_elevation(data: dict[str, Any]) -> str:
 _ALLOWED_T3_VERSIONS: dict[str, str] = {"t3": "3", "天正3": "3", "3": "3"}
 
 
+def _gen_search_room(data: dict[str, Any]) -> str:
+    """搜索房间。data: {layer?}
+
+    全图选择 TCH_WALL 后驱动 TUPDSPACE, 闭合墙体围合区域生成 TCH_SPACE
+    (itest_26 真机验证: 选择集 + 回车序列, 一轮成功)。
+    """
+    return _render("search_room", {"SET_LAYER": _set_layer_cmd(data.get("layer"))})
+
+
 EXPLODE_OFFSET_MIN: float = 100_000.0   # 副本暂存区最小偏移 (防重合墙对话框)
 EXPLODE_MAX_ENTITIES_RANGE: tuple[int, int] = (1, 2000)
 
@@ -606,6 +615,7 @@ _GENERATORS: dict[str, Callable[[dict[str, Any]], str]] = {
     "opening_dimension": _gen_opening_dimension,
     "elevation": _gen_elevation,
     "explode_read": _gen_explode_read,
+    "search_room": _gen_search_room,
     "export_t3": _gen_export_t3,
 }
 
@@ -699,8 +709,8 @@ def register_tangent_tool(mcp: Any) -> None:
           axis_grid  — 直线轴网 [仅 dry-run]。{base_x?, base_y?, hspacings:[..], vspacings:[..], angle?, layer?}
           axis_lines — 普通线轴网 [可执行替代]。{base_x?, base_y?, hspacings:[..], vspacings:[..], angle?, layer?}
           explode_read — 实体几何读回 [已验证]。{handle, offset_x?, offset_y?, max_entities?}
-                       副本分解管线, 不修改原实体; 执行期间会自动驱动「分解对象」
-                       对话框 (白名单点击), 期间请勿手动操作 AutoCAD。
+                       副本分解管线 (原生 EXPLODE, 不弹框), 不修改原实体。
+          search_room — 搜索房间 [已验证]。{layer?} 全图墙体围合区域生成 TCH_SPACE。
           export_t3  — 导出天正3 [仅 dry-run]。{out_path, target_ver?}
 
         注: 验证记录详见 docs/T20_COMMANDS.md 与 docs/handoff/05_fable_field_test.md。
