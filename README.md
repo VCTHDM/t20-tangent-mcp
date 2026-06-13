@@ -18,7 +18,7 @@ LISP 模板封装。
 |---|---|---|
 | IPC 基础设施（编码链/窗口识别/模态防护/引导加载） | 100% | 全部真机验收通过；WPF 对话框探测盲区已补（Handoff 09，itest_21） |
 | 命令编目 | 100% | 官方表 454 条全部收录并真机探测注册状态（442/451） |
-| 天正实体封装 | ~48% | wall/dimension/wall_thickness_dimension/opening_dimension/two_point_dimension/elevation/explode_read/search_room 已 E2E 验证，axis_lines 普通线轴网替代可执行，door 部分验证；标准柱/轴网/导出受 #32770 对话框阻碍（仅 dry-run）；楼梯/屋顶等未动工 |
+| 天正实体封装 | ~50% | wall/dimension/wall_thickness_dimension/opening_dimension/two_point_dimension/elevation/coordinate/explode_read/search_room 已 E2E 验证，axis_lines 普通线轴网替代可执行，door 部分验证；标准柱/轴网/导出受 #32770 对话框阻碍（仅 dry-run）；楼梯/屋顶等未动工 |
 | MCP server 集成 | ~95% | 9 工具已注册（含 `tangent`）；MCP stdio dry-run 冒烟已通过 |
 | 测试与联调管线 | ~88% | 离线测试全绿；`scripts/itest_*.py` 可重复真机管线，E2E 收尾环境已校验 |
 
@@ -49,9 +49,10 @@ MCP 工具共 9 个：上游 8 个（drawing/entity/layer/block/annotation/pid/v
 | `opening_dimension` 门窗标注 | `TDim3` | ✅ E2E 验证 |
 | `two_point_dimension` 两点标注 | `TDimTP` | ✅ E2E 验证（穿越三墙生成 `TCH_DIMENSION2`；穿过对象不足会报"对象数目太少"） |
 | `elevation` 标高标注 | `TMElev` | ✅ 双点序列 E2E 验证（实体 `TCH_ELEVATION`）；execute 附 warning，严禁改成单点序列 |
+| `coordinate` 坐标标注 | `TCoord` | ✅ E2E 验证（标注点→方向点→回车，实体 `TCH_COORD`） |
 | `column` 标准柱 | `TGColumn` | ⛔ #32770 标准柱面板阻塞，execute 已禁用（仅 dry-run；点序列到不了放置处理器，0 实体，Handoff 13） |
 | `door` 门 | `TOpening` | 🟡 部分验证（execute 附 warning） |
-| `window` 窗 | `TOpening` | 🟡 类型随面板模式、窗台高未保证 |
+| `window` 窗 | `TOpening` | 🟡 类型随面板模式；工具 warning 已明确要求先人工切窗模式，窗台高仍待窗模式真机验证 |
 | `axis_lines` 普通线轴网 | 原生 `LINE` | 🟡 可执行替代路径，生成普通线，不是天正智能轴网 |
 | `explode_read` 几何读回 | 原生 `EXPLODE` | ✅ E2E 验证（副本分解+回滚，非破坏；墙体起点侧有已知 T20 缺陷，见 Handoff 10） |
 | `search_room` 搜索房间 | `TUpdSpace` | ✅ E2E 验证（全选墙体+回车，生成 `TCH_SPACE`） |
@@ -99,8 +100,11 @@ MCP 工具共 9 个：上游 8 个（drawing/entity/layer/block/annotation/pid/v
 | `docs/handoff/10_fable_explode_read.md` | explode_read 几何读回管线（选型/教训/T20 缺陷/对话框自动化） |
 | `docs/handoff/11_fable_search_room.md` | search_room 封装（TUpdSpace 一轮通过）+ LASTPROMPT 捕获法失败记录 |
 | `docs/handoff/15_tswall_recon_stop.md` | TSWall 复核：选择集 no-op、无弹框、暂不封装 |
+| `docs/handoff/16_codex_window_contract.md` | window 子命令人工切窗模式使用约定 + 离线测试记录 |
+| `docs/handoff/17_codex_coordinate.md` | coordinate 坐标标注封装与真机 E2E 记录 |
+| `docs/handoff/18_codex_annotation_probe_stop.md` | TParallelDim / TArrow 初探停手记录 |
 | `docs/research/2026-06-13_*.md` | GPT 调研：网搜与安装目录提示词检索（结论：需真机提示捕获） |
-| `scripts/itest_01..33_*.py` | 可重复的联调管线（引导/探测/试驱动/E2E/MCP stdio/恢复/清理/LOGFILEMODE 提示捕获/弹框侦察） |
+| `scripts/itest_01..34_*.py` | 可重复的联调管线（引导/探测/试驱动/E2E/MCP stdio/恢复/清理/LOGFILEMODE 提示捕获/弹框侦察） |
 
 ## 协作规则（模型路由与安全门禁）
 
@@ -168,8 +172,8 @@ AutoCAD 命令行回显、最后一次 diff）写进 `docs/handoff/` 新文档�
 **可继续按管线推进：**
 1. **window 完善**：COM 属性（itest_16）与 COM 方法（itest_29：
    GetKind/SetKind/GetSubKind/SetSubKind 等全部未暴露）两条路线均已排除；
-   剩余路线为门窗面板 UI 自动化（WPF，需先做方案记录）或文档化"用户先手动
-   切窗模式"的使用约定。
+   已在工具 warning / 模板注释中固化"用户先手动切窗模式"的使用约定。
+   真要免人工，剩余路线仍是门窗面板 UI 自动化（WPF，需先做方案记录）。
 2. **批量封装 6 命令**——进度：墙厚标注 `TDimWall`、标高标注 `TMElev`、
    搜索房间 `TUpdSpace`（→`search_room`，Handoff 11）已完成 E2E；标准柱
    `TGColumn`（→`column`）真机复测证实弹 #32770 面板、命令行点序列无法放置，

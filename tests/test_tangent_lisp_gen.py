@@ -56,6 +56,7 @@ VALID_CASES: dict[str, dict] = {
     "opening_dimension": {"p1_x": -200, "p1_y": 600, "p2_x": 3200, "p2_y": 600},
     "two_point_dimension": {"p1_x": -1000, "p1_y": 0, "p2_x": 7000, "p2_y": 0, "pos_x": 3000, "pos_y": 1500},
     "elevation": {"base_x": 0, "base_y": 0, "label_x": 1000, "label_y": 1000},
+    "coordinate": {"point_x": 1234, "point_y": 5678, "label_x": 1234, "label_y": 6678},
     "explode_read": {"handle": "1a3f", "offset_x": 1_000_000, "offset_y": 1_000_000},
     "search_room": {"layer": "SPACE"},
     "export_t3": {"out_path": "C:/temp/out_t3.dwg", "target_ver": "t3"},
@@ -239,6 +240,18 @@ class TestParamInjection:
         assert base < label
         assert '"")' in code
 
+    def test_coordinate_uses_tcoord_two_points(self) -> None:
+        # TCoord 真机试验: 标注点 -> 坐标标注方向点 -> 回车, 生成 TCH_COORD。
+        code = generate_lisp("coordinate", {
+            "point_x": 1234, "point_y": 5678, "label_x": 1234, "label_y": 6678,
+        })
+        assert '"TCOORD"' in code
+        point = code.index("t20mcp:pt 1234 5678")
+        label = code.index("t20mcp:pt 1234 6678")
+        done = code.index('""', label)
+        assert point < label < done
+        assert "TCH_COORD" in code
+
     def test_float_formatting_is_compact(self) -> None:
         # 整数值不应带小数点; 小数值应保留
         code = generate_lisp("door", {"ins_x": 1500.0, "ins_y": 0, "width": 912.5, "height": 2100})
@@ -325,6 +338,12 @@ class TestInvalidParamsRejected:
         with pytest.raises(ParamError):
             generate_lisp("elevation", {
                 "base_x": 1, "base_y": 1, "label_x": 1, "label_y": 1,
+            })
+
+    def test_coordinate_coincident_points_rejected(self) -> None:
+        with pytest.raises(ParamError):
+            generate_lisp("coordinate", {
+                "point_x": 1, "point_y": 1, "label_x": 1, "label_y": 1,
             })
 
     def test_axis_grid_empty_spacings_rejected(self) -> None:

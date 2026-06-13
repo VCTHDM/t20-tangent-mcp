@@ -395,7 +395,11 @@ def _gen_door(data: dict[str, Any]) -> str:
 
 
 def _gen_window(data: dict[str, Any]) -> str:
-    """普通窗。data: {ins_x, ins_y, width?, height?, sill_height?, layer?}"""
+    """普通窗。data: {ins_x, ins_y, width?, height?, sill_height?, layer?}
+
+    真机已排除 COM 属性/方法切换门窗类型路线。调用前需要用户先在天正门窗面板
+    人工切到窗模式, 否则 TOpening 可能沿用门模式并生成门对象。
+    """
     ins_x = _require_coord(data.get("ins_x"), "ins_x")
     ins_y = _require_coord(data.get("ins_y"), "ins_y")
     width = _require_range(data.get("width", 1500.0), "width", *OPENING_WIDTH_RANGE)
@@ -522,6 +526,30 @@ def _gen_elevation(data: dict[str, Any]) -> str:
             "SET_LAYER": _set_layer_cmd(data.get("layer")),
             "BASE_X": _num(base_x),
             "BASE_Y": _num(base_y),
+            "LABEL_X": _num(label_x),
+            "LABEL_Y": _num(label_y),
+        },
+    )
+
+
+def _gen_coordinate(data: dict[str, Any]) -> str:
+    """坐标标注。data: {point_x,point_y,label_x?,label_y?,layer?}
+
+    真机验证序列: 标注点 -> 坐标标注方向点 -> 回车, 生成 TCH_COORD。
+    label 点只决定标注方向/放置侧, 缺省为标注点正上方 1000mm。
+    """
+    point_x = _require_coord(data.get("point_x"), "point_x")
+    point_y = _require_coord(data.get("point_y"), "point_y")
+    label_x = _require_coord(data.get("label_x", point_x), "label_x")
+    label_y = _require_coord(data.get("label_y", point_y + 1000.0), "label_y")
+    if point_x == label_x and point_y == label_y:
+        raise ParamError("坐标标注点与方向点不能重合")
+    return _render(
+        "coordinate",
+        {
+            "SET_LAYER": _set_layer_cmd(data.get("layer")),
+            "POINT_X": _num(point_x),
+            "POINT_Y": _num(point_y),
             "LABEL_X": _num(label_x),
             "LABEL_Y": _num(label_y),
         },
@@ -664,6 +692,7 @@ _GENERATORS: dict[str, Callable[[dict[str, Any]], str]] = {
     "opening_dimension": _gen_opening_dimension,
     "two_point_dimension": _gen_two_point_dimension,
     "elevation": _gen_elevation,
+    "coordinate": _gen_coordinate,
     "explode_read": _gen_explode_read,
     "search_room": _gen_search_room,
     "export_t3": _gen_export_t3,
@@ -679,8 +708,9 @@ LOW_CONFIDENCE_WARNINGS: dict[str, str] = {
         "窗台高注入待窗模式验证 (见 docs/T20_COMMANDS.md)"
     ),
     "window": (
-        "部分行为未经真机完全验证: 门/窗类型取决于天正门窗面板当前模式 (默认插门), "
-        "窗台高注入待窗模式验证 (见 docs/T20_COMMANDS.md)"
+        "window 需要先人工把天正门窗面板切到窗模式再调用; TOpening 会沿用面板当前模式 "
+        "(默认常为门), 否则可能生成门对象。窗台高 SillHeight 注入仍待窗模式真机验证 "
+        "(COM 属性/方法切换路线已排除, 见 docs/T20_COMMANDS.md)"
     ),
     "elevation": (
         "TMElev 已验证双点序列可生成 TCH_ELEVATION; "
@@ -753,8 +783,8 @@ def register_tangent_tool(mcp: Any) -> None:
         **execute (默认 False = dry-run)**: 默认只返回渲染后的 LISP 代码而**不**
         下发到 AutoCAD (不产生任何 IPC 文件); 传 execute=True 才经 execute_lisp
         真正执行。axis_grid / export_t3 / column 经真机证实为纯对话框 (#32770) 命令,
-        **禁止 execute** (会阻塞 IPC), 仅可 dry-run。door/window/elevation 执行成功也会附 warning 字段
-        (门/窗类型取决于天正门窗面板当前模式)。
+        **禁止 execute** (会阻塞 IPC), 仅可 dry-run。door/window/elevation 执行成功也会附 warning 字段。
+        window 调用前需用户先在天正门窗面板人工切到窗模式; 否则 TOpening 会沿用当前模式。
 
         Operations (data 字段) — 真机验证状态 (T20 V10 / AutoCAD 2024):
           wall       — 单段墙体 [已验证]。{x1, y1, x2, y2, left_width?, right_width?, height?, wall_type?, layer?}
@@ -763,9 +793,10 @@ def register_tangent_tool(mcp: Any) -> None:
           opening_dimension — 门窗标注 [已验证]。{p1_x, p1_y, p2_x, p2_y, layer?}
           two_point_dimension — 两点标注 [已验证]。{p1_x, p1_y, p2_x, p2_y, pos_x?, pos_y?, layer?}
           elevation  — 标高标注 [已验证双点序列]。{base_x, base_y, label_x?, label_y?, layer?}
+          coordinate — 坐标标注 [已验证]。{point_x, point_y, label_x?, label_y?, layer?}
           column     — 标准柱   [仅 dry-run: #32770 面板阻塞]。{x, y, angle?, layer?}
           door       — 普通门   [部分验证]。{ins_x, ins_y, width?, height?, sill_distance?, layer?}
-          window     — 普通窗   [部分验证]。{ins_x, ins_y, width?, height?, sill_height?, layer?}
+          window     — 普通窗   [部分验证; 调用前需人工切窗模式]。{ins_x, ins_y, width?, height?, sill_height?, layer?}
           axis_grid  — 直线轴网 [仅 dry-run]。{base_x?, base_y?, hspacings:[..], vspacings:[..], angle?, layer?}
           axis_lines — 普通线轴网 [可执行替代]。{base_x?, base_y?, hspacings:[..], vspacings:[..], angle?, layer?}
           explode_read — 实体几何读回 [已验证]。{handle, offset_x?, offset_y?, max_entities?}

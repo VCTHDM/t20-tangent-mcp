@@ -72,7 +72,9 @@
 
 ## 6. 遗留（按优先级）
 
-1. window 子命令：窗模式下的类型切换与 SillHeight 属性（需面板处于窗模式或找到 COM 类型切换属性）
+1. window 子命令：窗模式下的类型切换与 SillHeight 属性（COM 属性/方法路线已在 itest_16/29 排除；
+   2026-06-13 Codex 补记：工具 warning / 模板注释已明确要求用户先人工切到窗模式后再调 `window`；
+   若要免人工，剩余路线为 WPF 门窗面板 UI 自动化）
 2. 轴网替代路径：逐根轴线 + `TSingleAxisDim`，或 UI 自动化
 3. 导出替代路径：`TPartSaveAs` / `TGetXML`（BIM 导出）调研
 4. 标准柱 `TGColumn`：`column` 子命令已建（dry-run），但真机复测证实弹 `#32770` 面板、
@@ -81,3 +83,8 @@
 5. `TExplode` + ezdxf 临时副本读取管线
 6. ~~P1-2 防护对 WPF 框的探测~~ **已完成**（2026-06-13，Handoff 09：
    改用「主窗口 IsWindowEnabled」信号，与类名/线程无关；itest_21 真机验收通过）
+7. ~~坐标标注 `TCoord`~~ **已完成**（2026-06-13，Handoff 17：封装为
+   `coordinate`，标注点→方向点→回车，E2E 生成 `TCH_COORD`）
+8. `TParallelDim` / `TArrow` 已初探但暂不封装（2026-06-13，Handoff 18）：
+   `TParallelDim` 三墙穿越线场景无新增实体；`TArrow` 可生成 `TCH_ARROW` 但命令仍 active，
+   完成/退出语义未确认。

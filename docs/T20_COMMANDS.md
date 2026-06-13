@@ -48,7 +48,8 @@
 | 门窗标注 | `TDim3` | 线选起点→线选终点→回车；线选段穿过墙体/门窗 | `TCH_DIMENSION2` | **高** (E2E) |
 | 两点标注 | `TDimTP` | 穿越线起点→穿越线终点→标注位置→回车；三墙场景 E2E 生成尺寸，穿过对象不足会报"对象数目太少" | `TCH_DIMENSION2` | **高** (E2E) |
 | 标高标注 | `TMElev` | 标高基准点→标注放置点→回车；单点序列会挂起等待输入，严禁改成单点序列 | `TCH_ELEVATION` | **高** (E2E) |
-| 门窗 | `TOpening` | 墙上插入点→回车（非模态面板不阻塞）；`Width/Height/DoorSill` 可 COM 注入 | `TCH_OPENING` | **中**：插入类型随面板当前模式（默认门）；窗模式/`SillHeight` 待验证 |
+| 坐标标注 | `TCoord` | 标注点→坐标标注方向点→回车 | `TCH_COORD` | **高** (E2E) |
+| 门窗 | `TOpening` | 墙上插入点→回车（非模态面板不阻塞）；`Width/Height/DoorSill` 可 COM 注入；`window` 调用前需人工把门窗面板切到窗模式 | `TCH_OPENING` | **中**：插入类型随面板当前模式（默认门）；窗模式/`SillHeight` 待验证 |
 | 普通线轴网 | 原生 `LINE` | `axis_lines` 替代路径：按开间/进深生成普通线网格，可旋转；不生成天正智能轴网 | `LINE` | **中** (替代路径) |
 | 几何读回 | 原生 `EXPLODE` | `explode_read`：COPY 副本到暂存区→分解副本→序列化产物→UNDO 回滚，非破坏。TEXPLODE 弹「分解对象」框被弃用（可白名单点击驱动，见 dialog_automation）。已知 T20 缺陷：墙体产物起点侧顶点归零（Handoff 10 §4） | `LINE` 等 | **高** (E2E) |
 | 搜索房间 | `TUpdSpace` | `search_room`：全图选择 `TCH_WALL` → 选择集 → 回车；闭合墙体围合区域生成房间对象 | `TCH_SPACE` | **高** (E2E) |
@@ -64,6 +65,9 @@
 | 两点标注 | `TDimTP` | **已封装为 `two_point_dimension`**。Handoff 13 改用三墙穿越线场景后 E2E 验证通过 |
 | 墙厚标注 | `TDimWall` / 门窗标注 `TDim3` | 已封装为 `wall_thickness_dimension` / `opening_dimension` |
 | 标高标注 | `TMElev` | 已封装为 `elevation`；双点序列 E2E 验证，单点序列禁用 |
+| 坐标标注 | `TCoord` | **已封装为 `coordinate`**（Handoff 17，E2E 验证） |
+| 平行标注 | `TParallelDim` | 已探测：提示为起点→终点；无足够平行对象时报“与第一个对象平行的对象太少”；三墙穿越线场景未生成新实体，暂不封装（Handoff 18） |
+| 箭头引注 | `TArrow` | 已探测：起点→下一点可生成 `TCH_ARROW`，但回车后命令仍 active，完成/退出语义未确认，暂不封装（Handoff 18） |
 | 局部导出 | `TPartSaveAs` | 空输入无弹框、无实体、无输出（no-op），仍未找到静默导出参数 |
 | BIM导出 | `TGetXML` | 空输入弹 `#32770` “天正模型导出到TGL”，不可静默封装 |
 | 单线变墙 | `TSWall` | 已复核：选择 LINE 后回车直接结束，0 实体；未观察到弹框；额外 `240` 被当未知命令。暂不封装（Handoff 15） |
@@ -83,16 +87,17 @@
 | `opening_dimension` | `opening_dimension.lsp` | TDim3 | **已验证** (E2E) |
 | `two_point_dimension` | `two_point_dimension.lsp` | TDimTP | **已验证** (E2E: 穿越三墙生成 TCH_DIMENSION2) |
 | `elevation` | `elevation.lsp` | TMElev | **已验证** (双点序列生成 TCH_ELEVATION；execute 附 warning) |
+| `coordinate` | `coordinate.lsp` | TCoord | **已验证** (E2E: 生成 TCH_COORD) |
 | `column` | `column.lsp` | TGColumn | **仅 dry-run** (#32770 面板阻塞, execute 已禁用, Handoff 13) |
 | `door` | `door.lsp` | TOpening | **部分验证** (execute 附 warning) |
-| `window` | `window.lsp` | TOpening | **部分验证** (类型/窗台高未保证, execute 附 warning) |
+| `window` | `window.lsp` | TOpening | **部分验证** (需先人工切窗模式; 窗台高未保证, execute 附 warning) |
 | `axis_lines` | `axis_lines.lsp` | 原生 LINE | **替代路径** (普通线网格，可 execute) |
 | `explode_read` | `explode_read.lsp` | 原生 EXPLODE | **已验证** (E2E: 副本分解+回滚; 墙体起点侧缺陷见 Handoff 10) |
 | `search_room` | `search_room.lsp` | TUpdSpace | **已验证** (E2E: 闭合墙生成 TCH_SPACE) |
 | `axis_grid` | `axis_grid.lsp` | TRectAxis | **仅 dry-run** (execute 已禁用) |
 | `export_t3` | `export_t3.lsp` | TSaveAs | **仅 dry-run** (execute 已禁用) |
 
-未覆盖（待后续迭代）：楼梯、房间、屋顶、符号/文字标注、门窗表等。
+未覆盖（待后续迭代）：楼梯、房间、屋顶、符号/文字标注（坐标标注已覆盖）、门窗表等。
 
 ## 3. 后续待办
 
@@ -100,8 +105,9 @@
    `SillHeight/WindowSillHeight/OpType/Kind/Type/WinType` 均不可读/不可写
    （`itest_16`）。**COM 方法路线已排除**（2026-06-13，`itest_29`：
    `GetKind/SetKind/GetSubKind/SetSubKind/OpeningKind/InsertMode` 经
-   vlax-invoke 全部不可用）。剩余路线：门窗面板 UI 自动化（WPF，难）
-   或要求用户人工把面板切到窗模式后再调 `window`。
+   vlax-invoke 全部不可用）。已在工具 warning / `window.lsp` 注释中固化
+   "要求用户人工把面板切到窗模式后再调 `window`"的使用约定。
+   若要免人工，剩余路线为门窗面板 UI 自动化（WPF，难）。
 2. **轴网/导出替代路径**：
    - 轴网：`axis_lines`（普通线网格）已可执行。`TRectAxis` 对话框已侦察
      （`itest_28` + `docs/research/2026-06-13_rectaxis_dialog_controls.txt`）：
