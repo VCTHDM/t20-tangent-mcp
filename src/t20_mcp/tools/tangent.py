@@ -483,6 +483,96 @@ def _gen_elevation(data: dict[str, Any]) -> str:
 _ALLOWED_T3_VERSIONS: dict[str, str] = {"t3": "3", "天正3": "3", "3": "3"}
 
 
+EXPLODE_OFFSET_MIN: float = 100_000.0   # 副本暂存区最小偏移 (防重合墙对话框)
+EXPLODE_MAX_ENTITIES_RANGE: tuple[int, int] = (1, 2000)
+
+
+def _gen_explode_read(data: dict[str, Any]) -> str:
+    """天正实体几何读回。data: {handle, offset_x?, offset_y?, max_entities?}
+
+    副本分解管线 (itest_23/24 真机验证): COPY 到远处暂存区 → TEXPLODE 仅
+    分解副本 → 序列化产物几何 → UNDO 回滚。execute 路径必须由调用方并发
+    驱动「分解对象」对话框 (dialog_automation.drive_texplode_dialog)。
+    """
+    handle = data.get("handle")
+    if (
+        not isinstance(handle, str)
+        or not handle
+        or any(c not in "0123456789abcdefABCDEF" for c in handle)
+    ):
+        raise ParamError(
+            f"参数 handle 必须为十六进制实体句柄字符串 (可经 entity 工具获取), 实际为 {handle!r}"
+        )
+    off_x = _require_coord(data.get("offset_x", 1_000_000.0), "offset_x")
+    off_y = _require_coord(data.get("offset_y", 1_000_000.0), "offset_y")
+    if max(abs(off_x), abs(off_y)) < EXPLODE_OFFSET_MIN:
+        raise ParamError(
+            f"暂存区偏移过小 (max(|offset_x|,|offset_y|) ≥ {EXPLODE_OFFSET_MIN:g}): "
+            "副本太靠近既有实体会触发天正「处理重合的墙体」模态对话框"
+        )
+    max_entities = data.get("max_entities", 200)
+    lo, hi = EXPLODE_MAX_ENTITIES_RANGE
+    if isinstance(max_entities, bool) or not isinstance(max_entities, int) or not (
+        lo <= max_entities <= hi
+    ):
+        raise ParamError(f"参数 max_entities 必须为 {lo}..{hi} 的整数, 实际为 {max_entities!r}")
+    return _render(
+        "explode_read",
+        {
+            "HANDLE": handle.upper(),
+            "OFF_X": _num(off_x),
+            "OFF_Y": _num(off_y),
+            "MAX_ENTITIES": str(max_entities),
+        },
+    )
+
+
+def parse_explode_payload(payload: str, off_x: float, off_y: float) -> dict[str, Any]:
+    """解析 explode_read 模板返回串, 并把坐标平移回原位 (减去暂存偏移)。
+
+    输入形如: ``rc=T clean=T n=4 data=LINE|x,y|x,y;LINE|...;``
+    输出: {rc, clean, count, entities:[{type, points:[[x,y]..], props:{..}, text?}]}
+    """
+    text = payload or ""
+    head, sep, body = text.partition(" data=")
+    flags: dict[str, str] = {}
+    for token in head.split():
+        k, eq, v = token.partition("=")
+        if eq:
+            flags[k] = v
+    entities: list[dict[str, Any]] = []
+    if sep:
+        for item in body.split(";"):
+            if not item:
+                continue
+            parts = item.split("|")
+            ent: dict[str, Any] = {"type": parts[0], "points": [], "props": {}}
+            for tok in parts[1:]:
+                if tok.startswith("s="):
+                    ent["text"] = tok[2:]
+                elif "=" in tok:
+                    k, _, v = tok.partition("=")
+                    try:
+                        ent["props"][k] = float(v)
+                    except ValueError:
+                        ent["props"][k] = v
+                elif "," in tok:
+                    xs, _, ys = tok.partition(",")
+                    try:
+                        ent["points"].append(
+                            [float(xs) - off_x, float(ys) - off_y]
+                        )
+                    except ValueError:
+                        pass
+            entities.append(ent)
+    return {
+        "rc": flags.get("rc") == "T",
+        "clean": flags.get("clean") == "T",
+        "count": int(flags.get("n", "0") or 0),
+        "entities": entities,
+    }
+
+
 def _gen_export_t3(data: dict[str, Any]) -> str:
     """图形导出天正3 (T3)。data: {out_path, target_ver?}"""
     out_path = _require_str(data.get("out_path"), "out_path", max_len=512)
@@ -515,6 +605,7 @@ _GENERATORS: dict[str, Callable[[dict[str, Any]], str]] = {
     "wall_thickness_dimension": _gen_wall_thickness_dimension,
     "opening_dimension": _gen_opening_dimension,
     "elevation": _gen_elevation,
+    "explode_read": _gen_explode_read,
     "export_t3": _gen_export_t3,
 }
 
@@ -607,6 +698,9 @@ def register_tangent_tool(mcp: Any) -> None:
           window     — 普通窗   [部分验证]。{ins_x, ins_y, width?, height?, sill_height?, layer?}
           axis_grid  — 直线轴网 [仅 dry-run]。{base_x?, base_y?, hspacings:[..], vspacings:[..], angle?, layer?}
           axis_lines — 普通线轴网 [可执行替代]。{base_x?, base_y?, hspacings:[..], vspacings:[..], angle?, layer?}
+          explode_read — 实体几何读回 [已验证]。{handle, offset_x?, offset_y?, max_entities?}
+                       副本分解管线, 不修改原实体; 执行期间会自动驱动「分解对象」
+                       对话框 (白名单点击), 期间请勿手动操作 AutoCAD。
           export_t3  — 导出天正3 [仅 dry-run]。{out_path, target_ver?}
 
         注: 验证记录详见 docs/T20_COMMANDS.md 与 docs/handoff/05_fable_field_test.md。
@@ -639,6 +733,32 @@ def register_tangent_tool(mcp: Any) -> None:
             return _json({"error": f"[tangent.{operation}] execute 已禁用: {disabled_reason}"})
 
         backend = await get_backend()
+
+        # explode_read: 原生 _.EXPLODE 不弹框 (itest_25 真机验证; TEXPLODE 方案
+        # 弹「分解对象」框, 见 dialog_automation 模块的选型记录), 直接下发,
+        # payload 经 parse_explode_payload 结构化并把坐标平移回原位。
+        if operation == "explode_read":
+            d = data or {}
+            off_x = float(d.get("offset_x", 1_000_000.0))
+            off_y = float(d.get("offset_y", 1_000_000.0))
+            result = await backend.execute_lisp(code)
+            if not result.ok:
+                return _json({"error": f"[tangent.explode_read] {result.error}"})
+            parsed = parse_explode_payload(str(result.payload or ""), off_x, off_y)
+            parsed.update(
+                {
+                    "operation": operation,
+                    "executed": True,
+                    "warning": (
+                        "已知 T20 缺陷: 墙体 explode 产物的起点侧顶点可能归零; "
+                        "墙体精确几何请用 COM 曲线起终点 + LeftWidth/RightWidth。"
+                        "若 clean=false 说明回滚未完全, 请检查并手动 UNDO"
+                    ),
+                }
+            )
+            result = CommandResult(ok=True, payload=parsed)
+            return await add_screenshot_if_available(result, include_screenshot)
+
         result = await backend.execute_lisp(code)
         # 低置信子命令: 在成功 payload 上附 warning (失败结果保持原 error 不动)。
         if low_conf and result.ok:

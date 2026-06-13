@@ -54,6 +54,7 @@ VALID_CASES: dict[str, dict] = {
     "wall_thickness_dimension": {"p1_x": 1500, "p1_y": -500, "p2_x": 1500, "p2_y": 500},
     "opening_dimension": {"p1_x": -200, "p1_y": 600, "p2_x": 3200, "p2_y": 600},
     "elevation": {"base_x": 0, "base_y": 0, "label_x": 1000, "label_y": 1000},
+    "explode_read": {"handle": "1a3f", "offset_x": 1_000_000, "offset_y": 1_000_000},
     "export_t3": {"out_path": "C:/temp/out_t3.dwg", "target_ver": "t3"},
 }
 
@@ -358,3 +359,88 @@ class TestInvalidParamsRejected:
             "x1": 0, "y1": 0, "x2": 1000, "y2": 0, "layer": "墙体",
         })
         assert "墙体" in code
+
+
+# ---------------------------------------------------------------------------
+# explode_read 专项
+# ---------------------------------------------------------------------------
+
+
+class TestExplodeRead:
+    def test_render_injects_params(self) -> None:
+        code = generate_lisp("explode_read", {"handle": "1a3f"})
+        assert is_paren_balanced(code)
+        assert "{{" not in _strip_line_comments(code)
+        assert '(handent "1A3F")' in code  # handle 统一大写注入
+        assert "TEXPLODE" in code
+
+    def test_bad_handle_rejected(self) -> None:
+        for bad in (None, "", "XYZ-1", "1A3G", 42, "(princ)"):
+            with pytest.raises(ParamError):
+                generate_lisp("explode_read", {"handle": bad})
+
+    def test_small_offset_rejected(self) -> None:
+        # 副本太靠近既有实体会触发天正「处理重合的墙体」对话框 (itest_23 教训)
+        with pytest.raises(ParamError, match="偏移"):
+            generate_lisp("explode_read", {"handle": "1F", "offset_x": 0, "offset_y": 0})
+
+    def test_max_entities_validated(self) -> None:
+        for bad in (0, -1, 2001, True, "10"):
+            with pytest.raises(ParamError):
+                generate_lisp("explode_read", {"handle": "1F", "max_entities": bad})
+
+    def test_parse_payload_roundtrip(self) -> None:
+        payload = (
+            "rc=T clean=T n=2 data="
+            "LINE|1000100.0,1000200.0|1003100.0,1000200.0;"
+            "ARC|1000100.0,1000200.0|40=60.0|50=0.0|51=1.5707963;"
+        )
+        out = tangent.parse_explode_payload(payload, 1_000_000.0, 1_000_000.0)
+        assert out["rc"] is True and out["clean"] is True and out["count"] == 2
+        line, arc = out["entities"]
+        assert line["type"] == "LINE"
+        assert line["points"] == [[100.0, 200.0], [3100.0, 200.0]]
+        assert arc["props"]["40"] == 60.0 and arc["props"]["51"] == 1.5707963
+
+    def test_parse_payload_empty_and_malformed(self) -> None:
+        out = tangent.parse_explode_payload("", 0.0, 0.0)
+        assert out == {"rc": False, "clean": False, "count": 0, "entities": []}
+        out = tangent.parse_explode_payload("rc=nil clean=nil n=0 data=", 0.0, 0.0)
+        assert out["rc"] is False and out["entities"] == []
+
+    def test_text_entity_preserved(self) -> None:
+        payload = "rc=T clean=T n=1 data=TEXT|1000010.0,1000020.0|40=350.0|s=砖墙;"
+        out = tangent.parse_explode_payload(payload, 1_000_000.0, 1_000_000.0)
+        ent = out["entities"][0]
+        assert ent["text"] == "砖墙"
+        assert ent["points"] == [[10.0, 20.0]]
+
+
+class TestDialogAutomationWhitelist:
+    def test_forbidden_button_refused(self) -> None:
+        import asyncio
+
+        from t20_mcp.dialog_automation import click_dialog_buttons
+
+        result = asyncio.run(
+            click_dialog_buttons("分解对象", ("分解本图所有天正对象", "确定"), timeout=0.1)
+        )
+        assert result == "forbidden:分解本图所有天正对象"
+
+    def test_empty_buttons_refused(self) -> None:
+        import asyncio
+
+        from t20_mcp.dialog_automation import click_dialog_buttons
+
+        result = asyncio.run(click_dialog_buttons("分解对象", (), timeout=0.1))
+        assert result == "no-buttons-specified"
+
+    def test_texplode_sequence_is_whitelisted(self) -> None:
+        from t20_mcp.dialog_automation import (
+            FORBIDDEN_BUTTONS,
+            TEXPLODE_BUTTONS,
+            TEXPLODE_DIALOG_TITLE,
+        )
+
+        assert TEXPLODE_DIALOG_TITLE == "分解对象"
+        assert not (set(TEXPLODE_BUTTONS) & FORBIDDEN_BUTTONS)

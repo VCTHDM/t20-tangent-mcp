@@ -16,7 +16,7 @@ LISP 模板封装。
 |---|---|---|
 | IPC 基础设施（编码链/窗口识别/模态防护/引导加载） | 100% | 全部真机验收通过；WPF 对话框探测盲区已补（Handoff 09，itest_21） |
 | 命令编目 | 100% | 官方表 454 条全部收录并真机探测注册状态（442/451） |
-| 天正实体封装 | ~36% | wall/dimension/wall_thickness_dimension/opening_dimension/elevation 已 E2E 验证，axis_lines 普通线轴网替代可执行，door 部分验证；导出受对话框阻碍；柱/楼梯/房间/屋顶等未动工 |
+| 天正实体封装 | ~42% | wall/dimension/wall_thickness_dimension/opening_dimension/elevation/explode_read 已 E2E 验证，axis_lines 普通线轴网替代可执行，door 部分验证；导出受对话框阻碍；柱/楼梯/房间/屋顶等未动工 |
 | MCP server 集成 | ~95% | 9 工具已注册（含 `tangent`）；MCP stdio dry-run 冒烟已通过 |
 | 测试与联调管线 | ~88% | 离线测试全绿；`scripts/itest_*.py` 可重复真机管线，E2E 收尾环境已校验 |
 
@@ -49,6 +49,7 @@ MCP 工具共 9 个：上游 8 个（drawing/entity/layer/block/annotation/pid/v
 | `door` 门 | `TOpening` | 🟡 部分验证（execute 附 warning） |
 | `window` 窗 | `TOpening` | 🟡 类型随面板模式、窗台高未保证 |
 | `axis_lines` 普通线轴网 | 原生 `LINE` | 🟡 可执行替代路径，生成普通线，不是天正智能轴网 |
+| `explode_read` 几何读回 | 原生 `EXPLODE` | ✅ E2E 验证（副本分解+回滚，非破坏；墙体起点侧有已知 T20 缺陷，见 Handoff 10） |
 | `axis_grid` 轴网 | `TRectAxis` | ⛔ 模态对话框，execute 已禁用（仅 dry-run） |
 | `export_t3` 导出T3 | `TSaveAs` | ⛔ WPF 导出框无视 FILEDIA=0，execute 已禁用 |
 
@@ -90,7 +91,9 @@ MCP 工具共 9 个：上游 8 个（drawing/entity/layer/block/annotation/pid/v
 | `docs/handoff/07_gpt_branch_takeover.md` | GPT 接管本分支后的安全门禁与当前状态 |
 | `docs/handoff/08_gpt_field_test.md` | GPT 本轮真机联调结果（bringup/E2E/elevation/opening props） |
 | `docs/handoff/09_fable_wpf_guard.md` | P1-2 补盲：模态对话框探测（IsWindowEnabled 信号，itest_21 验收） |
-| `scripts/itest_01..21_*.py` | 可重复的联调管线（引导/探测/试驱动/E2E/MCP stdio/恢复/清理） |
+| `docs/handoff/10_fable_explode_read.md` | explode_read 几何读回管线（选型/教训/T20 缺陷/对话框自动化） |
+| `docs/research/2026-06-13_*.md` | GPT 调研：网搜与安装目录提示词检索（结论：需真机提示捕获） |
+| `scripts/itest_01..25_*.py` | 可重复的联调管线（引导/探测/试驱动/E2E/MCP stdio/恢复/清理） |
 
 ## 分工规则（二人制：fable = 执行人/审查者，GPT = 辅助执行）
 
@@ -128,7 +131,8 @@ AutoCAD 命令行回显、最后一次 diff）写进 `docs/handoff/` 新文档�
 **fable（审查与硬骨头）：**
 1. GPT 每批封装的 review + 合入（参照 `docs/handoff/03` 的审查模式）。
 2. **轴网替代路径**选型与实现（逐根轴线+`TSingleAxisDim` 组合 vs UI 自动化）。
-3. **TExplode + ezdxf 管线**设计实现（破坏性！仅临时副本，禁动用户图纸）。
+3. ~~TExplode + ezdxf 管线~~ 已完成（Handoff 10：实体副本 + 原生 EXPLODE 路线，
+   `explode_read` 子命令 E2E 验收；ezdxf proxy 路线被真机否决）。
 4. ~~P1-2 防护补盲~~ 已完成（Handoff 09：主窗口 IsWindowEnabled 信号，itest_21 真机验收）。
 5. **MCP 协议端到端冒烟**（最终验收，完成后更新完成度表）。
 

@@ -140,6 +140,23 @@
   ;; 用 rtos 模式 2(十进制)定点 8 位, 不受 LUPREC 当前值影响。
   (strcat (rtos x 2 8) "," (rtos y 2 8)))
 
+(defun t20mcp:geo1 (e / g ty out pr)
+  ;; 实体 -> 简要几何串 "TYPE|x,y|x,y|40=r|s=text"。只消费常见组码
+  ;; (10/11 点, 40/50/51 半径与弧角[弧度], 1 文本), 未知类型仅输出 TYPE。
+  ;; 供 explode_read 读回分解产物; 角度保持 entget 原始弧度, 不换算。
+  (setq g (entget e))
+  (setq ty (cdr (assoc 0 g)))
+  (setq out ty)
+  (foreach pr g
+    (cond
+      ((and (member (car pr) '(10 11)) (listp (cdr pr)))
+       (setq out (strcat out "|" (rtos (cadr pr) 2 8) "," (rtos (caddr pr) 2 8))))
+      ((member (car pr) '(40 50 51))
+       (setq out (strcat out "|" (itoa (car pr)) "=" (rtos (cdr pr) 2 8))))
+      ((= (car pr) 1)
+       (setq out (strcat out "|s=" (vl-princ-to-string (cdr pr)))))))
+  out)
+
 ;;; ----------------------------------------------------------------------------
 ;;; 模板骨架 —— 所有 tangent 模板必须长这样(由 tangent.py 注入占位符):
 ;;;

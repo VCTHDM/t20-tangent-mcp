@@ -49,6 +49,7 @@
 | 标高标注 | `TMElev` | 标高基准点→标注放置点→回车；单点序列会挂起等待输入，严禁改成单点序列 | `TCH_ELEVATION` | **高** (E2E) |
 | 门窗 | `TOpening` | 墙上插入点→回车（非模态面板不阻塞）；`Width/Height/DoorSill` 可 COM 注入 | `TCH_OPENING` | **中**：插入类型随面板当前模式（默认门）；窗模式/`SillHeight` 待验证 |
 | 普通线轴网 | 原生 `LINE` | `axis_lines` 替代路径：按开间/进深生成普通线网格，可旋转；不生成天正智能轴网 | `LINE` | **中** (替代路径) |
+| 几何读回 | 原生 `EXPLODE` | `explode_read`：COPY 副本到暂存区→分解副本→序列化产物→UNDO 回滚，非破坏。TEXPLODE 弹「分解对象」框被弃用（可白名单点击驱动，见 dialog_automation）。已知 T20 缺陷：墙体产物起点侧顶点归零（Handoff 10 §4） | `LINE` 等 | **高** (E2E) |
 | 绘制轴网(直线) | `TRectAxis` | **不可命令行驱动**：模态对话框 (#32770)。工具层已禁止 execute | — | **禁** (仅 dry-run) |
 | 图形导出(T3) | `TSaveAs` | **不可静默**：天正自绘导出框 (WPF)，无视 FILEDIA=0。工具层已禁止 execute | — | **禁** (仅 dry-run) |
 
@@ -56,7 +57,7 @@
 
 | 中文命令名 | 命令名 | 备注 |
 |---|---|---|
-| 分解对象 | `TExplode` | 注册已验证。**破坏性**：仅可在临时副本上执行（先 SAVEAS 副本→副本上分解→ezdxf 读取），禁止分解用户当前图纸 |
+| 分解对象 | `TExplode` | **已被 `explode_read` 取代**（实体副本 + 原生 `EXPLODE`，不弹框）。TExplode 必弹「分解对象」#32770 框（itest_23），白名单按钮驱动已验证可行（itest_24）但不再需要 |
 | 两点标注 | `TDimTP` | 两轮最小点序列均 0 实体（见 Handoff 06），暂不封装 |
 | 墙厚标注 | `TDimWall` / 门窗标注 `TDim3` | 已封装为 `wall_thickness_dimension` / `opening_dimension` |
 | 标高标注 | `TMElev` | 已封装为 `elevation`；双点序列 E2E 验证，单点序列禁用 |
@@ -82,6 +83,7 @@
 | `door` | `door.lsp` | TOpening | **部分验证** (execute 附 warning) |
 | `window` | `window.lsp` | TOpening | **部分验证** (类型/窗台高未保证, execute 附 warning) |
 | `axis_lines` | `axis_lines.lsp` | 原生 LINE | **替代路径** (普通线网格，可 execute) |
+| `explode_read` | `explode_read.lsp` | 原生 EXPLODE | **已验证** (E2E: 副本分解+回滚; 墙体起点侧缺陷见 Handoff 10) |
 | `axis_grid` | `axis_grid.lsp` | TRectAxis | **仅 dry-run** (execute 已禁用) |
 | `export_t3` | `export_t3.lsp` | TSaveAs | **仅 dry-run** (execute 已禁用) |
 
@@ -96,6 +98,8 @@
 2. **轴网/导出替代路径**：
    - 轴网：评估逐根画轴线（原生 LINE + 轴号 `TSingleAxisDim`）或 UI 自动化填对话框；
    - 导出：评估 `TPartSaveAs`、`TGetXML`，或 UI 自动化。
-3. **TExplode + ezdxf 读取管线**（临时副本上，见 §1.2 批注）。
+3. ~~TExplode + ezdxf 读取管线~~ 已完成：`explode_read` 子命令（Handoff 10）。
+   余项：墙体解析式 outline（vlax-curve + 宽度），TCH_OPENING/TCH_DIMENSION2
+   产物质量验证。
 4. 新封装命令一律走已验证模式：官方表取名 → getcname 预检 → 最小点序列
    试驱动 → 实体增量校验 → COM 属性注参（`scripts/itest_*.py` 为现成管线）。
