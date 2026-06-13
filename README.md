@@ -97,7 +97,7 @@ MCP 工具共 9 个：上游 8 个（drawing/entity/layer/block/annotation/pid/v
 | `docs/handoff/10_fable_explode_read.md` | explode_read 几何读回管线（选型/教训/T20 缺陷/对话框自动化） |
 | `docs/handoff/11_fable_search_room.md` | search_room 封装（TUpdSpace 一轮通过）+ LASTPROMPT 捕获法失败记录 |
 | `docs/research/2026-06-13_*.md` | GPT 调研：网搜与安装目录提示词检索（结论：需真机提示捕获） |
-| `scripts/itest_01..27_*.py` | 可重复的联调管线（引导/探测/试驱动/E2E/MCP stdio/恢复/清理） |
+| `scripts/itest_01..32_*.py` | 可重复的联调管线（引导/探测/试驱动/E2E/MCP stdio/恢复/清理/LOGFILEMODE 提示捕获） |
 
 ## 协作规则（两个模型交替推进）
 

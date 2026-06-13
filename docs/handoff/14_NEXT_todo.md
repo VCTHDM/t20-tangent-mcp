@@ -5,7 +5,7 @@
 - `cada772` `[claude]` column 降级 dry-run（#32770 假成功纠错，Handoff 13）
 - `db6bcba` `[claude]` two_point_dimension (TDimTP) 新封装，真机 E2E 通过
 
-真机已清干净；工作树仅余未跟踪的临时探针 `scripts/_probe_*.py`。
+真机已清干净；临时探针收尾见下方补记。
 
 ## 待办（按优先级）
 
@@ -14,12 +14,13 @@
 2. **TSWall 单线变墙**（Handoff 12 §4，疑难，claude territory）：
    选择成功但未转换，疑似选择后弹模态框。先 recon 定性（仿
    `itest_28_rectaxis_recon.py` 枚举 `#32770`，**严禁 WM_CLOSE**），
-   再决定封装或记录停手。用 `_probe_log.py run TSWALL tswall_ss line` 看完整日志。
+   再决定封装或记录停手。用
+   `scripts/itest_32_prompt_capture_log.py run TSWALL tswall_ss line` 看完整日志。
 
-3. **临时探针收尾**：
-   - `scripts/_probe_log.py` 转正为 `scripts/itest_*_prompt_capture_log.py`
+3. ~~**临时探针收尾**~~（2026-06-13 已完成）：
+   - `scripts/_probe_log.py` 已转正为 `scripts/itest_32_prompt_capture_log.py`
      （LOGFILEMODE 提示捕获法，长期有用，本轮破译 TDimTP 全靠它）。
-   - 其余 `scripts/_probe_*.py`（cmd/cmdline/fixshot/harness/launch/recover/state/tdimtp）删除。
+   - 其余 `scripts/_probe_*.py`（cmd/cmdline/fixshot/harness/launch/recover/state/tdimtp）已删除。
 
 4. **column UI 自动化**（可选，高风险）：让标准柱真能放置，需驱动 #32770 面板
    + 模拟绘图区坐标点击（比白名单 BM_CLICK 难）。详见 Handoff 13 §4。

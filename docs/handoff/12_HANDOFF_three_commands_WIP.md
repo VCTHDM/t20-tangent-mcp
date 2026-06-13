@@ -6,6 +6,10 @@
 > LASTPROMPT 法都失败，本轮用 **LOGFILEMODE 日志法**成功）。TGColumn 已完成封装
 > 并通过 E2E；TDimTP / TSWall 提示已知但最小成功序列还差一步。**本轮所有改动尚未 commit**，
 > 工作树里有一批 `scripts/_probe_*.py` 临时探针（下划线前缀，**提交前必须删除**）。
+>
+> 2026-06-13 接力状态：本文件保留 Handoff 12 当时现场；TGColumn 结论已由 Handoff 13
+> 推翻并降级 dry-run，TDimTP 已由 Handoff 13 封装验证，LOGFILEMODE 探针已转正为
+> `scripts/itest_32_prompt_capture_log.py`，其余 `_probe_*.py` 已删除。
 
 ## 0. 当前 git 状态
 
@@ -34,10 +38,10 @@
 6. execute_lisp: (setvar "LOGFILEMODE" 0)
 ```
 
-`scripts/_probe_log.py` 已实现这套，用法：
+2026-06-13 接力收尾：该工具已转正为 `scripts/itest_32_prompt_capture_log.py`，用法：
 ```
-uv run python -X utf8 scripts/_probe_log.py path                      # 看日志路径
-uv run python -X utf8 scripts/_probe_log.py run <CMD> <arglist|场景名> <wall|line|none>
+uv run python -X utf8 scripts/itest_32_prompt_capture_log.py path                      # 看日志路径
+uv run python -X utf8 scripts/itest_32_prompt_capture_log.py run <CMD> <arglist|场景名> <wall|line|none>
 ```
 内置命名场景（避开 PowerShell 引号地狱）：`tswall_ss` / `tswall_ss_w` /
 `tdimtp_fence` / `tdimtp_cross` / `empty`。验证过原生 LINE 提示能抓到
@@ -95,12 +99,12 @@ LOGFILEMODE 抓到的提示流（真机）：
 （柱/墙/门窗/轴线）的**间距**。不是"标注两点间距离"，而是"穿过哪些对象就标注它们"。
 单个对象会报"对象数目太少"。
 
-**待办 B（接手者，先用 `_probe_log.py` 验证场景再封装）**：
+**待办 B（历史记录；TDimTP 后续已完成，见 Handoff 13）**：
 1. 搭**多对象一排**场景再测。建议：先放 3 根柱 `TGCOLUMN` 于 (0,0)/(3000,0)/(6000,0)，
-   再 `_probe_log.py run TDIMTP tdimtp_fence none`（场景 `tdimtp_fence` = 两点
+   再 `itest_32_prompt_capture_log.py run TDIMTP tdimtp_fence none`（场景 `tdimtp_fence` = 两点
    (-500,0)→(6500,0)，横穿三柱）。预期标注三柱间距，生成 `TCH_DIMENSION2`。
    - 备选场景 `tdimtp_cross` = (1500,-800)→(1500,800) 竖向穿单墙，试墙厚向。
-   - 注意：`_probe_cmd.py`/`_probe_log.py` 的 prereq 目前只支持单 wall/line，
+   - 注意：当时的 `_probe_cmd.py`/`_probe_log.py` prereq 只支持单 wall/line，
      多柱场景需要在脚本里加，或手动先建好柱再跑（柱已可由 column 封装生成）。
 2. 找到能生成 `TCH_DIMENSION2` 的最小点序列后，照 `wall_thickness_dimension.lsp`
    套路写 `two_point_dimension.lsp`（命令 `TDIMTP`），data 形如 `{p1_x,p1_y,p2_x,p2_y,layer?}`。
@@ -123,7 +127,7 @@ LOGFILEMODE 抓到的提示：
 **怀疑方向（接手者优先验证）**：
 1. **选择后可能弹模态/参数对话框**（墙宽/对齐/材料），CMDDIA=0 对天正框无效，
    vl-cmdf 的后续 "" 没喂到框上 → 框被默默取消 → 不转换。
-   - **下一步**：用 `_probe_log.py run TSWALL tswall_ss line` 看选择后**完整日志**
+   - **下一步**：用 `itest_32_prompt_capture_log.py run TSWALL tswall_ss line` 看选择后**完整日志**
      （我中断前正要看，没看到）。**如果日志在"找到1个"之后没有更多文字提示，
      极可能是弹了对话框**（对话框不写命令行日志）。
    - 验证弹框：仿 `itest_28_rectaxis_recon.py`，启动 TSWALL + 喂选择集后，
@@ -156,8 +160,8 @@ TSWall 若弹框，加一个场景白名单即可（标题需先 recon 确认）
 ## 6. 收尾状态（中断时）
 
 - 真机：probe 都带 UNDO 清理 + 环境复位；中断前最后一次跑的是 TSWALL tswall_ss，
-  **可能残留**：建议接手第一步先 `uv run python -X utf8 scripts/_probe_state.py clean`
-  再 `... types` 确认图面为空、`CMDACTIVE=0`。若 dispatcher ping 失败，先
+  **可能残留**：建议接手第一步先 `uv run python scripts/itest_14_cleanup.py`
+  确认环境复位、`CMDACTIVE=0`。若 dispatcher ping 失败，先
   `uv run python -X utf8 scripts/itest_01_bringup.py` 重新引导。
 - LOGFILEMODE 中断时应已被探针关回 0，但**请确认** `(getvar "LOGFILEMODE")` = 0，
   避免日志持续写盘（用 `_probe_state.py env` 加查或单独 execute_lisp）。
@@ -187,7 +191,7 @@ TSWall 若弹框，加一个场景白名单即可（标题需先 recon 确认）
 2. ~~先把 TGColumn 转正~~ **已完成**（见 §2，本轮应以 `[assist]` 提交）。
 3. TDimTP 多柱场景验证（§3 待办 B），通了就封装。
 4. TSWall 弹框 recon（§4），定性后再决定封装或记录停手。
-5. 全部完成后：**删除所有 `scripts/_probe_*.py` 临时探针**（除非决定把 `_probe_log.py`
-   转正为 `itest_30_prompt_capture_log.py` —— 它确实有长期价值，可保留并改名去掉下划线）。
+5. ~~删除所有 `scripts/_probe_*.py` 临时探针~~：2026-06-13 已完成；
+   `_probe_log.py` 已转正为 `scripts/itest_32_prompt_capture_log.py`。
 6. 回填三处权威待办（README 路线图 / README tangent 子命令表 + 完成度 /
    docs/T20_COMMANDS.md §2 子命令表 + §3）。同步更新 `docs/handoff/05 §6`。

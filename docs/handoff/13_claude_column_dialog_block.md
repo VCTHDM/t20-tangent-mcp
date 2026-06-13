@@ -58,5 +58,5 @@
   `src/t20_mcp/lisp_templates/tangent/two_point_dimension.lsp`，真机脚本为
   `scripts/itest_31_two_point_dimension_e2e.py`。
 - TSWall 仍未推进，仍是 §4（疑似选择后弹框）。
-- 临时探针 `scripts/_probe_*.py` 仍在工作树（未提交）。`_probe_log.py` 值得转正
-  （LOGFILEMODE 提示捕获法，长期有用）；其余 column 收尾后可清。
+- 2026-06-13 接力收尾：LOGFILEMODE 提示捕获法已转正为
+  `scripts/itest_32_prompt_capture_log.py`；其余 `scripts/_probe_*.py` 临时探针已删除。
