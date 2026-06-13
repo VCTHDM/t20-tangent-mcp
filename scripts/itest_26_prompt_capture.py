@@ -43,15 +43,20 @@ RESET_ENV = """
 """
 
 CAPTURE = """
-(defun c:t20mcp-cap ( / t20mcp:saved *error*)
+(defun c:t20mcp-cap ( / t20mcp:saved *error* t20mcp:p1 t20mcp:a1)
   (setq t20mcp:result "")
   (setq t20mcp:saved (t20mcp:begin "capture"))
   (defun *error* (m) (t20mcp:on-error m t20mcp:saved))
   (vl-catch-all-apply 'vl-cmdf (list "{CMD}"))
-  (setq t20mcp:result
-        (strcat "active=" (itoa (getvar "CMDACTIVE"))
-                " prompt=" (vl-princ-to-string (getvar "LASTPROMPT"))))
+  (setq t20mcp:a1 (getvar "CMDACTIVE"))
+  (setq t20mcp:p1 (vl-princ-to-string (getvar "LASTPROMPT")))
   (t20mcp:cancel-pending)
+  ;; LASTPROMPT 在命令挂起时不更新, 取消后才刷新 (itest_26 第一轮教训),
+  ;; 取消前后各读一次对比。
+  (setq t20mcp:result
+        (strcat "active=" (itoa t20mcp:a1)
+                " pre=" t20mcp:p1
+                " post=" (vl-princ-to-string (getvar "LASTPROMPT"))))
   (t20mcp:end "capture" t20mcp:saved)
   (princ))
 (c:t20mcp-cap)

@@ -18,8 +18,14 @@ GPT 两轮调研（docs/research/）无 TUpdSpace 序列线索，真机试驱动
 设想：`vl-cmdf` 启动命令（不给参数）→ 读 `LASTPROMPT` 取首个提示 → cancel。
 实测（itest_26 Phase A）：`CMDACTIVE=1` 确认命令已启动，但 `LASTPROMPT`
 返回的是此前 dispatch 的回显文本——**vl-cmdf 启动的命令在挂起等输入时,
-其提示不会进入 LASTPROMPT**（可能要命令结束才刷新）。该路线对
-TGColumn/TDimTP/TSWall 无效。
+其提示不会进入 LASTPROMPT**。第二轮（cancel 之后再读）同样失败：提示
+要等整个 LISP/命令栈退出后才刷新，届时已被后续回显覆盖。该路线对
+TGColumn/TDimTP/TSWall **彻底无效**，两轮证据齐全，勿再尝试。
+
+附带观察：TGCOLUMN 启动会弹**非模态**标准柱面板（无标题 #32770），
+不阻塞 dispatch，探测后残留，可对其发单次 ESC 关闭。
+另一次 Phase B 复跑中 4 段墙只建成 3 段（一次性现象，未复现前按
+偶发记录；search_room E2E itest_27 此前 4/4 通过）。
 
 候选后续（均未做）：AutoCAD `*command-will-start*` reactor + prompt reactor；
 或人工跑一遍命令记录提示。三命令维持「待验证、不开放 execute」。
