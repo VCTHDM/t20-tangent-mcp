@@ -52,8 +52,11 @@
 
 ## 5. 给接手者
 
-- TDimTP / TSWall 本轮**未推进**（先处理了 column 的错误状态）。TDimTP 多对象场景探针
-  `scripts/_probe_tdimtp.py` 已写好（建 3 柱 + 栏选），但**因 column 打不通建不出 3 柱**，
-  需改用 `wall` 或手工建对象作为被标注目标，再跑。TSWall 仍是 §4（疑似选择后弹框）。
+- TDimTP 已按本节建议改用 `wall` 构造被标注目标并封装为 `two_point_dimension`：
+  三道短墙 (x=0/3000/6000, y=-600..600) + 穿越线 (-1000,0)->(7000,0) +
+  标注位置 (3000,1500) 可稳定生成 `TCH_DIMENSION2`。对应模板为
+  `src/t20_mcp/lisp_templates/tangent/two_point_dimension.lsp`，真机脚本为
+  `scripts/itest_31_two_point_dimension_e2e.py`。
+- TSWall 仍未推进，仍是 §4（疑似选择后弹框）。
 - 临时探针 `scripts/_probe_*.py` 仍在工作树（未提交）。`_probe_log.py` 值得转正
   （LOGFILEMODE 提示捕获法，长期有用）；其余 column 收尾后可清。

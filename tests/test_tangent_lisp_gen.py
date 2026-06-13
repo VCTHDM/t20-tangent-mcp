@@ -54,6 +54,7 @@ VALID_CASES: dict[str, dict] = {
     "dimension": {"p1_x": 0, "p1_y": 0, "p2_x": 6000, "p2_y": 0},
     "wall_thickness_dimension": {"p1_x": 1500, "p1_y": -500, "p2_x": 1500, "p2_y": 500},
     "opening_dimension": {"p1_x": -200, "p1_y": 600, "p2_x": 3200, "p2_y": 600},
+    "two_point_dimension": {"p1_x": -1000, "p1_y": 0, "p2_x": 7000, "p2_y": 0, "pos_x": 3000, "pos_y": 1500},
     "elevation": {"base_x": 0, "base_y": 0, "label_x": 1000, "label_y": 1000},
     "explode_read": {"handle": "1a3f", "offset_x": 1_000_000, "offset_y": 1_000_000},
     "search_room": {"layer": "SPACE"},
@@ -213,6 +214,20 @@ class TestParamInjection:
         assert "t20mcp:pt -200 600" in code
         assert "t20mcp:pt 3200 600" in code
 
+    def test_two_point_dimension_uses_tdimtp_sequence(self) -> None:
+        code = generate_lisp("two_point_dimension", {
+            "p1_x": -1000, "p1_y": 0,
+            "p2_x": 7000, "p2_y": 0,
+            "pos_x": 3000, "pos_y": 1500,
+        })
+        assert '"TDIMTP"' in code
+        p1 = code.index("t20mcp:pt -1000 0")
+        p2 = code.index("t20mcp:pt 7000 0")
+        pos = code.index("t20mcp:pt 3000 1500")
+        done = code.index('""', pos)
+        assert p1 < p2 < pos < done
+        assert "TCH_DIM*" in code
+
     def test_elevation_uses_tmelev_two_points(self) -> None:
         # TMElev 真机试验: 双点序列可生成 TCH_ELEVATION; 单点序列会挂起等待输入。
         code = generate_lisp("elevation", {
@@ -301,7 +316,7 @@ class TestInvalidParamsRejected:
         with pytest.raises(ParamError):
             generate_lisp("dimension", {"p1_x": 1, "p1_y": 1, "p2_x": 1, "p2_y": 1})
 
-    @pytest.mark.parametrize("operation", ["wall_thickness_dimension", "opening_dimension"])
+    @pytest.mark.parametrize("operation", ["wall_thickness_dimension", "opening_dimension", "two_point_dimension"])
     def test_two_point_dimension_coincident_points_rejected(self, operation: str) -> None:
         with pytest.raises(ParamError):
             generate_lisp(operation, {"p1_x": 1, "p1_y": 1, "p2_x": 1, "p2_y": 1})

@@ -479,6 +479,34 @@ def _gen_opening_dimension(data: dict[str, Any]) -> str:
     )
 
 
+def _gen_two_point_dimension(data: dict[str, Any]) -> str:
+    """两点标注 (TDimTP)。data: {p1_x,p1_y,p2_x,p2_y, pos_x?, pos_y?, layer?}
+
+    起点/终点连成穿越线, 标注该线穿过的一排对象 (墙/柱/门窗/轴线) 的间距;
+    pos 定尺寸线位置 (缺省取两点中点上方 1000mm)。穿过对象不足会报"对象数目太少"。
+    """
+    p1_x = _require_coord(data.get("p1_x"), "p1_x")
+    p1_y = _require_coord(data.get("p1_y"), "p1_y")
+    p2_x = _require_coord(data.get("p2_x"), "p2_x")
+    p2_y = _require_coord(data.get("p2_y"), "p2_y")
+    if p1_x == p2_x and p1_y == p2_y:
+        raise ParamError("两点标注的起点与终点不能重合")
+    pos_x = _require_coord(data.get("pos_x", (p1_x + p2_x) / 2.0), "pos_x")
+    pos_y = _require_coord(data.get("pos_y", (p1_y + p2_y) / 2.0 + 1000.0), "pos_y")
+    return _render(
+        "two_point_dimension",
+        {
+            "SET_LAYER": _set_layer_cmd(data.get("layer")),
+            "P1_X": _num(p1_x),
+            "P1_Y": _num(p1_y),
+            "P2_X": _num(p2_x),
+            "P2_Y": _num(p2_y),
+            "POS_X": _num(pos_x),
+            "POS_Y": _num(pos_y),
+        },
+    )
+
+
 def _gen_elevation(data: dict[str, Any]) -> str:
     """标高标注。data: {base_x,base_y,label_x?,label_y?,layer?}"""
     base_x = _require_coord(data.get("base_x"), "base_x")
@@ -634,6 +662,7 @@ _GENERATORS: dict[str, Callable[[dict[str, Any]], str]] = {
     "dimension": _gen_dimension,
     "wall_thickness_dimension": _gen_wall_thickness_dimension,
     "opening_dimension": _gen_opening_dimension,
+    "two_point_dimension": _gen_two_point_dimension,
     "elevation": _gen_elevation,
     "explode_read": _gen_explode_read,
     "search_room": _gen_search_room,
@@ -732,6 +761,7 @@ def register_tangent_tool(mcp: Any) -> None:
           dimension  — 逐点标注 [已验证]。{p1_x, p1_y, p2_x, p2_y, pos_x?, pos_y?, layer?}
           wall_thickness_dimension — 墙厚标注 [已验证]。{p1_x, p1_y, p2_x, p2_y, layer?}
           opening_dimension — 门窗标注 [已验证]。{p1_x, p1_y, p2_x, p2_y, layer?}
+          two_point_dimension — 两点标注 [已验证]。{p1_x, p1_y, p2_x, p2_y, pos_x?, pos_y?, layer?}
           elevation  — 标高标注 [已验证双点序列]。{base_x, base_y, label_x?, label_y?, layer?}
           column     — 标准柱   [仅 dry-run: #32770 面板阻塞]。{x, y, angle?, layer?}
           door       — 普通门   [部分验证]。{ins_x, ins_y, width?, height?, sill_distance?, layer?}
