@@ -114,6 +114,10 @@ LOGFILEMODE 抓到的提示流（真机）：
 
 ## 4. TSWall（单线变墙）—— 提示已知，选择成功但未转换（卡点）
 
+> 2026-06-13 接力复核（Handoff 15）：已用 `itest_33_tswall_dialog_recon.py`
+> 证实未观察到弹框；`itest_32_prompt_capture_log.py` 复核选择集能找到 1 个 LINE，
+> 但回车后直接结束且 0 实体，额外 `240` 被当未知命令。当前结论：暂不封装。
+
 LOGFILEMODE 抓到的提示：
 ```
 选择要变成墙体的直线、圆弧或多段线:  找到 1 个
@@ -134,6 +138,7 @@ LOGFILEMODE 抓到的提示：
      枚举 acad.exe 顶层窗口找 `#32770`，dump 子控件。若有框 → 用
      `src/t20_mcp/dialog_automation.py`（已有的白名单 BM_CLICK 原语，handoff 10 建的）
      驱动"确定"。**严禁 WM_CLOSE**。
+     2026-06-13 已补专用侦察脚本：`scripts/itest_33_tswall_dialog_recon.py`。
 2. 若不是弹框：可能选择集要用**交互式 ssget（pause）**而非预构造 pickset，
    或转换前需指定基线对齐关键字。再用日志法逐步试。
 

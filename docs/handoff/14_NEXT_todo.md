@@ -11,11 +11,9 @@
 
 1. **push / 开 PR**：3 个 commit 还在本地分支，未 push。
 
-2. **TSWall 单线变墙**（Handoff 12 §4，疑难，claude territory）：
-   选择成功但未转换，疑似选择后弹模态框。先 recon 定性（仿
-   `itest_28_rectaxis_recon.py` 枚举 `#32770`，**严禁 WM_CLOSE**），
-   再决定封装或记录停手。用
-   `scripts/itest_32_prompt_capture_log.py run TSWALL tswall_ss line` 看完整日志。
+2. ~~**TSWall 单线变墙**~~（2026-06-13 已复核，见 Handoff 15）：
+   选择成功但不转换；未观察到弹框；额外宽度输入被当未知命令。两轮仍 0 实体，
+   按规则停手，暂不封装。
 
 3. ~~**临时探针收尾**~~（2026-06-13 已完成）：
    - `scripts/_probe_log.py` 已转正为 `scripts/itest_32_prompt_capture_log.py`

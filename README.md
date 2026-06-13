@@ -96,8 +96,9 @@ MCP 工具共 9 个：上游 8 个（drawing/entity/layer/block/annotation/pid/v
 | `docs/handoff/09_fable_wpf_guard.md` | P1-2 补盲：模态对话框探测（IsWindowEnabled 信号，itest_21 验收） |
 | `docs/handoff/10_fable_explode_read.md` | explode_read 几何读回管线（选型/教训/T20 缺陷/对话框自动化） |
 | `docs/handoff/11_fable_search_room.md` | search_room 封装（TUpdSpace 一轮通过）+ LASTPROMPT 捕获法失败记录 |
+| `docs/handoff/15_tswall_recon_stop.md` | TSWall 复核：选择集 no-op、无弹框、暂不封装 |
 | `docs/research/2026-06-13_*.md` | GPT 调研：网搜与安装目录提示词检索（结论：需真机提示捕获） |
-| `scripts/itest_01..32_*.py` | 可重复的联调管线（引导/探测/试驱动/E2E/MCP stdio/恢复/清理/LOGFILEMODE 提示捕获） |
+| `scripts/itest_01..33_*.py` | 可重复的联调管线（引导/探测/试驱动/E2E/MCP stdio/恢复/清理/LOGFILEMODE 提示捕获/弹框侦察） |
 
 ## 协作规则（两个模型交替推进）
 
@@ -131,7 +132,7 @@ AutoCAD 命令行回显、最后一次 diff）写进 `docs/handoff/` 新文档�
    `TGColumn`（→`column`）真机复测证实弹 #32770 面板、命令行点序列无法放置，
    已降级为 dry-run（Handoff 13）；两点标注 `TDimTP` 已封装为
    `two_point_dimension`（Handoff 13：三墙穿越线场景 E2E 生成 `TCH_DIMENSION2`）；
-   单线变墙 `TSWall` 已抓到命令行提示但最小成功序列仍待验证。
+   单线变墙 `TSWall` 已复核为选择集 no-op、无弹框、暂不封装（Handoff 15）。
 3. **导出替代探测**：`TPartSaveAs`/`TGetXML` 注册预检 + 最小试驱动；**弹框即记录停手**，
    只产出调研结论，不做绕过尝试。
 4. 文档/测试补全、截图存档。
