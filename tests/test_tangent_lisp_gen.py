@@ -60,6 +60,8 @@ VALID_CASES: dict[str, dict] = {
     "symmetry": {"x1": 0, "y1": 0, "x2": 0, "y2": 3000},
     "north_arrow": {"pos_x": 0, "pos_y": 0, "dir_x": 0, "dir_y": 1000},
     "break_line": {"x1": 0, "y1": 0, "x2": 3000, "y2": 0},
+    "section_symbol": {"x1": 0, "y1": 0, "x2": 3000, "y2": 0, "dir_x": 1500, "dir_y": -1000},
+    "drawing_name": {"ins_x": 0, "ins_y": 0},
     "explode_read": {"handle": "1a3f", "offset_x": 1_000_000, "offset_y": 1_000_000},
     "search_room": {"layer": "SPACE"},
     "export_t3": {"out_path": "C:/temp/out_t3.dwg", "target_ver": "t3"},
@@ -284,6 +286,32 @@ class TestParamInjection:
         assert x1 < x2 < done
         assert "TCH_RUPTURE" in code
 
+    def test_section_symbol_uses_tsection_three_points(self) -> None:
+        # TSection 真机试验: 第一剖切点 -> 第二剖切点 -> 剖视方向 -> 回车, 生成 TCH_SYMB_SECTION。
+        code = generate_lisp("section_symbol", {
+            "x1": 0, "y1": 0, "x2": 3000, "y2": 0, "dir_x": 1500, "dir_y": -1000,
+        })
+        assert '"TSECTION"' in code
+        p1 = code.index("t20mcp:pt 0 0")
+        p2 = code.index("t20mcp:pt 3000 0")
+        d = code.index("t20mcp:pt 1500 -1000")
+        done = code.index('""', d)
+        assert p1 < p2 < d < done
+        assert "TCH_SYMB_SECTION" in code
+
+    def test_section_symbol_default_direction_below_midpoint(self) -> None:
+        # 缺省剖视方向取剖切线中点向下偏移 1000mm
+        code = generate_lisp("section_symbol", {"x1": 0, "y1": 0, "x2": 2000, "y2": 0})
+        assert "t20mcp:pt 1000 -1000" in code
+
+    def test_drawing_name_uses_tdrawingname_with_trailing_enter(self) -> None:
+        # TDrawingName 真机试验: 插入位置 -> 回车退出循环, 生成 TCH_DRAWINGNAME。
+        code = generate_lisp("drawing_name", {"ins_x": 1234, "ins_y": 5678})
+        assert '"TDRAWINGNAME"' in code
+        ins = code.index("t20mcp:pt 1234 5678")
+        assert code.index('""', ins) > ins
+        assert "TCH_DRAWINGNAME" in code
+
     def test_float_formatting_is_compact(self) -> None:
         # 整数值不应带小数点; 小数值应保留
         code = generate_lisp("door", {"ins_x": 1500.0, "ins_y": 0, "width": 912.5, "height": 2100})
@@ -389,6 +417,14 @@ class TestInvalidParamsRejected:
     def test_break_line_coincident_points_rejected(self) -> None:
         with pytest.raises(ParamError):
             generate_lisp("break_line", {"x1": 1, "y1": 1, "x2": 1, "y2": 1})
+
+    def test_section_symbol_coincident_cut_points_rejected(self) -> None:
+        with pytest.raises(ParamError):
+            generate_lisp("section_symbol", {"x1": 1, "y1": 1, "x2": 1, "y2": 1})
+
+    def test_drawing_name_missing_coord_rejected(self) -> None:
+        with pytest.raises(ParamError):
+            generate_lisp("drawing_name", {"ins_x": 0})  # 缺 ins_y
 
     def test_axis_grid_empty_spacings_rejected(self) -> None:
         with pytest.raises(ParamError):

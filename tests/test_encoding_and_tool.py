@@ -227,6 +227,14 @@ class TestTangentDryRun:
         assert "人工" in payload["warning"]
         assert "窗模式" in payload["warning"]
 
+    def test_drawing_name_dry_run_has_panel_memory_warning(self, monkeypatch) -> None:
+        fn = _register_with_fake_backend(monkeypatch, RuntimeError("unused"))
+        out = asyncio.run(fn(operation="drawing_name", data={"ins_x": 0, "ins_y": 0}))
+        payload = json.loads(out)
+        assert payload["dry_run"] is True
+        assert "warning" in payload
+        assert "图名" in payload["warning"]
+
     def test_high_confidence_dry_run_no_warning(self, monkeypatch) -> None:
         fn = _register_with_fake_backend(monkeypatch, RuntimeError("unused"))
         out = asyncio.run(fn(operation="wall", data={"x1": 0, "y1": 0, "x2": 6000, "y2": 0}))

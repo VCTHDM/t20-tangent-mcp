@@ -91,3 +91,7 @@
 9. ~~符号标注 `TSymmetry` / `TNorthThumb` / `TSymbCut`~~ **已完成**（2026-06-14，Handoff 19：
    分别封装为 `symmetry` / `north_arrow` / `break_line`，命令行点序列无弹框，
    E2E 生成 `TCH_SYMMETRY` / `TCH_NORTHTHUMB` / `TCH_RUPTURE`；`break_line` 需尾随空回车接受 `<不切割>`）。
+10. ~~符号标注 `TSection` / `TDrawingName`~~ **已完成**（2026-06-14，Handoff 20：
+    封装为 `section_symbol` / `drawing_name`，循环式命令补空回车退出，
+    E2E 生成 `TCH_SYMB_SECTION` / `TCH_DRAWINGNAME`；文字内容走面板记忆值，
+    `drawing_name` 附 warning，COM 文本注入待评估）。

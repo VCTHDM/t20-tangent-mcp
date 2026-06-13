@@ -626,6 +626,53 @@ def _gen_break_line(data: dict[str, Any]) -> str:
     )
 
 
+def _gen_section_symbol(data: dict[str, Any]) -> str:
+    """剖切符号。data: {x1,y1,x2,y2,dir_x?,dir_y?,layer?}
+
+    真机验证序列: 第一剖切点 -> 第二剖切点 -> 剖视方向点 -> 回车退出循环,
+    生成 TCH_SYMB_SECTION。剖切编号文字走天正面板记忆值 (只参数化几何)。
+    dir 点决定剖视方向, 缺省取剖切线中点向下偏移 1000mm。
+    """
+    x1 = _require_coord(data.get("x1"), "x1")
+    y1 = _require_coord(data.get("y1"), "y1")
+    x2 = _require_coord(data.get("x2"), "x2")
+    y2 = _require_coord(data.get("y2"), "y2")
+    if x1 == x2 and y1 == y2:
+        raise ParamError("剖切符号的第一、第二剖切点不能重合")
+    dir_x = _require_coord(data.get("dir_x", (x1 + x2) / 2.0), "dir_x")
+    dir_y = _require_coord(data.get("dir_y", (y1 + y2) / 2.0 - 1000.0), "dir_y")
+    return _render(
+        "section_symbol",
+        {
+            "SET_LAYER": _set_layer_cmd(data.get("layer")),
+            "X1": _num(x1),
+            "Y1": _num(y1),
+            "X2": _num(x2),
+            "Y2": _num(y2),
+            "DIR_X": _num(dir_x),
+            "DIR_Y": _num(dir_y),
+        },
+    )
+
+
+def _gen_drawing_name(data: dict[str, Any]) -> str:
+    """图名标注。data: {ins_x,ins_y,layer?}
+
+    真机验证序列: 插入位置点 -> 回车退出循环, 生成 TCH_DRAWINGNAME。
+    图名文字/比例走天正面板记忆值, 本模板只参数化插入位置 (见 warning)。
+    """
+    ins_x = _require_coord(data.get("ins_x"), "ins_x")
+    ins_y = _require_coord(data.get("ins_y"), "ins_y")
+    return _render(
+        "drawing_name",
+        {
+            "SET_LAYER": _set_layer_cmd(data.get("layer")),
+            "INS_X": _num(ins_x),
+            "INS_Y": _num(ins_y),
+        },
+    )
+
+
 _ALLOWED_T3_VERSIONS: dict[str, str] = {"t3": "3", "天正3": "3", "3": "3"}
 
 
@@ -766,6 +813,8 @@ _GENERATORS: dict[str, Callable[[dict[str, Any]], str]] = {
     "symmetry": _gen_symmetry,
     "north_arrow": _gen_north_arrow,
     "break_line": _gen_break_line,
+    "section_symbol": _gen_section_symbol,
+    "drawing_name": _gen_drawing_name,
     "explode_read": _gen_explode_read,
     "search_room": _gen_search_room,
     "export_t3": _gen_export_t3,
@@ -788,6 +837,10 @@ LOW_CONFIDENCE_WARNINGS: dict[str, str] = {
     "elevation": (
         "TMElev 已验证双点序列可生成 TCH_ELEVATION; "
         "不要改成单点序列, 点不足曾导致 IPC 超时并触发 AutoCAD 闪退事故"
+    ),
+    "drawing_name": (
+        "图名文字/比例取自天正面板记忆值, 本工具只参数化插入位置, "
+        "不能通过参数设置图名文本 (COM 文本注入待评估, 见 docs/T20_COMMANDS.md)"
     ),
 }
 
@@ -870,6 +923,8 @@ def register_tangent_tool(mcp: Any) -> None:
           symmetry   — 画对称轴 [已验证]。{x1, y1, x2, y2, layer?}
           north_arrow — 画指北针 [已验证]。{pos_x, pos_y, dir_x?, dir_y?, layer?}
           break_line — 加折断线 [已验证]。{x1, y1, x2, y2, layer?}
+          section_symbol — 剖切符号 [已验证]。{x1, y1, x2, y2, dir_x?, dir_y?, layer?}
+          drawing_name — 图名标注 [已验证; 图名文字取面板记忆值, 见 warning]。{ins_x, ins_y, layer?}
           column     — 标准柱   [仅 dry-run: #32770 面板阻塞]。{x, y, angle?, layer?}
           door       — 普通门   [部分验证]。{ins_x, ins_y, width?, height?, sill_distance?, layer?}
           window     — 普通窗   [部分验证; 调用前需人工切窗模式]。{ins_x, ins_y, width?, height?, sill_height?, layer?}
