@@ -354,6 +354,26 @@ def _gen_wall(data: dict[str, Any]) -> str:
     )
 
 
+def _gen_column(data: dict[str, Any]) -> str:
+    """标准柱。data: {x,y, angle?, layer?}
+
+    截面尺寸由天正标准柱面板当前记忆值决定; angle 仅尝试常见 COM 属性名,
+    属性不存在时模板会吞掉错误, 不影响已验证的点序列建柱路径。
+    """
+    x = _require_coord(data.get("x"), "x")
+    y = _require_coord(data.get("y"), "y")
+    angle = _require_range(data.get("angle", 0.0), "angle", *ANGLE_RANGE)
+    return _render(
+        "column",
+        {
+            "SET_LAYER": _set_layer_cmd(data.get("layer")),
+            "X": _num(x),
+            "Y": _num(y),
+            "ANGLE": _num(angle),
+        },
+    )
+
+
 def _gen_door(data: dict[str, Any]) -> str:
     """普通门。data: {ins_x, ins_y, width?, height?, sill_distance?, layer?}"""
     ins_x = _require_coord(data.get("ins_x"), "ins_x")
@@ -455,6 +475,34 @@ def _gen_opening_dimension(data: dict[str, Any]) -> str:
             "P1_Y": _num(p1_y),
             "P2_X": _num(p2_x),
             "P2_Y": _num(p2_y),
+        },
+    )
+
+
+def _gen_two_point_dimension(data: dict[str, Any]) -> str:
+    """两点标注 (TDimTP)。data: {p1_x,p1_y,p2_x,p2_y, pos_x?, pos_y?, layer?}
+
+    起点/终点连成穿越线, 标注该线穿过的一排对象 (墙/柱/门窗/轴线) 的间距;
+    pos 定尺寸线位置 (缺省取两点中点上方 1000mm)。穿过对象不足会报"对象数目太少"。
+    """
+    p1_x = _require_coord(data.get("p1_x"), "p1_x")
+    p1_y = _require_coord(data.get("p1_y"), "p1_y")
+    p2_x = _require_coord(data.get("p2_x"), "p2_x")
+    p2_y = _require_coord(data.get("p2_y"), "p2_y")
+    if p1_x == p2_x and p1_y == p2_y:
+        raise ParamError("两点标注的起点与终点不能重合")
+    pos_x = _require_coord(data.get("pos_x", (p1_x + p2_x) / 2.0), "pos_x")
+    pos_y = _require_coord(data.get("pos_y", (p1_y + p2_y) / 2.0 + 1000.0), "pos_y")
+    return _render(
+        "two_point_dimension",
+        {
+            "SET_LAYER": _set_layer_cmd(data.get("layer")),
+            "P1_X": _num(p1_x),
+            "P1_Y": _num(p1_y),
+            "P2_X": _num(p2_x),
+            "P2_Y": _num(p2_y),
+            "POS_X": _num(pos_x),
+            "POS_Y": _num(pos_y),
         },
     )
 
@@ -608,11 +656,13 @@ _GENERATORS: dict[str, Callable[[dict[str, Any]], str]] = {
     "axis_grid": _gen_axis_grid,
     "axis_lines": _gen_axis_lines,
     "wall": _gen_wall,
+    "column": _gen_column,
     "door": _gen_door,
     "window": _gen_window,
     "dimension": _gen_dimension,
     "wall_thickness_dimension": _gen_wall_thickness_dimension,
     "opening_dimension": _gen_opening_dimension,
+    "two_point_dimension": _gen_two_point_dimension,
     "elevation": _gen_elevation,
     "explode_read": _gen_explode_read,
     "search_room": _gen_search_room,
@@ -643,6 +693,9 @@ LOW_CONFIDENCE_SUBCOMMANDS: frozenset[str] = frozenset(LOW_CONFIDENCE_WARNINGS)
 # 真机证实「纯对话框、不可命令行驱动」的子命令: 禁止 execute, 仅 dry-run。
 # axis_grid: TAXISGRID 弹模态框 (#32770), 强关曾致 AutoCAD 致命错误;
 # export_t3: TSAVEAS 弹天正自绘导出框 (WPF), 不理会 FILEDIA=0 (编目 §0 坑 1)。
+# column: TGCOLUMN 弹 #32770 标准柱面板且命令保持 active=1, vl-cmdf 点序列
+#   到不了"绘图区放置"处理器 → 0 实体 (2026-06-13 claude 真机复测, Handoff 13)。
+#   Handoff 12 记录的 delta=1 不可复现 (面板恰好开着的顺序依赖假成功)。
 EXECUTE_DISABLED_SUBCOMMANDS: dict[str, str] = {
     "axis_grid": (
         "TAXISGRID 为模态对话框命令 (真机证实), 不可命令行驱动, 下发会阻塞 IPC; "
@@ -651,6 +704,11 @@ EXECUTE_DISABLED_SUBCOMMANDS: dict[str, str] = {
     "export_t3": (
         "TSAVEAS 弹出天正自绘导出框且不理会 FILEDIA=0 (真机证实), 下发会阻塞 IPC; "
         "仅支持 dry-run, 导出请人工操作"
+    ),
+    "column": (
+        "TGCOLUMN 弹 #32770 标准柱面板且命令保持 active, vl-cmdf 点序列无法到达"
+        "绘图区放置处理器 → 0 实体 (2026-06-13 真机复测); 仅支持 dry-run, "
+        "插柱请人工操作或等待面板 UI 自动化方案"
     ),
 }
 
@@ -694,8 +752,8 @@ def register_tangent_tool(mcp: Any) -> None:
 
         **execute (默认 False = dry-run)**: 默认只返回渲染后的 LISP 代码而**不**
         下发到 AutoCAD (不产生任何 IPC 文件); 传 execute=True 才经 execute_lisp
-        真正执行。axis_grid 与 export_t3 经真机证实为纯对话框命令, **禁止 execute**
-        (会阻塞 IPC), 仅可 dry-run。door/window/elevation 执行成功也会附 warning 字段
+        真正执行。axis_grid / export_t3 / column 经真机证实为纯对话框 (#32770) 命令,
+        **禁止 execute** (会阻塞 IPC), 仅可 dry-run。door/window/elevation 执行成功也会附 warning 字段
         (门/窗类型取决于天正门窗面板当前模式)。
 
         Operations (data 字段) — 真机验证状态 (T20 V10 / AutoCAD 2024):
@@ -703,7 +761,9 @@ def register_tangent_tool(mcp: Any) -> None:
           dimension  — 逐点标注 [已验证]。{p1_x, p1_y, p2_x, p2_y, pos_x?, pos_y?, layer?}
           wall_thickness_dimension — 墙厚标注 [已验证]。{p1_x, p1_y, p2_x, p2_y, layer?}
           opening_dimension — 门窗标注 [已验证]。{p1_x, p1_y, p2_x, p2_y, layer?}
+          two_point_dimension — 两点标注 [已验证]。{p1_x, p1_y, p2_x, p2_y, pos_x?, pos_y?, layer?}
           elevation  — 标高标注 [已验证双点序列]。{base_x, base_y, label_x?, label_y?, layer?}
+          column     — 标准柱   [仅 dry-run: #32770 面板阻塞]。{x, y, angle?, layer?}
           door       — 普通门   [部分验证]。{ins_x, ins_y, width?, height?, sill_distance?, layer?}
           window     — 普通窗   [部分验证]。{ins_x, ins_y, width?, height?, sill_height?, layer?}
           axis_grid  — 直线轴网 [仅 dry-run]。{base_x?, base_y?, hspacings:[..], vspacings:[..], angle?, layer?}

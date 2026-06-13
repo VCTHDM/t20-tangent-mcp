@@ -48,11 +48,13 @@ VALID_CASES: dict[str, dict] = {
         "left_width": 120, "right_width": 120, "height": 3000,
         "wall_type": "砖墙", "layer": "WALL",
     },
+    "column": {"x": 0, "y": 0},
     "door": {"ins_x": 1500, "ins_y": 0, "width": 900, "height": 2100},
     "window": {"ins_x": 3000, "ins_y": 0, "width": 1500, "height": 1500, "sill_height": 900},
     "dimension": {"p1_x": 0, "p1_y": 0, "p2_x": 6000, "p2_y": 0},
     "wall_thickness_dimension": {"p1_x": 1500, "p1_y": -500, "p2_x": 1500, "p2_y": 500},
     "opening_dimension": {"p1_x": -200, "p1_y": 600, "p2_x": 3200, "p2_y": 600},
+    "two_point_dimension": {"p1_x": -1000, "p1_y": 0, "p2_x": 7000, "p2_y": 0, "pos_x": 3000, "pos_y": 1500},
     "elevation": {"base_x": 0, "base_y": 0, "label_x": 1000, "label_y": 1000},
     "explode_read": {"handle": "1a3f", "offset_x": 1_000_000, "offset_y": 1_000_000},
     "search_room": {"layer": "SPACE"},
@@ -177,6 +179,14 @@ class TestParamInjection:
         assert '(cons "RightWidth" (float 140))' in code
         assert '(cons "Height" (float 2900))' in code
 
+    def test_column_uses_tgcolumn_point_sequence(self) -> None:
+        code = generate_lisp("column", {"x": 1200, "y": 2400, "angle": 30, "layer": "COL"})
+        assert '"TGCOLUMN"' in code
+        assert "t20mcp:pt 1200 2400" in code
+        assert '"_.-LAYER" "_M" "COL"' in code
+        assert '(float 30)' in code
+        assert '"TCH_COLUMN"' in code
+
     def test_dimension_uses_tdimmp_pos_first(self) -> None:
         # 真机验证: TDIMMP, 顺序 = 尺寸线位置点 -> 点1 -> 点2 -> 回车
         code = generate_lisp("dimension", {
@@ -203,6 +213,20 @@ class TestParamInjection:
         assert '"TDIM3"' in code
         assert "t20mcp:pt -200 600" in code
         assert "t20mcp:pt 3200 600" in code
+
+    def test_two_point_dimension_uses_tdimtp_sequence(self) -> None:
+        code = generate_lisp("two_point_dimension", {
+            "p1_x": -1000, "p1_y": 0,
+            "p2_x": 7000, "p2_y": 0,
+            "pos_x": 3000, "pos_y": 1500,
+        })
+        assert '"TDIMTP"' in code
+        p1 = code.index("t20mcp:pt -1000 0")
+        p2 = code.index("t20mcp:pt 7000 0")
+        pos = code.index("t20mcp:pt 3000 1500")
+        done = code.index('""', pos)
+        assert p1 < p2 < pos < done
+        assert "TCH_DIM*" in code
 
     def test_elevation_uses_tmelev_two_points(self) -> None:
         # TMElev 真机试验: 双点序列可生成 TCH_ELEVATION; 单点序列会挂起等待输入。
@@ -292,7 +316,7 @@ class TestInvalidParamsRejected:
         with pytest.raises(ParamError):
             generate_lisp("dimension", {"p1_x": 1, "p1_y": 1, "p2_x": 1, "p2_y": 1})
 
-    @pytest.mark.parametrize("operation", ["wall_thickness_dimension", "opening_dimension"])
+    @pytest.mark.parametrize("operation", ["wall_thickness_dimension", "opening_dimension", "two_point_dimension"])
     def test_two_point_dimension_coincident_points_rejected(self, operation: str) -> None:
         with pytest.raises(ParamError):
             generate_lisp(operation, {"p1_x": 1, "p1_y": 1, "p2_x": 1, "p2_y": 1})

@@ -46,6 +46,7 @@
 | 逐点标注 | `TDimMP` | 尺寸线位置点→点1→点2→回车（顺序错则 0 实体假成功） | `TCH_DIMENSION2` | **高** (E2E) |
 | 墙厚标注 | `TDimWall` | 直线第一点→直线第二点；两点连线穿过墙体 | `TCH_DIMENSION2` | **高** (E2E) |
 | 门窗标注 | `TDim3` | 线选起点→线选终点→回车；线选段穿过墙体/门窗 | `TCH_DIMENSION2` | **高** (E2E) |
+| 两点标注 | `TDimTP` | 穿越线起点→穿越线终点→标注位置→回车；三墙场景 E2E 生成尺寸，穿过对象不足会报"对象数目太少" | `TCH_DIMENSION2` | **高** (E2E) |
 | 标高标注 | `TMElev` | 标高基准点→标注放置点→回车；单点序列会挂起等待输入，严禁改成单点序列 | `TCH_ELEVATION` | **高** (E2E) |
 | 门窗 | `TOpening` | 墙上插入点→回车（非模态面板不阻塞）；`Width/Height/DoorSill` 可 COM 注入 | `TCH_OPENING` | **中**：插入类型随面板当前模式（默认门）；窗模式/`SillHeight` 待验证 |
 | 普通线轴网 | 原生 `LINE` | `axis_lines` 替代路径：按开间/进深生成普通线网格，可旋转；不生成天正智能轴网 | `LINE` | **中** (替代路径) |
@@ -53,18 +54,18 @@
 | 搜索房间 | `TUpdSpace` | `search_room`：全图选择 `TCH_WALL` → 选择集 → 回车；闭合墙体围合区域生成房间对象 | `TCH_SPACE` | **高** (E2E) |
 | 绘制轴网(直线) | `TRectAxis` | **不可命令行驱动**：模态对话框 (#32770)。工具层已禁止 execute | — | **禁** (仅 dry-run) |
 | 图形导出(T3) | `TSaveAs` | **不可静默**：天正自绘导出框 (WPF)，无视 FILEDIA=0。工具层已禁止 execute | — | **禁** (仅 dry-run) |
+| 标准柱 | `TGColumn` | **不可命令行驱动**：弹 #32770 标准柱面板且命令保持 active，vl-cmdf 点序列到不了绘图区放置处理器 → 0 实体（2026-06-13 复测，Handoff 13）。工具层已禁止 execute | — | **禁** (仅 dry-run) |
 
 ### 1.2 已验证存在、待封装评估
 
 | 中文命令名 | 命令名 | 备注 |
 |---|---|---|
 | 分解对象 | `TExplode` | **已被 `explode_read` 取代**（实体副本 + 原生 `EXPLODE`，不弹框）。TExplode 必弹「分解对象」#32770 框（itest_23），白名单按钮驱动已验证可行（itest_24）但不再需要 |
-| 两点标注 | `TDimTP` | 两轮最小点序列均 0 实体（见 Handoff 06），暂不封装 |
+| 两点标注 | `TDimTP` | **已封装为 `two_point_dimension`**。Handoff 13 改用三墙穿越线场景后 E2E 验证通过 |
 | 墙厚标注 | `TDimWall` / 门窗标注 `TDim3` | 已封装为 `wall_thickness_dimension` / `opening_dimension` |
 | 标高标注 | `TMElev` | 已封装为 `elevation`；双点序列 E2E 验证，单点序列禁用 |
 | 局部导出 | `TPartSaveAs` | 空输入无弹框、无实体、无输出（no-op），仍未找到静默导出参数 |
 | BIM导出 | `TGetXML` | 空输入弹 `#32770` “天正模型导出到TGL”，不可静默封装 |
-| 标准柱 | `TGColumn` | 两轮点序列均 0 实体，暂不封装 |
 | 单线变墙 | `TSWall` | 两轮选择 LINE 序列均未转换，仅保留原 LINE，暂不封装 |
 | 搜索房间 | `TUpdSpace` | **已封装为 `search_room`**（Handoff 11，E2E 验证） |
 
@@ -80,7 +81,9 @@
 | `dimension` | `dimension.lsp` | TDimMP | **已验证** (E2E) |
 | `wall_thickness_dimension` | `wall_thickness_dimension.lsp` | TDimWall | **已验证** (E2E) |
 | `opening_dimension` | `opening_dimension.lsp` | TDim3 | **已验证** (E2E) |
+| `two_point_dimension` | `two_point_dimension.lsp` | TDimTP | **已验证** (E2E: 穿越三墙生成 TCH_DIMENSION2) |
 | `elevation` | `elevation.lsp` | TMElev | **已验证** (双点序列生成 TCH_ELEVATION；execute 附 warning) |
+| `column` | `column.lsp` | TGColumn | **仅 dry-run** (#32770 面板阻塞, execute 已禁用, Handoff 13) |
 | `door` | `door.lsp` | TOpening | **部分验证** (execute 附 warning) |
 | `window` | `window.lsp` | TOpening | **部分验证** (类型/窗台高未保证, execute 附 warning) |
 | `axis_lines` | `axis_lines.lsp` | 原生 LINE | **替代路径** (普通线网格，可 execute) |
@@ -89,7 +92,7 @@
 | `axis_grid` | `axis_grid.lsp` | TRectAxis | **仅 dry-run** (execute 已禁用) |
 | `export_t3` | `export_t3.lsp` | TSaveAs | **仅 dry-run** (execute 已禁用) |
 
-未覆盖（待后续迭代）：柱子、楼梯、房间、屋顶、符号/文字标注、门窗表等。
+未覆盖（待后续迭代）：楼梯、房间、屋顶、符号/文字标注、门窗表等。
 
 ## 3. 后续待办
 

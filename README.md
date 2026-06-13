@@ -7,16 +7,16 @@ LISP 模板封装。
 
 > 本 README 面向接手者（人或 AI）。读完本页 + 「文档索引」即可继续开发。
 
-> 当前主分支由 GPT 接管推进；不再等待 fable 额度。
+> 当前主分支由 claude 接管推进（fable 额度用尽退出）；codex 作为辅助执行。
 > 但真机安全门禁仍保留：未 E2E 或事故相关命令只允许 dry-run，不开放 execute。
 
-## 当前完成度：约 74%
+## 当前完成度：约 75%
 
 | 领域 | 完成度 | 说明 |
 |---|---|---|
 | IPC 基础设施（编码链/窗口识别/模态防护/引导加载） | 100% | 全部真机验收通过；WPF 对话框探测盲区已补（Handoff 09，itest_21） |
 | 命令编目 | 100% | 官方表 454 条全部收录并真机探测注册状态（442/451） |
-| 天正实体封装 | ~46% | wall/dimension/wall_thickness_dimension/opening_dimension/elevation/explode_read/search_room 已 E2E 验证，axis_lines 普通线轴网替代可执行，door 部分验证；导出受对话框阻碍；柱/楼梯/屋顶等未动工 |
+| 天正实体封装 | ~48% | wall/dimension/wall_thickness_dimension/opening_dimension/two_point_dimension/elevation/explode_read/search_room 已 E2E 验证，axis_lines 普通线轴网替代可执行，door 部分验证；标准柱/轴网/导出受 #32770 对话框阻碍（仅 dry-run）；楼梯/屋顶等未动工 |
 | MCP server 集成 | ~95% | 9 工具已注册（含 `tangent`）；MCP stdio dry-run 冒烟已通过 |
 | 测试与联调管线 | ~88% | 离线测试全绿；`scripts/itest_*.py` 可重复真机管线，E2E 收尾环境已校验 |
 
@@ -37,7 +37,7 @@ uv run python -m t20_mcp                 # 或在 MCP 客户端配置 command �
 MCP 工具共 9 个：上游 8 个（drawing/entity/layer/block/annotation/pid/view/system）
 + 本项目新增 **`tangent`**（天正实体，**默认 dry-run**，传 `execute=True` 才下发）。
 
-## `tangent` 子命令状态（真机：T20 V10 / AutoCAD 2024, 2026-06-12）
+## `tangent` 子命令状态（真机：T20 V10 / AutoCAD 2024, 2026-06-13）
 
 | 子命令 | 天正命令 | 状态 |
 |---|---|---|
@@ -45,7 +45,9 @@ MCP 工具共 9 个：上游 8 个（drawing/entity/layer/block/annotation/pid/v
 | `dimension` 逐点标注 | `TDimMP` | ✅ E2E 验证 |
 | `wall_thickness_dimension` 墙厚标注 | `TDimWall` | ✅ E2E 验证 |
 | `opening_dimension` 门窗标注 | `TDim3` | ✅ E2E 验证 |
+| `two_point_dimension` 两点标注 | `TDimTP` | ✅ E2E 验证（穿越三墙生成 `TCH_DIMENSION2`；穿过对象不足会报"对象数目太少"） |
 | `elevation` 标高标注 | `TMElev` | ✅ 双点序列 E2E 验证（实体 `TCH_ELEVATION`）；execute 附 warning，严禁改成单点序列 |
+| `column` 标准柱 | `TGColumn` | ⛔ #32770 标准柱面板阻塞，execute 已禁用（仅 dry-run；点序列到不了放置处理器，0 实体，Handoff 13） |
 | `door` 门 | `TOpening` | 🟡 部分验证（execute 附 warning） |
 | `window` 窗 | `TOpening` | 🟡 类型随面板模式、窗台高未保证 |
 | `axis_lines` 普通线轴网 | 原生 `LINE` | 🟡 可执行替代路径，生成普通线，不是天正智能轴网 |
@@ -97,12 +99,12 @@ MCP 工具共 9 个：上游 8 个（drawing/entity/layer/block/annotation/pid/v
 | `docs/research/2026-06-13_*.md` | GPT 调研：网搜与安装目录提示词检索（结论：需真机提示捕获） |
 | `scripts/itest_01..27_*.py` | 可重复的联调管线（引导/探测/试驱动/E2E/MCP stdio/恢复/清理） |
 
-## 分工规则（二人制：fable = 执行人/审查者，GPT = 辅助执行）
+## 分工规则（二人制：claude = 执行人/审查者，codex = 辅助执行）
 
-执行者读到这里先认领身份，按下面两条规则干活。commit 前缀：fable 用 `[fable]`，
-其他执行者一律 `[assist]`。
+执行者读到这里先认领身份，按下面两条规则干活。commit 前缀：claude 用 `[claude]`，
+其他执行者（含 codex）一律 `[assist]`。
 
-**规则 1 —— 以下情况必须 fable，GPT 不得动手：**
+**规则 1 —— 以下情况必须 claude，codex 不得动手：**
 - 改**基础设施**：`_prelude.lsp`、`file_ipc.py`、`mcp_dispatch.lsp`、编码契约相关的任何一行；
 - **疑难现场**：AutoCAD 崩溃/挂死、乱码、环境变量污染、IPC 超时反复出现；
 - **探索性决策**（没有现成管线可抄的）：轴网/导出替代路径选型、TExplode 管线设计；
@@ -111,7 +113,7 @@ MCP 工具共 9 个：上游 8 个（drawing/entity/layer/block/annotation/pid/v
 **规则 2 —— 体力活给 GPT，但触发即停：**
 照「封装方法论」五步管线（见上文）可完成的活都归 GPT：批量封装、属性探测、
 文档回填、测试补全。**一旦遇到以下任一情况立即停手**，把现场（脚本输出、
-AutoCAD 命令行回显、最后一次 diff）写进 `docs/handoff/` 新文档后移交 fable，
+AutoCAD 命令行回显、最后一次 diff）写进 `docs/handoff/` 新文档后移交 claude，
 禁止自行硬试：
 - 命中规则 1 的任何条目（尤其：想改 prelude / 想强关对话框 / 想猜命令名）；
 - 同一命令试驱动 **2 轮**仍是假成功或 0 实体；
@@ -122,18 +124,19 @@ AutoCAD 命令行回显、最后一次 diff）写进 `docs/handoff/` 新文档�
 **GPT（体力活，照管线抄作业）：**
 1. **window 完善**：COM 属性（itest_16）与 COM 方法（itest_29：
    GetKind/SetKind/GetSubKind/SetSubKind 等全部未暴露）两条路线均已排除；
-   剩余路线为门窗面板 UI 自动化（WPF，待 fable 决策）或文档化"用户先手动
+   剩余路线为门窗面板 UI 自动化（WPF，待 claude 决策）或文档化"用户先手动
    切窗模式"的使用约定。
 2. **批量封装 6 命令**——进度：墙厚标注 `TDimWall`、标高标注 `TMElev`、
-   搜索房间 `TUpdSpace`（→`search_room`，Handoff 11）均已完成 E2E；
-   标准柱 `TGColumn`、两点标注 `TDimTP`、单线变墙 `TSWall` 两轮失败 +
-   网搜/安装目录调研无线索 + LASTPROMPT 捕获法失效（Handoff 11 §2），
-   维持待验证，等新线索（reactor 捕获或人工录提示）。
+   搜索房间 `TUpdSpace`（→`search_room`，Handoff 11）已完成 E2E；标准柱
+   `TGColumn`（→`column`）真机复测证实弹 #32770 面板、命令行点序列无法放置，
+   已降级为 dry-run（Handoff 13）；两点标注 `TDimTP` 已封装为
+   `two_point_dimension`（Handoff 13：三墙穿越线场景 E2E 生成 `TCH_DIMENSION2`）；
+   单线变墙 `TSWall` 已抓到命令行提示但最小成功序列仍待验证。
 3. **导出替代探测**：`TPartSaveAs`/`TGetXML` 注册预检 + 最小试驱动；**弹框即记录停手**，
    只产出调研结论，不做绕过尝试。
 4. 文档/测试补全、截图存档。
 
-**fable（审查与硬骨头）：**
+**claude（审查与硬骨头）：**
 1. GPT 每批封装的 review + 合入（参照 `docs/handoff/03` 的审查模式）。
 2. **轴网替代路径**选型与实现（逐根轴线+`TSingleAxisDim` 组合 vs UI 自动化）。
 3. ~~TExplode + ezdxf 管线~~ 已完成（Handoff 10：实体副本 + 原生 EXPLODE 路线，
