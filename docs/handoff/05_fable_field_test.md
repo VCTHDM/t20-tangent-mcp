@@ -95,3 +95,9 @@
     封装为 `section_symbol` / `drawing_name`，循环式命令补空回车退出，
     E2E 生成 `TCH_SYMB_SECTION` / `TCH_DRAWINGNAME`；文字内容走面板记忆值，
     `drawing_name` 附 warning，COM 文本注入待评估）。
+11. ~~简单几何构件 `TRect` / `TBalcony` / `TStep`~~ **已完成**（2026-06-14，Handoff 21：
+    封装为 `rectangle` / `balcony` / `step`，纯点序列无面板无文字，
+    E2E 生成 `TCH_RECT` / `TCH_BALCONY` / `TCH_STEP`；阳台/台阶用变长轮廓点列）。
+12. 半径/直径/角度/弧弦标注 `TDimRad`/`TDimDia`/`TDimAng`/`TDimArc` 已探测暂不封装
+    （2026-06-14，Handoff 21）：均命令行无弹框，但选择待标注对象的拾取步不吃脚本点/ename
+    （报"点无效"，命令滞留 active=1），vl-cmdf 点序列打不通。下一轮若继续需找选择集注入法。

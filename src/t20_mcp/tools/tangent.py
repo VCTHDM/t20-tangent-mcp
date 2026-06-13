@@ -61,6 +61,7 @@ OPENING_WIDTH_RANGE: tuple[float, float] = (1.0, 20_000.0)  # 门窗洞口宽度
 SILL_RANGE: tuple[float, float] = (0.0, 100_000.0)          # 窗台高 / 距墙垛距离
 SPACING_RANGE: tuple[float, float] = (1.0, 100_000.0)       # 轴网单段间距
 SPACING_COUNT_MAX: int = 200          # 轴网间距段数上限
+POINT_LIST_COUNT_MAX: int = 200       # 轮廓点列点数上限 (阳台/台阶等)
 ANGLE_RANGE: tuple[float, float] = (-360.0, 360.0)
 LAYER_NAME_MAX: int = 255
 
@@ -130,6 +131,33 @@ def _require_spacings(value: Any, field: str) -> list[float]:
     for i, item in enumerate(value):
         out.append(_require_range(item, f"{field}[{i}]", *SPACING_RANGE))
     return out
+
+
+def _require_point_list(value: Any, field: str, *, min_points: int = 2) -> list[tuple[float, float]]:
+    """轮廓点列: [[x, y], ...]; 至少 min_points 个点, 每点坐标在范围内, 相邻点不重合。"""
+    if not isinstance(value, (list, tuple)) or isinstance(value, (str, bytes)):
+        raise ParamError(f"参数 {field} 必须为点列表 [[x, y], ...], 实际为 {value!r}")
+    if len(value) < min_points:
+        raise ParamError(f"参数 {field} 至少需要 {min_points} 个点, 实际 {len(value)}")
+    if len(value) > POINT_LIST_COUNT_MAX:
+        raise ParamError(f"参数 {field} 点数 {len(value)} 超过上限 {POINT_LIST_COUNT_MAX}")
+    out: list[tuple[float, float]] = []
+    prev: tuple[float, float] | None = None
+    for i, p in enumerate(value):
+        if not isinstance(p, (list, tuple)) or isinstance(p, (str, bytes)) or len(p) != 2:
+            raise ParamError(f"参数 {field}[{i}] 必须为 [x, y], 实际为 {p!r}")
+        x = _require_coord(p[0], f"{field}[{i}].x")
+        y = _require_coord(p[1], f"{field}[{i}].y")
+        if prev is not None and prev == (x, y):
+            raise ParamError(f"参数 {field}[{i}] 与前一点重合")
+        out.append((x, y))
+        prev = (x, y)
+    return out
+
+
+def _pt_list_lisp(points: list[tuple[float, float]]) -> str:
+    """把点列渲染为一串 ``(t20mcp:pt x y)`` 表单 (空格分隔)。"""
+    return " ".join(f"(t20mcp:pt {_num(x)} {_num(y)})" for x, y in points)
 
 
 def _num(value: float) -> str:
@@ -673,6 +701,61 @@ def _gen_drawing_name(data: dict[str, Any]) -> str:
     )
 
 
+def _gen_rectangle(data: dict[str, Any]) -> str:
+    """矩形 (天正矩形)。data: {x1,y1,x2,y2,layer?}
+
+    真机验证序列: 第一角点 -> 第二角点 -> 回车退出循环, 生成 TCH_RECT。
+    """
+    x1 = _require_coord(data.get("x1"), "x1")
+    y1 = _require_coord(data.get("y1"), "y1")
+    x2 = _require_coord(data.get("x2"), "x2")
+    y2 = _require_coord(data.get("y2"), "y2")
+    if x1 == x2 or y1 == y2:
+        raise ParamError("矩形两角点不能在同一水平或垂直线上 (零面积)")
+    return _render(
+        "rectangle",
+        {
+            "SET_LAYER": _set_layer_cmd(data.get("layer")),
+            "X1": _num(x1),
+            "Y1": _num(y1),
+            "X2": _num(x2),
+            "Y2": _num(y2),
+        },
+    )
+
+
+def _gen_balcony(data: dict[str, Any]) -> str:
+    """阳台。data: {points:[[x,y],...] (>=2), layer?}
+
+    真机验证序列: 各轮廓点 -> 回车结束, 生成 TCH_BALCONY。
+    阳台类型/挑出宽度走天正面板记忆值, 本工具只参数化轮廓点列。
+    """
+    points = _require_point_list(data.get("points"), "points", min_points=2)
+    return _render(
+        "balcony",
+        {
+            "SET_LAYER": _set_layer_cmd(data.get("layer")),
+            "POINTS": _pt_list_lisp(points),
+        },
+    )
+
+
+def _gen_step(data: dict[str, Any]) -> str:
+    """台阶。data: {points:[[x,y],...] (>=2), layer?}
+
+    真机验证序列: 各轮廓点 -> 回车结束, 生成 TCH_STEP。
+    踏步数/宽度走天正面板记忆值, 本工具只参数化轮廓点列。
+    """
+    points = _require_point_list(data.get("points"), "points", min_points=2)
+    return _render(
+        "step",
+        {
+            "SET_LAYER": _set_layer_cmd(data.get("layer")),
+            "POINTS": _pt_list_lisp(points),
+        },
+    )
+
+
 _ALLOWED_T3_VERSIONS: dict[str, str] = {"t3": "3", "天正3": "3", "3": "3"}
 
 
@@ -815,6 +898,9 @@ _GENERATORS: dict[str, Callable[[dict[str, Any]], str]] = {
     "break_line": _gen_break_line,
     "section_symbol": _gen_section_symbol,
     "drawing_name": _gen_drawing_name,
+    "rectangle": _gen_rectangle,
+    "balcony": _gen_balcony,
+    "step": _gen_step,
     "explode_read": _gen_explode_read,
     "search_room": _gen_search_room,
     "export_t3": _gen_export_t3,
@@ -925,6 +1011,9 @@ def register_tangent_tool(mcp: Any) -> None:
           break_line — 加折断线 [已验证]。{x1, y1, x2, y2, layer?}
           section_symbol — 剖切符号 [已验证]。{x1, y1, x2, y2, dir_x?, dir_y?, layer?}
           drawing_name — 图名标注 [已验证; 图名文字取面板记忆值, 见 warning]。{ins_x, ins_y, layer?}
+          rectangle  — 矩形     [已验证]。{x1, y1, x2, y2, layer?}
+          balcony    — 阳台     [已验证; 类型/挑出宽取面板记忆值]。{points:[[x,y],...]>=2, layer?}
+          step       — 台阶     [已验证; 踏步数/宽取面板记忆值]。{points:[[x,y],...]>=2, layer?}
           column     — 标准柱   [仅 dry-run: #32770 面板阻塞]。{x, y, angle?, layer?}
           door       — 普通门   [部分验证]。{ins_x, ins_y, width?, height?, sill_distance?, layer?}
           window     — 普通窗   [部分验证; 调用前需人工切窗模式]。{ins_x, ins_y, width?, height?, sill_height?, layer?}

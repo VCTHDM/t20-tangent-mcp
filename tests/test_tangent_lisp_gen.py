@@ -62,6 +62,9 @@ VALID_CASES: dict[str, dict] = {
     "break_line": {"x1": 0, "y1": 0, "x2": 3000, "y2": 0},
     "section_symbol": {"x1": 0, "y1": 0, "x2": 3000, "y2": 0, "dir_x": 1500, "dir_y": -1000},
     "drawing_name": {"ins_x": 0, "ins_y": 0},
+    "rectangle": {"x1": 0, "y1": 0, "x2": 3000, "y2": 2000},
+    "balcony": {"points": [[0, 0], [3000, 0], [3000, 1500], [0, 1500]]},
+    "step": {"points": [[0, 0], [3000, 0], [3000, 600], [0, 600]]},
     "explode_read": {"handle": "1a3f", "offset_x": 1_000_000, "offset_y": 1_000_000},
     "search_room": {"layer": "SPACE"},
     "export_t3": {"out_path": "C:/temp/out_t3.dwg", "target_ver": "t3"},
@@ -312,6 +315,32 @@ class TestParamInjection:
         assert code.index('""', ins) > ins
         assert "TCH_DRAWINGNAME" in code
 
+    def test_rectangle_uses_trect_two_corners(self) -> None:
+        # TRect 真机试验: 第一角点 -> 第二角点 -> 回车, 生成 TCH_RECT。
+        code = generate_lisp("rectangle", {"x1": 0, "y1": 0, "x2": 3000, "y2": 2000})
+        assert '"TRECT"' in code
+        c1 = code.index("t20mcp:pt 0 0")
+        c2 = code.index("t20mcp:pt 3000 2000")
+        done = code.index('""', c2)
+        assert c1 < c2 < done
+        assert "TCH_RECT" in code
+
+    def test_balcony_emits_point_list_and_trailing_enter(self) -> None:
+        # TBalcony 真机试验: 各轮廓点 -> 回车, 生成 TCH_BALCONY。
+        code = generate_lisp("balcony", {"points": [[0, 0], [3000, 0], [3000, 1500]]})
+        assert '"TBALCONY"' in code
+        p0 = code.index("t20mcp:pt 0 0")
+        p1 = code.index("t20mcp:pt 3000 0")
+        p2 = code.index("t20mcp:pt 3000 1500")
+        assert p0 < p1 < p2 < code.index('""', p2)
+        assert "TCH_BALCONY" in code
+
+    def test_step_emits_point_list(self) -> None:
+        code = generate_lisp("step", {"points": [[0, 0], [3000, 0]]})
+        assert '"TSTEP"' in code
+        assert "t20mcp:pt 0 0" in code and "t20mcp:pt 3000 0" in code
+        assert "TCH_STEP" in code
+
     def test_float_formatting_is_compact(self) -> None:
         # 整数值不应带小数点; 小数值应保留
         code = generate_lisp("door", {"ins_x": 1500.0, "ins_y": 0, "width": 912.5, "height": 2100})
@@ -425,6 +454,28 @@ class TestInvalidParamsRejected:
     def test_drawing_name_missing_coord_rejected(self) -> None:
         with pytest.raises(ParamError):
             generate_lisp("drawing_name", {"ins_x": 0})  # 缺 ins_y
+
+    def test_rectangle_zero_area_rejected(self) -> None:
+        with pytest.raises(ParamError):
+            generate_lisp("rectangle", {"x1": 0, "y1": 0, "x2": 0, "y2": 2000})  # 同一垂直线
+        with pytest.raises(ParamError):
+            generate_lisp("rectangle", {"x1": 0, "y1": 5, "x2": 3000, "y2": 5})  # 同一水平线
+
+    def test_balcony_too_few_points_rejected(self) -> None:
+        with pytest.raises(ParamError):
+            generate_lisp("balcony", {"points": [[0, 0]]})
+
+    def test_step_bad_point_shape_rejected(self) -> None:
+        with pytest.raises(ParamError):
+            generate_lisp("step", {"points": [[0, 0], [3000]]})  # 第二点不是 [x, y]
+
+    def test_balcony_coincident_adjacent_points_rejected(self) -> None:
+        with pytest.raises(ParamError):
+            generate_lisp("balcony", {"points": [[0, 0], [0, 0], [3000, 0]]})
+
+    def test_balcony_points_not_list_rejected(self) -> None:
+        with pytest.raises(ParamError):
+            generate_lisp("balcony", {"points": "0,0 3000,0"})
 
     def test_axis_grid_empty_spacings_rejected(self) -> None:
         with pytest.raises(ParamError):

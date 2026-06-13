@@ -54,6 +54,9 @@
 | 加折断线 | `TSymbCut` | 起点→终点→回车 (接受 `<不切割>` 默认)；两点后命令仍 active, 必须补空回车 | `TCH_RUPTURE` | **高** (E2E) |
 | 剖切符号 | `TSection` | 第一剖切点→第二剖切点→剖视方向→回车退出循环；编号文字走面板记忆值 | `TCH_SYMB_SECTION` | **高** (E2E) |
 | 图名标注 | `TDrawingName` | 插入位置→回车退出循环；图名文字/比例走面板记忆值 (不可参数化, 附 warning) | `TCH_DRAWINGNAME` | **高** (E2E) |
+| 矩形 | `TRect` | 第一角点→第二角点→回车退出循环 | `TCH_RECT` | **高** (E2E) |
+| 阳台 | `TBalcony` | 各轮廓点→回车；类型/挑出宽走面板记忆值；点数≥2 | `TCH_BALCONY` | **高** (E2E) |
+| 台阶 | `TStep` | 各轮廓点→回车；踏步数/宽走面板记忆值；点数≥2 | `TCH_STEP` | **高** (E2E) |
 | 门窗 | `TOpening` | 墙上插入点→回车（非模态面板不阻塞）；`Width/Height/DoorSill` 可 COM 注入；`window` 调用前需人工把门窗面板切到窗模式 | `TCH_OPENING` | **中**：插入类型随面板当前模式（默认门）；窗模式/`SillHeight` 待验证 |
 | 普通线轴网 | 原生 `LINE` | `axis_lines` 替代路径：按开间/进深生成普通线网格，可旋转；不生成天正智能轴网 | `LINE` | **中** (替代路径) |
 | 几何读回 | 原生 `EXPLODE` | `explode_read`：COPY 副本到暂存区→分解副本→序列化产物→UNDO 回滚，非破坏。TEXPLODE 弹「分解对象」框被弃用（可白名单点击驱动，见 dialog_automation）。已知 T20 缺陷：墙体产物起点侧顶点归零（Handoff 10 §4） | `LINE` 等 | **高** (E2E) |
@@ -78,6 +81,10 @@
 | 加折断线 | `TSymbCut` | **已封装为 `break_line`**（Handoff 19，E2E 生成 `TCH_RUPTURE`） |
 | 剖切符号 | `TSection` | **已封装为 `section_symbol`**（Handoff 20，E2E 生成 `TCH_SYMB_SECTION`） |
 | 图名标注 | `TDrawingName` | **已封装为 `drawing_name`**（Handoff 20，E2E 生成 `TCH_DRAWINGNAME`；图名文字取面板记忆值） |
+| 矩形 | `TRect` | **已封装为 `rectangle`**（Handoff 21，E2E 生成 `TCH_RECT`） |
+| 阳台 | `TBalcony` | **已封装为 `balcony`**（Handoff 21，E2E 生成 `TCH_BALCONY`；轮廓点列驱动） |
+| 台阶 | `TStep` | **已封装为 `step`**（Handoff 21，E2E 生成 `TCH_STEP`；轮廓点列驱动） |
+| 半径/直径/角度/弧弦标注 | `TDimRad`/`TDimDia`/`TDimAng`/`TDimArc` | 已探测：均命令行无弹框，但**选择待标注对象的拾取步不吃脚本点/ename**（报"点无效"，命令滞留 active），vl-cmdf 点序列打不通，暂不封装（Handoff 21） |
 | 局部导出 | `TPartSaveAs` | 空输入无弹框、无实体、无输出（no-op），仍未找到静默导出参数 |
 | BIM导出 | `TGetXML` | 空输入弹 `#32770` “天正模型导出到TGL”，不可静默封装 |
 | 单线变墙 | `TSWall` | 已复核：选择 LINE 后回车直接结束，0 实体；未观察到弹框；额外 `240` 被当未知命令。暂不封装（Handoff 15） |
@@ -103,6 +110,9 @@
 | `break_line` | `break_line.lsp` | TSymbCut | **已验证** (E2E: 起点→终点→回车, 生成 TCH_RUPTURE) |
 | `section_symbol` | `section_symbol.lsp` | TSection | **已验证** (E2E: 两剖切点→方向→回车, 生成 TCH_SYMB_SECTION) |
 | `drawing_name` | `drawing_name.lsp` | TDrawingName | **已验证** (E2E: 插入位置→回车, 生成 TCH_DRAWINGNAME; 图名文字取面板记忆值) |
+| `rectangle` | `rectangle.lsp` | TRect | **已验证** (E2E: 两角点→回车, 生成 TCH_RECT) |
+| `balcony` | `balcony.lsp` | TBalcony | **已验证** (E2E: 轮廓点列→回车, 生成 TCH_BALCONY) |
+| `step` | `step.lsp` | TStep | **已验证** (E2E: 轮廓点列→回车, 生成 TCH_STEP) |
 | `column` | `column.lsp` | TGColumn | **仅 dry-run** (#32770 面板阻塞, execute 已禁用, Handoff 13) |
 | `door` | `door.lsp` | TOpening | **部分验证** (execute 附 warning) |
 | `window` | `window.lsp` | TOpening | **部分验证** (需先人工切窗模式; 窗台高未保证, execute 附 warning) |
@@ -113,8 +123,8 @@
 | `export_t3` | `export_t3.lsp` | TSaveAs | **仅 dry-run** (execute 已禁用) |
 
 未覆盖（待后续迭代）：楼梯、房间、屋顶、文字标注、门窗表等。
-（符号标注已覆盖坐标/对称轴/指北针/折断线/剖切符号/图名标注；引出标注 `TLeader`、
-指向/剖切索引 `TPOINTINDEX`/`TSECTINDEX`、索引图名 `TIndexDim` 待探，多为多点引线+文字。）
+（符号标注已覆盖坐标/对称轴/指北针/折断线/剖切符号/图名标注；构件已覆盖矩形/阳台/台阶；
+引出标注 `TLeader`、索引类待探，多为多点引线+文字；半径/直径/角度/弧弦标注因选择步打不通暂搁置。）
 
 ## 3. 后续待办
 
