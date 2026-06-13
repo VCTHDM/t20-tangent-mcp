@@ -95,10 +95,16 @@
 
 1. **窗模式驱动**：当前门模式下已验证 `Width/Height/DoorSill` 可写；
    `SillHeight/WindowSillHeight/OpType/Kind/Type/WinType` 均不可读/不可写
-   （见 `scripts/itest_16_opening_props_safe.py`）。下一步需先把 TOpening 面板切到窗模式，
-   再重跑属性探测。
+   （`itest_16`）。**COM 方法路线已排除**（2026-06-13，`itest_29`：
+   `GetKind/SetKind/GetSubKind/SetSubKind/OpeningKind/InsertMode` 经
+   vlax-invoke 全部不可用）。剩余路线：门窗面板 UI 自动化（WPF，难）
+   或要求用户人工把面板切到窗模式后再调 `window`。
 2. **轴网/导出替代路径**：
-   - 轴网：评估逐根画轴线（原生 LINE + 轴号 `TSingleAxisDim`）或 UI 自动化填对话框；
+   - 轴网：`axis_lines`（普通线网格）已可执行。`TRectAxis` 对话框已侦察
+     （`itest_28` + `docs/research/2026-06-13_rectaxis_dialog_controls.txt`）：
+     MFC 原生框（#32770 + SysTabControl32 + ListBox/Edit 组合），**技术上可
+     dialog_automation 驱动但语义控件无文本，需控件 ID 映射**，性价比低，
+     暂维持 axis_lines 替代；轴号 `TSingleAxisDim` 序列仍未知。
    - 导出：评估 `TPartSaveAs`、`TGetXML`，或 UI 自动化。
 3. ~~TExplode + ezdxf 读取管线~~ 已完成：`explode_read` 子命令（Handoff 10）。
    余项：墙体解析式 outline（vlax-curve + 宽度），TCH_OPENING/TCH_DIMENSION2

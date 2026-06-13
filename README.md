@@ -120,8 +120,10 @@ AutoCAD 命令行回显、最后一次 diff）写进 `docs/handoff/` 新文档�
 ## 待办（按优先级，标了执行人）
 
 **GPT（体力活，照管线抄作业）：**
-1. **window 完善**：`itest_10_opening_props.py` 改属性候选名重跑，找 TOpening
-   门/窗类型 COM 切换属性与窗模式 `SillHeight`；只回填文档与模板参数，不改骨架。
+1. **window 完善**：COM 属性（itest_16）与 COM 方法（itest_29：
+   GetKind/SetKind/GetSubKind/SetSubKind 等全部未暴露）两条路线均已排除；
+   剩余路线为门窗面板 UI 自动化（WPF，待 fable 决策）或文档化"用户先手动
+   切窗模式"的使用约定。
 2. **批量封装 6 命令**——进度：墙厚标注 `TDimWall`、标高标注 `TMElev`、
    搜索房间 `TUpdSpace`（→`search_room`，Handoff 11）均已完成 E2E；
    标准柱 `TGColumn`、两点标注 `TDimTP`、单线变墙 `TSWall` 两轮失败 +
