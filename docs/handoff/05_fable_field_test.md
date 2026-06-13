@@ -76,4 +76,5 @@
 2. 轴网替代路径：逐根轴线 + `TSingleAxisDim`，或 UI 自动化
 3. 导出替代路径：`TPartSaveAs` / `TGetXML`（BIM 导出）调研
 4. `TExplode` + ezdxf 临时副本读取管线
-5. P1-2 防护对 WPF 框的探测（可选：枚举 acad.exe 线程的 HwndWrapper 可见窗）
+5. ~~P1-2 防护对 WPF 框的探测~~ **已完成**（2026-06-13，Handoff 09：
+   改用「主窗口 IsWindowEnabled」信号，与类名/线程无关；itest_21 真机验收通过）

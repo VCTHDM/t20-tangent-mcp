@@ -14,7 +14,7 @@ LISP 模板封装。
 
 | 领域 | 完成度 | 说明 |
 |---|---|---|
-| IPC 基础设施（编码链/窗口识别/模态防护/引导加载） | ~95% | 全部真机验收通过；遗留：天正 WPF 对话框探测盲区 |
+| IPC 基础设施（编码链/窗口识别/模态防护/引导加载） | 100% | 全部真机验收通过；WPF 对话框探测盲区已补（Handoff 09，itest_21） |
 | 命令编目 | 100% | 官方表 454 条全部收录并真机探测注册状态（442/451） |
 | 天正实体封装 | ~36% | wall/dimension/wall_thickness_dimension/opening_dimension/elevation 已 E2E 验证，axis_lines 普通线轴网替代可执行，door 部分验证；导出受对话框阻碍；柱/楼梯/房间/屋顶等未动工 |
 | MCP server 集成 | ~95% | 9 工具已注册（含 `tangent`）；MCP stdio dry-run 冒烟已通过 |
@@ -89,7 +89,8 @@ MCP 工具共 9 个：上游 8 个（drawing/entity/layer/block/annotation/pid/v
 | `docs/handoff/06_gpt_tmelev_crash_stop.md` | `TMElev` 试驱动后闪退停手记录 |
 | `docs/handoff/07_gpt_branch_takeover.md` | GPT 接管本分支后的安全门禁与当前状态 |
 | `docs/handoff/08_gpt_field_test.md` | GPT 本轮真机联调结果（bringup/E2E/elevation/opening props） |
-| `scripts/itest_01..20_*.py` | 可重复的联调管线（引导/探测/试驱动/E2E/MCP stdio/恢复/清理） |
+| `docs/handoff/09_fable_wpf_guard.md` | P1-2 补盲：模态对话框探测（IsWindowEnabled 信号，itest_21 验收） |
+| `scripts/itest_01..21_*.py` | 可重复的联调管线（引导/探测/试驱动/E2E/MCP stdio/恢复/清理） |
 
 ## 分工规则（二人制：fable = 执行人/审查者，GPT = 辅助执行）
 
@@ -128,7 +129,7 @@ AutoCAD 命令行回显、最后一次 diff）写进 `docs/handoff/` 新文档�
 1. GPT 每批封装的 review + 合入（参照 `docs/handoff/03` 的审查模式）。
 2. **轴网替代路径**选型与实现（逐根轴线+`TSingleAxisDim` 组合 vs UI 自动化）。
 3. **TExplode + ezdxf 管线**设计实现（破坏性！仅临时副本，禁动用户图纸）。
-4. P1-2 防护补盲（天正 WPF/HwndWrapper 对话框探测）——涉及 `file_ipc.py`。
+4. ~~P1-2 防护补盲~~ 已完成（Handoff 09：主窗口 IsWindowEnabled 信号，itest_21 真机验收）。
 5. **MCP 协议端到端冒烟**（最终验收，完成后更新完成度表）。
 
 > 待办的权威位置：本节 + `docs/T20_COMMANDS.md` §3 + `docs/handoff/05_fable_field_test.md` §6。

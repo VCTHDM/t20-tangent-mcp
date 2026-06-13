@@ -348,16 +348,30 @@ class FileIPCBackend(AutoCADBackend):
     def _autocad_modal_dialog_present(self) -> bool:
         """Best-effort check whether AutoCAD is blocked by a modal dialog.
 
-        Looks for a standard dialog (class ``#32770``) that is either the main
-        window's active popup or a visible window on the main UI thread. T20's
-        own ObjectARX dialogs may not use ``#32770``, so this is advisory: on any
-        error or uncertainty it returns False and the dispatch proceeds.
+        Two signals, either one positive ⇒ blocked:
+
+        1. **主窗口被禁用** (``IsWindowEnabled == FALSE``): any modal loop —
+           native ``#32770``, ObjectARX, or T20's WPF ``HwndWrapper[...]``
+           export dialogs (P1-2 盲区) — disables its owner window. Class-name
+           matching on ``HwndWrapper`` alone would false-positive on T20's
+           non-modal WPF palettes (门窗面板等), so the owner-disabled state is
+           the discriminator: non-modal panels leave the main window enabled.
+        2. A visible standard dialog (class ``#32770``) as active popup or on
+           the main UI thread (original check, kept as belt-and-braces).
+
+        Advisory: on any error or uncertainty it returns False and the
+        dispatch proceeds.
         """
         if sys.platform != "win32" or not self._hwnd:
             return False
         try:
+            import ctypes
+
             import win32gui
             import win32process
+
+            if not ctypes.windll.user32.IsWindowEnabled(self._hwnd):
+                return True
 
             popup = win32gui.GetLastActivePopup(self._hwnd)
             if (
