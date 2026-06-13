@@ -51,6 +51,8 @@ VALID_CASES: dict[str, dict] = {
     "door": {"ins_x": 1500, "ins_y": 0, "width": 900, "height": 2100},
     "window": {"ins_x": 3000, "ins_y": 0, "width": 1500, "height": 1500, "sill_height": 900},
     "dimension": {"p1_x": 0, "p1_y": 0, "p2_x": 6000, "p2_y": 0},
+    "wall_thickness_dimension": {"p1_x": 1500, "p1_y": -500, "p2_x": 1500, "p2_y": 500},
+    "opening_dimension": {"p1_x": -200, "p1_y": 600, "p2_x": 3200, "p2_y": 600},
     "elevation": {"base_x": 0, "base_y": 0, "label_x": 1000, "label_y": 1000},
     "export_t3": {"out_path": "C:/temp/out_t3.dwg", "target_ver": "t3"},
 }
@@ -184,6 +186,22 @@ class TestParamInjection:
         p1 = code.index("t20mcp:pt 0 0")
         assert pos < p1  # 位置点在标注点之前
 
+    def test_wall_thickness_dimension_uses_tdimwall_two_points(self) -> None:
+        code = generate_lisp("wall_thickness_dimension", {
+            "p1_x": 1500, "p1_y": -500, "p2_x": 1500, "p2_y": 500,
+        })
+        assert '"TDIMWALL"' in code
+        assert "t20mcp:pt 1500 -500" in code
+        assert "t20mcp:pt 1500 500" in code
+
+    def test_opening_dimension_uses_tdim3_line_select(self) -> None:
+        code = generate_lisp("opening_dimension", {
+            "p1_x": -200, "p1_y": 600, "p2_x": 3200, "p2_y": 600,
+        })
+        assert '"TDIM3"' in code
+        assert "t20mcp:pt -200 600" in code
+        assert "t20mcp:pt 3200 600" in code
+
     def test_elevation_uses_tmelev_two_points(self) -> None:
         # TMElev 真机试验: 双点序列可生成 TCH_ELEVATION; 单点序列会挂起等待输入。
         code = generate_lisp("elevation", {
@@ -271,6 +289,11 @@ class TestInvalidParamsRejected:
     def test_dimension_coincident_points_rejected(self) -> None:
         with pytest.raises(ParamError):
             generate_lisp("dimension", {"p1_x": 1, "p1_y": 1, "p2_x": 1, "p2_y": 1})
+
+    @pytest.mark.parametrize("operation", ["wall_thickness_dimension", "opening_dimension"])
+    def test_two_point_dimension_coincident_points_rejected(self, operation: str) -> None:
+        with pytest.raises(ParamError):
+            generate_lisp(operation, {"p1_x": 1, "p1_y": 1, "p2_x": 1, "p2_y": 1})
 
     def test_elevation_coincident_points_rejected(self) -> None:
         with pytest.raises(ParamError):

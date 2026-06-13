@@ -168,3 +168,22 @@ uv run python scripts/itest_19_mcp_stdio_smoke.py
 
 修正：README 中原 `uv run python -m t20_mcp.server` 不会调用 `main()`，已改为
 `uv run python -m t20_mcp`。
+
+## 12. TDimWall / TDim3 网页线索复验
+
+子 agent 网页检索发现：
+
+- `TDimWall` 提示为“直线第一点 / 直线第二点”，两点连线穿过墙体。
+- `TDim3` 提示为“请用线选第一、二道尺寸线及墙体起点 / 终点”。
+
+按该线索真机复验成功，并新增：
+
+```text
+uv run python scripts/itest_20_tangent_dimensions.py
+```
+
+结果：
+
+- `wall_thickness_dimension`: PASS，`TDimWall` 生成 `TCH_DIMENSION2`
+- `opening_dimension`: PASS，`TDim3` 生成 `TCH_DIMENSION2`
+- 清理还原：PASS

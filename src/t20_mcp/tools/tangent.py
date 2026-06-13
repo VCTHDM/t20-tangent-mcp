@@ -419,6 +419,46 @@ def _gen_dimension(data: dict[str, Any]) -> str:
     )
 
 
+def _gen_wall_thickness_dimension(data: dict[str, Any]) -> str:
+    """墙厚标注。data: {p1_x,p1_y,p2_x,p2_y,layer?}"""
+    p1_x = _require_coord(data.get("p1_x"), "p1_x")
+    p1_y = _require_coord(data.get("p1_y"), "p1_y")
+    p2_x = _require_coord(data.get("p2_x"), "p2_x")
+    p2_y = _require_coord(data.get("p2_y"), "p2_y")
+    if p1_x == p2_x and p1_y == p2_y:
+        raise ParamError("墙厚标注两点不能重合")
+    return _render(
+        "wall_thickness_dimension",
+        {
+            "SET_LAYER": _set_layer_cmd(data.get("layer")),
+            "P1_X": _num(p1_x),
+            "P1_Y": _num(p1_y),
+            "P2_X": _num(p2_x),
+            "P2_Y": _num(p2_y),
+        },
+    )
+
+
+def _gen_opening_dimension(data: dict[str, Any]) -> str:
+    """门窗标注。data: {p1_x,p1_y,p2_x,p2_y,layer?}"""
+    p1_x = _require_coord(data.get("p1_x"), "p1_x")
+    p1_y = _require_coord(data.get("p1_y"), "p1_y")
+    p2_x = _require_coord(data.get("p2_x"), "p2_x")
+    p2_y = _require_coord(data.get("p2_y"), "p2_y")
+    if p1_x == p2_x and p1_y == p2_y:
+        raise ParamError("门窗标注线选两点不能重合")
+    return _render(
+        "opening_dimension",
+        {
+            "SET_LAYER": _set_layer_cmd(data.get("layer")),
+            "P1_X": _num(p1_x),
+            "P1_Y": _num(p1_y),
+            "P2_X": _num(p2_x),
+            "P2_Y": _num(p2_y),
+        },
+    )
+
+
 def _gen_elevation(data: dict[str, Any]) -> str:
     """标高标注。data: {base_x,base_y,label_x?,label_y?,layer?}"""
     base_x = _require_coord(data.get("base_x"), "base_x")
@@ -472,6 +512,8 @@ _GENERATORS: dict[str, Callable[[dict[str, Any]], str]] = {
     "door": _gen_door,
     "window": _gen_window,
     "dimension": _gen_dimension,
+    "wall_thickness_dimension": _gen_wall_thickness_dimension,
+    "opening_dimension": _gen_opening_dimension,
     "elevation": _gen_elevation,
     "export_t3": _gen_export_t3,
 }
@@ -558,6 +600,8 @@ def register_tangent_tool(mcp: Any) -> None:
         Operations (data 字段) — 真机验证状态 (T20 V10 / AutoCAD 2024):
           wall       — 单段墙体 [已验证]。{x1, y1, x2, y2, left_width?, right_width?, height?, wall_type?, layer?}
           dimension  — 逐点标注 [已验证]。{p1_x, p1_y, p2_x, p2_y, pos_x?, pos_y?, layer?}
+          wall_thickness_dimension — 墙厚标注 [已验证]。{p1_x, p1_y, p2_x, p2_y, layer?}
+          opening_dimension — 门窗标注 [已验证]。{p1_x, p1_y, p2_x, p2_y, layer?}
           elevation  — 标高标注 [已验证双点序列]。{base_x, base_y, label_x?, label_y?, layer?}
           door       — 普通门   [部分验证]。{ins_x, ins_y, width?, height?, sill_distance?, layer?}
           window     — 普通窗   [部分验证]。{ins_x, ins_y, width?, height?, sill_height?, layer?}
