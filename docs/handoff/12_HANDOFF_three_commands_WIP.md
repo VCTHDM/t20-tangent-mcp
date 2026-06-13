@@ -43,7 +43,13 @@ uv run python -X utf8 scripts/_probe_log.py run <CMD> <arglist|场景名> <wall|
 `tdimtp_fence` / `tdimtp_cross` / `empty`。验证过原生 LINE 提示能抓到
 （"指定第一个点: *取消*"），机制可靠。
 
-## 2. ★ TGColumn（标准柱）—— 已封装并 E2E 验收
+## 2. ★ TGColumn（标准柱）—— ⚠️ 本节结论已被 Handoff 13 推翻
+
+> **2026-06-13 claude 复测**：本节「已 E2E 验收」**不成立**。`TGCOLUMN` 弹 `#32770`
+> 标准柱面板、命令保持 active，`vl-cmdf` 点序列到不了放置处理器 → 0 实体；下面的
+> 「4 组候选全成 delta=1」**不可复现**（面板恰好开着的顺序依赖假成功）。`column` 已降级
+> 为仅 dry-run（`EXECUTE_DISABLED_SUBCOMMANDS`）。详见 `docs/handoff/13_claude_column_dialog_block.md`。
+> 以下原文保留作记录。
 
 `scripts/_probe_cmd.py tgcolumn` 真机结果（4 组候选全成）：
 ```

@@ -16,7 +16,7 @@ LISP 模板封装。
 |---|---|---|
 | IPC 基础设施（编码链/窗口识别/模态防护/引导加载） | 100% | 全部真机验收通过；WPF 对话框探测盲区已补（Handoff 09，itest_21） |
 | 命令编目 | 100% | 官方表 454 条全部收录并真机探测注册状态（442/451） |
-| 天正实体封装 | ~50% | wall/dimension/wall_thickness_dimension/opening_dimension/elevation/explode_read/search_room/column 已 E2E 验证，axis_lines 普通线轴网替代可执行，door 部分验证；导出受对话框阻碍；楼梯/屋顶等未动工 |
+| 天正实体封装 | ~46% | wall/dimension/wall_thickness_dimension/opening_dimension/elevation/explode_read/search_room 已 E2E 验证，axis_lines 普通线轴网替代可执行，door 部分验证；标准柱/轴网/导出受 #32770 对话框阻碍（仅 dry-run）；楼梯/屋顶等未动工 |
 | MCP server 集成 | ~95% | 9 工具已注册（含 `tangent`）；MCP stdio dry-run 冒烟已通过 |
 | 测试与联调管线 | ~88% | 离线测试全绿；`scripts/itest_*.py` 可重复真机管线，E2E 收尾环境已校验 |
 
@@ -46,7 +46,7 @@ MCP 工具共 9 个：上游 8 个（drawing/entity/layer/block/annotation/pid/v
 | `wall_thickness_dimension` 墙厚标注 | `TDimWall` | ✅ E2E 验证 |
 | `opening_dimension` 门窗标注 | `TDim3` | ✅ E2E 验证 |
 | `elevation` 标高标注 | `TMElev` | ✅ 双点序列 E2E 验证（实体 `TCH_ELEVATION`）；execute 附 warning，严禁改成单点序列 |
-| `column` 标准柱 | `TGColumn` | ✅ E2E 验证（插入点生成 `TCH_COLUMN`；截面尺寸来自面板记忆值） |
+| `column` 标准柱 | `TGColumn` | ⛔ #32770 标准柱面板阻塞，execute 已禁用（仅 dry-run；点序列到不了放置处理器，0 实体，Handoff 13） |
 | `door` 门 | `TOpening` | 🟡 部分验证（execute 附 warning） |
 | `window` 窗 | `TOpening` | 🟡 类型随面板模式、窗台高未保证 |
 | `axis_lines` 普通线轴网 | 原生 `LINE` | 🟡 可执行替代路径，生成普通线，不是天正智能轴网 |
@@ -126,9 +126,10 @@ AutoCAD 命令行回显、最后一次 diff）写进 `docs/handoff/` 新文档�
    剩余路线为门窗面板 UI 自动化（WPF，待 claude 决策）或文档化"用户先手动
    切窗模式"的使用约定。
 2. **批量封装 6 命令**——进度：墙厚标注 `TDimWall`、标高标注 `TMElev`、
-   搜索房间 `TUpdSpace`（→`search_room`，Handoff 11）与标准柱 `TGColumn`
-   （→`column`，Handoff 12）均已完成 E2E；两点标注 `TDimTP`、单线变墙
-   `TSWall` 已抓到命令行提示但最小成功序列仍待验证。
+   搜索房间 `TUpdSpace`（→`search_room`，Handoff 11）已完成 E2E；标准柱
+   `TGColumn`（→`column`）真机复测证实弹 #32770 面板、命令行点序列无法放置，
+   已降级为 dry-run（Handoff 13）；两点标注 `TDimTP`、单线变墙 `TSWall`
+   已抓到命令行提示但最小成功序列仍待验证。
 3. **导出替代探测**：`TPartSaveAs`/`TGetXML` 注册预检 + 最小试驱动；**弹框即记录停手**，
    只产出调研结论，不做绕过尝试。
 4. 文档/测试补全、截图存档。

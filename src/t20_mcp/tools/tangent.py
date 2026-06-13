@@ -664,6 +664,9 @@ LOW_CONFIDENCE_SUBCOMMANDS: frozenset[str] = frozenset(LOW_CONFIDENCE_WARNINGS)
 # 真机证实「纯对话框、不可命令行驱动」的子命令: 禁止 execute, 仅 dry-run。
 # axis_grid: TAXISGRID 弹模态框 (#32770), 强关曾致 AutoCAD 致命错误;
 # export_t3: TSAVEAS 弹天正自绘导出框 (WPF), 不理会 FILEDIA=0 (编目 §0 坑 1)。
+# column: TGCOLUMN 弹 #32770 标准柱面板且命令保持 active=1, vl-cmdf 点序列
+#   到不了"绘图区放置"处理器 → 0 实体 (2026-06-13 claude 真机复测, Handoff 13)。
+#   Handoff 12 记录的 delta=1 不可复现 (面板恰好开着的顺序依赖假成功)。
 EXECUTE_DISABLED_SUBCOMMANDS: dict[str, str] = {
     "axis_grid": (
         "TAXISGRID 为模态对话框命令 (真机证实), 不可命令行驱动, 下发会阻塞 IPC; "
@@ -672,6 +675,11 @@ EXECUTE_DISABLED_SUBCOMMANDS: dict[str, str] = {
     "export_t3": (
         "TSAVEAS 弹出天正自绘导出框且不理会 FILEDIA=0 (真机证实), 下发会阻塞 IPC; "
         "仅支持 dry-run, 导出请人工操作"
+    ),
+    "column": (
+        "TGCOLUMN 弹 #32770 标准柱面板且命令保持 active, vl-cmdf 点序列无法到达"
+        "绘图区放置处理器 → 0 实体 (2026-06-13 真机复测); 仅支持 dry-run, "
+        "插柱请人工操作或等待面板 UI 自动化方案"
     ),
 }
 
@@ -715,8 +723,8 @@ def register_tangent_tool(mcp: Any) -> None:
 
         **execute (默认 False = dry-run)**: 默认只返回渲染后的 LISP 代码而**不**
         下发到 AutoCAD (不产生任何 IPC 文件); 传 execute=True 才经 execute_lisp
-        真正执行。axis_grid 与 export_t3 经真机证实为纯对话框命令, **禁止 execute**
-        (会阻塞 IPC), 仅可 dry-run。door/window/elevation 执行成功也会附 warning 字段
+        真正执行。axis_grid / export_t3 / column 经真机证实为纯对话框 (#32770) 命令,
+        **禁止 execute** (会阻塞 IPC), 仅可 dry-run。door/window/elevation 执行成功也会附 warning 字段
         (门/窗类型取决于天正门窗面板当前模式)。
 
         Operations (data 字段) — 真机验证状态 (T20 V10 / AutoCAD 2024):
@@ -725,7 +733,7 @@ def register_tangent_tool(mcp: Any) -> None:
           wall_thickness_dimension — 墙厚标注 [已验证]。{p1_x, p1_y, p2_x, p2_y, layer?}
           opening_dimension — 门窗标注 [已验证]。{p1_x, p1_y, p2_x, p2_y, layer?}
           elevation  — 标高标注 [已验证双点序列]。{base_x, base_y, label_x?, label_y?, layer?}
-          column     — 标准柱   [已验证最小点序列]。{x, y, angle?, layer?}
+          column     — 标准柱   [仅 dry-run: #32770 面板阻塞]。{x, y, angle?, layer?}
           door       — 普通门   [部分验证]。{ins_x, ins_y, width?, height?, sill_distance?, layer?}
           window     — 普通窗   [部分验证]。{ins_x, ins_y, width?, height?, sill_height?, layer?}
           axis_grid  — 直线轴网 [仅 dry-run]。{base_x?, base_y?, hspacings:[..], vspacings:[..], angle?, layer?}

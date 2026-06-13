@@ -47,13 +47,13 @@
 | 墙厚标注 | `TDimWall` | 直线第一点→直线第二点；两点连线穿过墙体 | `TCH_DIMENSION2` | **高** (E2E) |
 | 门窗标注 | `TDim3` | 线选起点→线选终点→回车；线选段穿过墙体/门窗 | `TCH_DIMENSION2` | **高** (E2E) |
 | 标高标注 | `TMElev` | 标高基准点→标注放置点→回车；单点序列会挂起等待输入，严禁改成单点序列 | `TCH_ELEVATION` | **高** (E2E) |
-| 标准柱 | `TGColumn` | 插入点；截面尺寸使用标准柱面板当前记忆值，角度属性名待确认且仅非致命候选注入 | `TCH_COLUMN` | **高** (E2E) |
 | 门窗 | `TOpening` | 墙上插入点→回车（非模态面板不阻塞）；`Width/Height/DoorSill` 可 COM 注入 | `TCH_OPENING` | **中**：插入类型随面板当前模式（默认门）；窗模式/`SillHeight` 待验证 |
 | 普通线轴网 | 原生 `LINE` | `axis_lines` 替代路径：按开间/进深生成普通线网格，可旋转；不生成天正智能轴网 | `LINE` | **中** (替代路径) |
 | 几何读回 | 原生 `EXPLODE` | `explode_read`：COPY 副本到暂存区→分解副本→序列化产物→UNDO 回滚，非破坏。TEXPLODE 弹「分解对象」框被弃用（可白名单点击驱动，见 dialog_automation）。已知 T20 缺陷：墙体产物起点侧顶点归零（Handoff 10 §4） | `LINE` 等 | **高** (E2E) |
 | 搜索房间 | `TUpdSpace` | `search_room`：全图选择 `TCH_WALL` → 选择集 → 回车；闭合墙体围合区域生成房间对象 | `TCH_SPACE` | **高** (E2E) |
 | 绘制轴网(直线) | `TRectAxis` | **不可命令行驱动**：模态对话框 (#32770)。工具层已禁止 execute | — | **禁** (仅 dry-run) |
 | 图形导出(T3) | `TSaveAs` | **不可静默**：天正自绘导出框 (WPF)，无视 FILEDIA=0。工具层已禁止 execute | — | **禁** (仅 dry-run) |
+| 标准柱 | `TGColumn` | **不可命令行驱动**：弹 #32770 标准柱面板且命令保持 active，vl-cmdf 点序列到不了绘图区放置处理器 → 0 实体（2026-06-13 复测，Handoff 13）。工具层已禁止 execute | — | **禁** (仅 dry-run) |
 
 ### 1.2 已验证存在、待封装评估
 
@@ -81,7 +81,7 @@
 | `wall_thickness_dimension` | `wall_thickness_dimension.lsp` | TDimWall | **已验证** (E2E) |
 | `opening_dimension` | `opening_dimension.lsp` | TDim3 | **已验证** (E2E) |
 | `elevation` | `elevation.lsp` | TMElev | **已验证** (双点序列生成 TCH_ELEVATION；execute 附 warning) |
-| `column` | `column.lsp` | TGColumn | **已验证** (E2E: 插入点生成 TCH_COLUMN) |
+| `column` | `column.lsp` | TGColumn | **仅 dry-run** (#32770 面板阻塞, execute 已禁用, Handoff 13) |
 | `door` | `door.lsp` | TOpening | **部分验证** (execute 附 warning) |
 | `window` | `window.lsp` | TOpening | **部分验证** (类型/窗台高未保证, execute 附 warning) |
 | `axis_lines` | `axis_lines.lsp` | 原生 LINE | **替代路径** (普通线网格，可 execute) |
