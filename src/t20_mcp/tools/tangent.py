@@ -3,7 +3,7 @@
 本模块在不改动 dispatcher / IPC 层的前提下, 新增 ``tangent`` 工具, 仿照上游
 8 个 consolidated tools 的风格, 通过 ``operation`` (子命令) 分派到各类天正建筑实体。
 
-设计要点 (遵循 CLAUDE.md 铁律):
+设计要点 (遵循 PROJECT_RULES.md 铁律):
   * 每个子命令对应 ``lisp_templates/tangent/<name>.lsp`` 模板, 仅做占位符注入,
     绝不在 Python 侧拼接键击序列。
   * 所有参数在注入前完成 **类型 + 取值范围** 校验, 非法参数抛出 ``ParamError``。

@@ -1,6 +1,6 @@
-# Handoff 04 — Gemini 按 Fable 审查整改
+# Handoff 04 — GPT 按 Fable 审查整改
 
-执行人：Gemini ｜ 日期：2026-06-12 ｜ 依据：`docs/handoff/03_fable_review.md`（逐条 ✅ done 回填于该文档）
+执行人：GPT ｜ 日期：2026-06-12 ｜ 依据：`docs/handoff/03_fable_review.md`（逐条 ✅ done 回填于该文档）
 
 按 P0 → P1 → P2 顺序逐条整改，无跳过、无降级。`uv run pytest` 全绿：**60 passed**
 （原 43 + 新增 17）。下列「真机待验」项为审查本身已声明需 T20 环境者，代码侧均已就位。

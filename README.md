@@ -7,7 +7,7 @@ LISP 模板封装。
 
 > 本 README 面向接手者（人或 AI）。读完本页 + 「文档索引」即可继续开发。
 
-> 当前分支 `codex/safe-tangent-batch` 由 Codex 接管推进；不再等待 fable 额度。
+> 当前主分支由 GPT 接管推进；不再等待 fable 额度。
 > 但真机安全门禁仍保留：未 E2E 或事故相关命令只允许 dry-run，不开放 execute。
 
 ## 当前完成度：约 74%
@@ -73,7 +73,7 @@ MCP 工具共 9 个：上游 8 个（drawing/entity/layer/block/annotation/pid/v
   恢复只允许 ESC 键或点"取消"按钮（`scripts/itest_11_force_recover.py`）。
 - `CMDDIA`/`FILEDIA` 等静默态若因对话框阻塞未被 prelude 恢复，会**经注册表跨重启
   泄漏**，恢复后须复位（`scripts/itest_14_cleanup.py`）。
-- 所有天正封装走 **LISP 模板 + 参数注入**，不允许硬编码键击序列（CLAUDE.md）。
+- 所有天正封装走 **LISP 模板 + 参数注入**，不允许硬编码键击序列（PROJECT_RULES.md）。
 - `tangent` 工具**默认 dry-run**；纯对话框命令禁止 execute。
 
 ## 文档索引
@@ -84,11 +84,11 @@ MCP 工具共 9 个：上游 8 个（drawing/entity/layer/block/annotation/pid/v
 | `docs/T20_OFFICIAL_COMMANDS.md` | 官方 454 条命令全表 + 真机注册标记 |
 | `docs/t20_official_commands.txt` | 官方表原始副本（源：`C:\Tangent\TArchT20V10\SYS\tchcmd.txt`） |
 | `docs/handoff/03_fable_review.md` | 架构审查（P0/P1/P2 整改清单，已全部完成） |
-| `docs/handoff/04_gemini_fixes.md` | 整改记录 |
+| `docs/handoff/04_gpt_fixes.md` | 整改记录 |
 | `docs/handoff/05_fable_field_test.md` | **真机联调全记录**（发现/修复/崩溃教训/遗留 §6） |
 | `docs/handoff/06_gpt_tmelev_crash_stop.md` | `TMElev` 试驱动后闪退停手记录 |
-| `docs/handoff/07_codex_branch_takeover.md` | Codex 接管本分支后的安全门禁与当前状态 |
-| `docs/handoff/08_codex_field_test.md` | Codex 本轮真机联调结果（bringup/E2E/elevation/opening props） |
+| `docs/handoff/07_gpt_branch_takeover.md` | GPT 接管本分支后的安全门禁与当前状态 |
+| `docs/handoff/08_gpt_field_test.md` | GPT 本轮真机联调结果（bringup/E2E/elevation/opening props） |
 | `scripts/itest_01..20_*.py` | 可重复的联调管线（引导/探测/试驱动/E2E/MCP stdio/恢复/清理） |
 
 ## 分工规则（二人制：fable = 执行人/审查者，GPT = 辅助执行）
@@ -117,7 +117,7 @@ AutoCAD 命令行回显、最后一次 diff）写进 `docs/handoff/` 新文档�
 1. **window 完善**：`itest_10_opening_props.py` 改属性候选名重跑，找 TOpening
    门/窗类型 COM 切换属性与窗模式 `SillHeight`；只回填文档与模板参数，不改骨架。
 2. **批量封装 6 命令**：标准柱 `TGColumn`、两点标注 `TDimTP`、墙厚标注 `TDimWall`、
-   标高标注 `TMElev`（已在 `codex/safe-tangent-batch` E2E 验证）、
+   标高标注 `TMElev`（已完成 E2E 验证）、
    单线变墙 `TSWall`、搜索房间 `TUpdSpace`——每条走五步管线，
    产出模板 + 离线测试 + 文档回填，攒一批等 fable review。
 3. **导出替代探测**：`TPartSaveAs`/`TGetXML` 注册预检 + 最小试驱动；**弹框即记录停手**，

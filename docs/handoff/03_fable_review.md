@@ -1,11 +1,11 @@
 # Handoff 03 — Fable 架构审查
 
-执行人：Fable（架构师/reviewer）｜ 日期：2026-06-12 ｜ 审查对象：Gemini 适配清单（`docs/T20_ADAPTATION_PLAN.md`）+ Codex tangent 模块（commit d0ee486）
+执行人：Fable（架构师/reviewer）｜ 日期：2026-06-12 ｜ 审查对象：GPT 适配清单（`docs/T20_ADAPTATION_PLAN.md`）+ GPT tangent 模块（commit d0ee486）
 
 ## 0. 总评
 
-- **Codex 模块纪律良好**：置信度诚实标注、参数校验完整、离线测试齐全。但存在一个结构性矛盾：**编目文档承认序列是推测，模板却把推测序列写成了默认可执行的代码**，叠加 `(command)` 对未知命令的级联失控特性，"待验证"会变成"必然执行的破坏"。
-- **Gemini 清单方向正确但停留在草案**，且其声称的 `lisp-code/` 目录实际**不存在**（CLAUDE.md、config.py 均引用它，dispatcher 只活在 vendor 里）——引导链路当前是断的。
+- **GPT 模块纪律良好**：置信度诚实标注、参数校验完整、离线测试齐全。但存在一个结构性矛盾：**编目文档承认序列是推测，模板却把推测序列写成了默认可执行的代码**，叠加 `(command)` 对未知命令的级联失控特性，"待验证"会变成"必然执行的破坏"。
+- **GPT 清单方向正确但停留在草案**，且其声称的 `lisp-code/` 目录实际**不存在**（PROJECT_RULES.md、config.py 均引用它，dispatcher 只活在 vendor 里）——引导链路当前是断的。
 - **全链路编码是最大盲区**：三处（LISP 代码写出、结果文件读取、params JSON）全部按英文 Windows 假设处理，在中文系统 + 天正环境下必乱码，且 cp1252 兜底会把乱码**静默放行**而非报错。
 - 已由本人定稿 `src/t20_mcp/lisp_templates/tangent/_prelude.lsp`：环境保存/静默/恢复、局部 `*error*` 兜底、UNDO 组回滚、命令存在性预检（`t20mcp:call`）、`vl-cmdf` 防级联、编码契约注释。**模板与传输层必须按它迁移（见 P0-4/P0-2）。**
 
@@ -49,7 +49,7 @@
 
 ### P1-1 窗口识别改为进程名主判据
 - **文件**：`src/t20_mcp/backends/file_ipc.py:34-53`
-- **问题**：现在要求标题同时含 "autocad" 和 ("drawing"|".dwg")。天正启动器可能把主窗标题改成 "T20天正建筑 Vxx…"（不含 autocad）；标题方案对多实例也不确定（`windows[0]`）。Gemini 清单第 1 点方向认可，给具体判据如下。
+- **问题**：现在要求标题同时含 "autocad" 和 ("drawing"|".dwg")。天正启动器可能把主窗标题改成 "T20天正建筑 Vxx…"（不含 autocad）；标题方案对多实例也不确定（`windows[0]`）。GPT 清单第 1 点方向认可，给具体判据如下。
 - **改法**：`EnumWindows` 后用 `GetWindowThreadProcessId` 取 PID → 进程映像名等于 `acad.exe`（可配置）为主判据；标题含 "autocad"/"天正"/"tarch" 为辅；多命中时优先含 ".dwg" 者并记 warning 日志；错误文案去掉 "LT" 字样（file_ipc.py:89）。
 - **验收**：T20 环境下能找到窗口；同机再开一个普通 AutoCAD 时日志给出多实例警告且选择可解释。
 - ✅ done — `find_autocad_window` 改用 `GetWindowThreadProcessId` + `QueryFullProcessImageNameW`，进程映像名等于 `acad.exe`（env `AUTOCAD_MCP_ACAD_PROCESS` 可配）为主判据，标题 autocad/天正/tarch 为辅，多命中优先 .dwg 并记 `multiple_autocad_windows` 警告；window-not-found 与 dispatcher 引导文案去掉 "LT"。（真机多实例选择待实测）
@@ -81,11 +81,11 @@
   - ✅ done — `_render` 在 token 替换前 `if ";|" in body: raise ParamError`；`test_block_comment_template_rejected` 验证含块注释模板被拒。
 - **P2-3** `tangent.py:321` 附近：`out_path` 建议在校验后统一 normalize 为正斜杠再注入，消除 FILEDIA=0 命令行交互下的反斜杠歧义。验收：传入反斜杠路径，渲染产物中为正斜杠。
   - ✅ done — `_gen_export_t3` 校验后 `out_path.replace("\\", "/")`；`test_export_path_backslash_normalized_to_slash` 验证产物为正斜杠。
-- **P2-4** IPC 目录默认 `C:/temp`（`config.py:15`）：采纳 Gemini 清单第 4 点，默认改 `%TEMP%` 下子目录，保留环境变量覆盖。验收：无 C 盘根写权限的账户可正常往返。
+- **P2-4** IPC 目录默认 `C:/temp`（`config.py:15`）：采纳 GPT 清单第 4 点，默认改 `%TEMP%` 下子目录，保留环境变量覆盖。验收：无 C 盘根写权限的账户可正常往返。
   - ✅ done — `config.IPC_DIR` 默认改 `%TEMP%/t20_mcp`（`AUTOCAD_MCP_IPC_DIR` 仍可覆盖），dispatcher `t20mcp:resolve-ipc-dir` 用同规则解析，两端一致。
 - **P2-5** 模板头注释把 `{{TOKEN}}` 写成"«TOKEN» (双花括号)"，表述自相矛盾，统一为 `{{TOKEN}}`（6 个模板同改，P0-4 迁移时顺手完成）。
   - ✅ done — 6 模板头注释统一为"占位符形如 `{{TOKEN}}`"（随 P0-4 重写完成）；`_render` 残留占位符自检改为忽略注释，避免误判该说明文字。
-- **P2-6** Gemini 清单第 3 点（TExplode 分解天正对象供 ezdxf 读取）批注：方向可行，但 `T81_TExplode` 命令名同属未验证推测，且分解是**破坏性**操作——方案必须限定在临时副本文件上执行，禁止在用户当前图纸上分解。落地前先在 T20_COMMANDS.md 补该命令条目。
+- **P2-6** GPT 清单第 3 点（TExplode 分解天正对象供 ezdxf 读取）批注：方向可行，但 `T81_TExplode` 命令名同属未验证推测，且分解是**破坏性**操作——方案必须限定在临时副本文件上执行，禁止在用户当前图纸上分解。落地前先在 T20_COMMANDS.md 补该命令条目。
   - ✅ done — T20_COMMANDS.md §1.9 新增 `T81_TExplode`（置信度低）条目 + 批注，明确"未验证命令名 + 破坏性 + 仅在临时副本上执行、禁止分解当前图纸"。
 
 ## 边界声明

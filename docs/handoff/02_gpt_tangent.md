@@ -1,6 +1,6 @@
-# Handoff 02 — Tangent (天正 T20) 命令编目与封装骨架
+﻿# Handoff 02 — Tangent (天正 T20) 命令编目与封装骨架
 
-执行人：codex ｜ 日期：2026-06-12 ｜ 分支：master
+执行人：GPT ｜ 日期：2026-06-12 ｜ 分支：master
 
 ## 1. 任务范围
 

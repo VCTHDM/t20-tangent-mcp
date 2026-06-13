@@ -1,10 +1,10 @@
-# Handoff 07 — Codex 接管 safe-tangent-batch 分支
+# Handoff 07 — GPT 接管开发分支
 
-执行人：Codex ｜ 日期：2026-06-13 ｜ 分支：`codex/safe-tangent-batch`
+执行人：GPT ｜ 日期：2026-06-13 ｜ 分支：开发分支
 
 ## 1. 接管原则
 
-用户已明确本分支不再等待 fable 额度。本分支由 Codex 继续推进，但仍保留真机安全门禁：
+用户已明确本分支不再等待 fable 额度。本分支由 GPT 继续推进，但仍保留真机安全门禁：
 
 - 不把未 E2E 验证的命令开放 `execute=True`；事故相关命令开放前必须有专门 E2E 记录。
 - 不再对任何天正窗口发送 `WM_CLOSE`。

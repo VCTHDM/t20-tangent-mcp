@@ -1,10 +1,10 @@
-# Gemini 执行摘要
+# GPT 执行摘要
 
 ## 1. 完成的修改
 - 已将基础结构和环境初始化：使用 `git init` 并创建了规范的 `.gitignore` 包含 Python、AutoCAD 以及 IPC 临时文件的过滤规则。
 - clone 了上游仓库 `puran-water/autocad-mcp` 至 `vendor/autocad-mcp`（保留 git 历史且非 submodule）。
 - 成功将核心 Python 代码结构从上游复制进入了本项目的 `src/t20_mcp`，配置了 `uv` 依赖管理（包含 mcp, ezdxf, pywin32 等）。
-- 产出了项目核心约定文件 `CLAUDE.md`，明确了"所有天正命令必须走 LISP 模板+参数注入，禁止硬编码键击序列"的铁律。
+- 产出了项目核心约定文件 `PROJECT_RULES.md`，明确了"所有天正命令必须走 LISP 模板+参数注入，禁止硬编码键击序列"的铁律。
 - 根据对上游代码审查生成了 `docs/ARCHITECTURE_NOTES.md`，梳理了通过 File IPC 派发命令的完整时序与涉及 AutoCAD LT 的耦合位置。
 - 编写了初始改造规划方案 `docs/T20_ADAPTATION_PLAN.md`。
 

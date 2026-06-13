@@ -1,6 +1,6 @@
-# Handoff 08 — Codex 真机联调记录
+# Handoff 08 — GPT 真机联调记录
 
-执行人：Codex ｜ 日期：2026-06-13 ｜ 环境：T20天正建筑 V10.0 + AutoCAD 2024（Drawing1.dwg）
+执行人：GPT ｜ 日期：2026-06-13 ｜ 环境：T20天正建筑 V10.0 + AutoCAD 2024（Drawing1.dwg）
 
 ## 1. 基线
 

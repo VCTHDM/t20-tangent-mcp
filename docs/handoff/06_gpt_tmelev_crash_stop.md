@@ -8,7 +8,7 @@
 
 ## 2. 已执行步骤
 
-1. 读 README / AGENTS / `docs/T20_COMMANDS.md` / `docs/handoff/05_fable_field_test.md`，确认 GPT 只能做可复用管线内的体力活，不碰 `_prelude.lsp`、IPC、dispatcher。
+1. 读 README / `PROJECT_RULES.md` / `docs/T20_COMMANDS.md` / `docs/handoff/05_fable_field_test.md`，确认 GPT 只能做可复用管线内的体力活，不碰 `_prelude.lsp`、IPC、dispatcher。
 2. 离线基线：
    - `uv run pytest -q`
    - 结果：`64 passed in 0.63s`
@@ -58,10 +58,10 @@ Get-Process acad -ErrorAction SilentlyContinue
 `git status --short`：
 
 ```text
-?? AGENTS.md
+?? 旧规则文件
 ```
 
-说明：本轮在事故前没有改源码；`AGENTS.md` 是既有未跟踪文件，未触碰。
+说明：本轮在事故前没有改源码；旧规则文件是既有未跟踪文件，未触碰。
 
 ## 4. 初步判断（仅供 fable 排查）
 
