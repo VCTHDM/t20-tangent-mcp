@@ -88,3 +88,6 @@
 8. `TParallelDim` / `TArrow` 已初探但暂不封装（2026-06-13，Handoff 18）：
    `TParallelDim` 三墙穿越线场景无新增实体；`TArrow` 可生成 `TCH_ARROW` 但命令仍 active，
    完成/退出语义未确认。
+9. ~~符号标注 `TSymmetry` / `TNorthThumb` / `TSymbCut`~~ **已完成**（2026-06-14，Handoff 19：
+   分别封装为 `symmetry` / `north_arrow` / `break_line`，命令行点序列无弹框，
+   E2E 生成 `TCH_SYMMETRY` / `TCH_NORTHTHUMB` / `TCH_RUPTURE`；`break_line` 需尾随空回车接受 `<不切割>`）。

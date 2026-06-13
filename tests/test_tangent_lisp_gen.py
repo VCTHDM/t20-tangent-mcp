@@ -57,6 +57,9 @@ VALID_CASES: dict[str, dict] = {
     "two_point_dimension": {"p1_x": -1000, "p1_y": 0, "p2_x": 7000, "p2_y": 0, "pos_x": 3000, "pos_y": 1500},
     "elevation": {"base_x": 0, "base_y": 0, "label_x": 1000, "label_y": 1000},
     "coordinate": {"point_x": 1234, "point_y": 5678, "label_x": 1234, "label_y": 6678},
+    "symmetry": {"x1": 0, "y1": 0, "x2": 0, "y2": 3000},
+    "north_arrow": {"pos_x": 0, "pos_y": 0, "dir_x": 0, "dir_y": 1000},
+    "break_line": {"x1": 0, "y1": 0, "x2": 3000, "y2": 0},
     "explode_read": {"handle": "1a3f", "offset_x": 1_000_000, "offset_y": 1_000_000},
     "search_room": {"layer": "SPACE"},
     "export_t3": {"out_path": "C:/temp/out_t3.dwg", "target_ver": "t3"},
@@ -252,6 +255,35 @@ class TestParamInjection:
         assert point < label < done
         assert "TCH_COORD" in code
 
+    def test_symmetry_uses_tsymmetry_two_points(self) -> None:
+        # TSymmetry 真机试验: 起点 -> 终点, 两点收尾, 生成 TCH_SYMMETRY。
+        code = generate_lisp("symmetry", {"x1": 0, "y1": 0, "x2": 0, "y2": 3000})
+        assert '"TSYMMETRY"' in code
+        assert code.index("t20mcp:pt 0 0") < code.index("t20mcp:pt 0 3000")
+        assert "TCH_SYMMETRY" in code
+
+    def test_north_arrow_uses_tnorththumb_two_points(self) -> None:
+        # TNorthThumb 真机试验: 位置点 -> 方向点, 两点收尾, 生成 TCH_NORTHTHUMB。
+        code = generate_lisp("north_arrow", {"pos_x": 0, "pos_y": 0, "dir_x": 0, "dir_y": 1000})
+        assert '"TNORTHTHUMB"' in code
+        assert code.index("t20mcp:pt 0 0") < code.index("t20mcp:pt 0 1000")
+        assert "TCH_NORTHTHUMB" in code
+
+    def test_north_arrow_default_direction_is_north(self) -> None:
+        # 缺省方向点应为位置点正上方 1000mm (北向)
+        code = generate_lisp("north_arrow", {"pos_x": 500, "pos_y": 500})
+        assert "t20mcp:pt 500 1500" in code
+
+    def test_break_line_uses_tsymbcut_with_trailing_enter(self) -> None:
+        # TSymbCut 真机试验: 起点 -> 终点 -> 回车 (接受<不切割>), 生成 TCH_RUPTURE。
+        code = generate_lisp("break_line", {"x1": 0, "y1": 0, "x2": 3000, "y2": 0})
+        assert '"TSYMBCUT"' in code
+        x1 = code.index("t20mcp:pt 0 0")
+        x2 = code.index("t20mcp:pt 3000 0")
+        done = code.index('""', x2)
+        assert x1 < x2 < done
+        assert "TCH_RUPTURE" in code
+
     def test_float_formatting_is_compact(self) -> None:
         # 整数值不应带小数点; 小数值应保留
         code = generate_lisp("door", {"ins_x": 1500.0, "ins_y": 0, "width": 912.5, "height": 2100})
@@ -345,6 +377,18 @@ class TestInvalidParamsRejected:
             generate_lisp("coordinate", {
                 "point_x": 1, "point_y": 1, "label_x": 1, "label_y": 1,
             })
+
+    def test_symmetry_coincident_points_rejected(self) -> None:
+        with pytest.raises(ParamError):
+            generate_lisp("symmetry", {"x1": 1, "y1": 1, "x2": 1, "y2": 1})
+
+    def test_north_arrow_coincident_points_rejected(self) -> None:
+        with pytest.raises(ParamError):
+            generate_lisp("north_arrow", {"pos_x": 1, "pos_y": 1, "dir_x": 1, "dir_y": 1})
+
+    def test_break_line_coincident_points_rejected(self) -> None:
+        with pytest.raises(ParamError):
+            generate_lisp("break_line", {"x1": 1, "y1": 1, "x2": 1, "y2": 1})
 
     def test_axis_grid_empty_spacings_rejected(self) -> None:
         with pytest.raises(ParamError):

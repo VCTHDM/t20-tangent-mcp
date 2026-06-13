@@ -556,6 +556,76 @@ def _gen_coordinate(data: dict[str, Any]) -> str:
     )
 
 
+def _gen_symmetry(data: dict[str, Any]) -> str:
+    """画对称轴。data: {x1,y1,x2,y2,layer?}
+
+    真机验证序列: 起点 -> 终点, 两点即收尾 (active=0), 生成 TCH_SYMMETRY。
+    """
+    x1 = _require_coord(data.get("x1"), "x1")
+    y1 = _require_coord(data.get("y1"), "y1")
+    x2 = _require_coord(data.get("x2"), "x2")
+    y2 = _require_coord(data.get("y2"), "y2")
+    if x1 == x2 and y1 == y2:
+        raise ParamError("对称轴的起点与终点不能重合")
+    return _render(
+        "symmetry",
+        {
+            "SET_LAYER": _set_layer_cmd(data.get("layer")),
+            "X1": _num(x1),
+            "Y1": _num(y1),
+            "X2": _num(x2),
+            "Y2": _num(y2),
+        },
+    )
+
+
+def _gen_north_arrow(data: dict[str, Any]) -> str:
+    """画指北针。data: {pos_x,pos_y,dir_x?,dir_y?,layer?}
+
+    真机验证序列: 指北针位置点 -> 方向点, 两点即收尾 (active=0), 生成 TCH_NORTHTHUMB。
+    dir 点只决定指北针朝向, 缺省为位置点正上方 1000mm (北向)。
+    """
+    pos_x = _require_coord(data.get("pos_x"), "pos_x")
+    pos_y = _require_coord(data.get("pos_y"), "pos_y")
+    dir_x = _require_coord(data.get("dir_x", pos_x), "dir_x")
+    dir_y = _require_coord(data.get("dir_y", pos_y + 1000.0), "dir_y")
+    if pos_x == dir_x and pos_y == dir_y:
+        raise ParamError("指北针位置点与方向点不能重合")
+    return _render(
+        "north_arrow",
+        {
+            "SET_LAYER": _set_layer_cmd(data.get("layer")),
+            "POS_X": _num(pos_x),
+            "POS_Y": _num(pos_y),
+            "DIR_X": _num(dir_x),
+            "DIR_Y": _num(dir_y),
+        },
+    )
+
+
+def _gen_break_line(data: dict[str, Any]) -> str:
+    """加折断线 (单折断线)。data: {x1,y1,x2,y2,layer?}
+
+    真机验证序列: 折断线起点 -> 终点 -> 回车 (接受 <不切割> 默认), 生成 TCH_RUPTURE。
+    """
+    x1 = _require_coord(data.get("x1"), "x1")
+    y1 = _require_coord(data.get("y1"), "y1")
+    x2 = _require_coord(data.get("x2"), "x2")
+    y2 = _require_coord(data.get("y2"), "y2")
+    if x1 == x2 and y1 == y2:
+        raise ParamError("折断线的起点与终点不能重合")
+    return _render(
+        "break_line",
+        {
+            "SET_LAYER": _set_layer_cmd(data.get("layer")),
+            "X1": _num(x1),
+            "Y1": _num(y1),
+            "X2": _num(x2),
+            "Y2": _num(y2),
+        },
+    )
+
+
 _ALLOWED_T3_VERSIONS: dict[str, str] = {"t3": "3", "天正3": "3", "3": "3"}
 
 
@@ -693,6 +763,9 @@ _GENERATORS: dict[str, Callable[[dict[str, Any]], str]] = {
     "two_point_dimension": _gen_two_point_dimension,
     "elevation": _gen_elevation,
     "coordinate": _gen_coordinate,
+    "symmetry": _gen_symmetry,
+    "north_arrow": _gen_north_arrow,
+    "break_line": _gen_break_line,
     "explode_read": _gen_explode_read,
     "search_room": _gen_search_room,
     "export_t3": _gen_export_t3,
@@ -794,6 +867,9 @@ def register_tangent_tool(mcp: Any) -> None:
           two_point_dimension — 两点标注 [已验证]。{p1_x, p1_y, p2_x, p2_y, pos_x?, pos_y?, layer?}
           elevation  — 标高标注 [已验证双点序列]。{base_x, base_y, label_x?, label_y?, layer?}
           coordinate — 坐标标注 [已验证]。{point_x, point_y, label_x?, label_y?, layer?}
+          symmetry   — 画对称轴 [已验证]。{x1, y1, x2, y2, layer?}
+          north_arrow — 画指北针 [已验证]。{pos_x, pos_y, dir_x?, dir_y?, layer?}
+          break_line — 加折断线 [已验证]。{x1, y1, x2, y2, layer?}
           column     — 标准柱   [仅 dry-run: #32770 面板阻塞]。{x, y, angle?, layer?}
           door       — 普通门   [部分验证]。{ins_x, ins_y, width?, height?, sill_distance?, layer?}
           window     — 普通窗   [部分验证; 调用前需人工切窗模式]。{ins_x, ins_y, width?, height?, sill_height?, layer?}
