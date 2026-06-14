@@ -69,6 +69,8 @@ VALID_CASES: dict[str, dict] = {
     "arrow": {"x1": 0, "y1": 0, "x2": 2000, "y2": 0},
     "rect_roof": {"x1": 0, "y1": 0, "x2": 6000, "y2": 0, "x3": 6000, "y3": 4000},
     "cusp_roof": {"center_x": 3000, "center_y": 3000, "base_x": 6000, "base_y": 3000},
+    "insight": {"x": 0, "y": 0},
+    "tree": {"x": 0, "y": 0},
     "explode_read": {"handle": "1a3f", "offset_x": 1_000_000, "offset_y": 1_000_000},
     "search_room": {"layer": "SPACE"},
     "export_t3": {"out_path": "C:/temp/out_t3.dwg", "target_ver": "t3"},
@@ -386,6 +388,22 @@ class TestParamInjection:
         assert code.index("t20mcp:pt 6000 3000") > c
         assert "TCH_CUSPROOF" in code
 
+    def test_insight_uses_tinsight_single_point_with_trailing_enter(self) -> None:
+        # TInsight 真机试验: 标注位置点 -> 回车退出循环, 生成 TCH_TDBINSIGHT。
+        code = generate_lisp("insight", {"x": 1500, "y": 800})
+        assert '"TINSIGHT"' in code
+        pt = code.index("t20mcp:pt 1500 800")
+        assert pt < code.index('""', pt)
+        assert "TCH_TDBINSIGHT" in code
+
+    def test_tree_uses_tsingletree_single_point_inserts_block(self) -> None:
+        # TSingleTree 真机试验: 插入点 -> 回车退出循环, 插入 INSERT 图块。
+        code = generate_lisp("tree", {"x": 1500, "y": 800})
+        assert '"TSINGLETREE"' in code
+        pt = code.index("t20mcp:pt 1500 800")
+        assert pt < code.index('""', pt)
+        assert '"INSERT"' in code
+
     def test_float_formatting_is_compact(self) -> None:
         # 整数值不应带小数点; 小数值应保留
         code = generate_lisp("door", {"ins_x": 1500.0, "ins_y": 0, "width": 912.5, "height": 2100})
@@ -525,6 +543,14 @@ class TestInvalidParamsRejected:
             generate_lisp(
                 "cusp_roof", {"center_x": 1, "center_y": 1, "base_x": 1, "base_y": 1}
             )
+
+    def test_insight_missing_coord_rejected(self) -> None:
+        with pytest.raises(ParamError):
+            generate_lisp("insight", {"x": 0})  # 缺 y
+
+    def test_tree_missing_coord_rejected(self) -> None:
+        with pytest.raises(ParamError):
+            generate_lisp("tree", {"y": 0})  # 缺 x
 
     def test_balcony_too_few_points_rejected(self) -> None:
         with pytest.raises(ParamError):

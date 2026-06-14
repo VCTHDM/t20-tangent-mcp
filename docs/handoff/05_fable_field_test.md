@@ -117,3 +117,8 @@
     `TLeader` 需内联文字编辑(挂死风险，空回车则 0 实体)；`TAddPatch` 造型需依附墙体，
     无墙时 0 实体，前置重。任意/人字坡顶 `TSlopeRoof`/`TDualSlopeRoof` 预计为选闭合
     多段线的选对象步(同 `TSlab` 坑)，未探先记。
+17. ~~单点插入构件 `TInsight` / `TSingleTree`~~ **已完成**（2026-06-14，Handoff 24：
+    封装为 `insight` / `tree`，命令行单点循环插入(每点一个，补空回车退出)无弹框无选对象，
+    E2E 生成 `TCH_TDBINSIGHT` / INSERT 树木图块；朝向/编号/树种走面板记忆值）。
+18. 指向索引 `TPointIndex` / 剖切索引 `TSectIndex` 已探测暂不封装（2026-06-14，Handoff 24）：
+    索引节点位置→参考点后需输入编号文字，空回车则 0 实体，属文字依赖类，暂搁置。

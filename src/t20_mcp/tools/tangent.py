@@ -853,6 +853,42 @@ def _gen_cusp_roof(data: dict[str, Any]) -> str:
     )
 
 
+def _gen_insight(data: dict[str, Any]) -> str:
+    """内视符号。data: {x, y, layer?}
+
+    真机验证序列: 标注位置点 -> 回车退出循环, 生成 TCH_TDBINSIGHT。
+    命令是循环式 (每点一个内视符号); 朝向/编号走天正面板记忆值, 只参数化标注位置。
+    """
+    x = _require_coord(data.get("x"), "x")
+    y = _require_coord(data.get("y"), "y")
+    return _render(
+        "insight",
+        {
+            "SET_LAYER": _set_layer_cmd(data.get("layer")),
+            "X": _num(x),
+            "Y": _num(y),
+        },
+    )
+
+
+def _gen_tree(data: dict[str, Any]) -> str:
+    """任意布树 (单棵)。data: {x, y, layer?}
+
+    真机验证序列: 插入点 -> 回车退出循环, 插入树木图块 (INSERT, 块名形如 "tree1")。
+    命令是循环式 (每点一棵); 树种/尺寸走天正面板记忆值, 只参数化插入点。
+    """
+    x = _require_coord(data.get("x"), "x")
+    y = _require_coord(data.get("y"), "y")
+    return _render(
+        "tree",
+        {
+            "SET_LAYER": _set_layer_cmd(data.get("layer")),
+            "X": _num(x),
+            "Y": _num(y),
+        },
+    )
+
+
 def _gen_search_room(data: dict[str, Any]) -> str:
     """搜索房间。data: {layer?}
 
@@ -999,6 +1035,8 @@ _GENERATORS: dict[str, Callable[[dict[str, Any]], str]] = {
     "arrow": _gen_arrow,
     "rect_roof": _gen_rect_roof,
     "cusp_roof": _gen_cusp_roof,
+    "insight": _gen_insight,
+    "tree": _gen_tree,
     "explode_read": _gen_explode_read,
     "search_room": _gen_search_room,
     "export_t3": _gen_export_t3,
@@ -1120,6 +1158,8 @@ def register_tangent_tool(mcp: Any) -> None:
           arrow      — 箭头引注 [已验证; 引注文字取面板记忆值, 见 warning]。{x1, y1, x2, y2, layer?}
           rect_roof  — 矩形屋顶 [已验证; 坡角/出檐取面板记忆值]。{x1, y1, x2, y2, x3, y3, layer?}
           cusp_roof  — 攒尖屋顶 [已验证; 边数/屋顶高取面板记忆值]。{center_x, center_y, base_x?, base_y?, layer?}
+          insight    — 内视符号 [已验证; 朝向/编号取面板记忆值]。{x, y, layer?}
+          tree       — 任意布树 [已验证; 树种/尺寸取面板记忆值, 实体为 INSERT 图块]。{x, y, layer?}
           column     — 标准柱   [仅 dry-run: #32770 面板阻塞]。{x, y, angle?, layer?}
           door       — 普通门   [部分验证]。{ins_x, ins_y, width?, height?, sill_distance?, layer?}
           window     — 普通窗   [部分验证; 调用前需人工切窗模式]。{ins_x, ins_y, width?, height?, sill_height?, layer?}
