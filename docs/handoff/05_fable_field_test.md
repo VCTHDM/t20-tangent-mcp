@@ -108,3 +108,12 @@
 14. 平板 `TSlab` / 地下坡道 `TUndergroundRamp` 已探测暂不封装（2026-06-14，Handoff 22）：
     `TSlab` 选闭合多段线的选对象步不吃 ssget/拾取点（同标注族选择步坑）；
     `TUndergroundRamp` 产物是裸 LWPOLYLINE（非干净 TCH_ 实体），难以断言。
+15. ~~屋顶构件 `TRectRoof` / `TCuspRoof`~~ **已完成**（2026-06-14，Handoff 23：
+    封装为 `rect_roof` / `cusp_roof`，命令行点序列无弹框无选对象；
+    `rect_roof` 三角点(左下/右下/右上)+回车，`cusp_roof` 中心+半径点两点收尾，
+    E2E 生成 `TCH_MOUNTROOF` / `TCH_CUSPROOF`；坡角/边数/屋顶高走面板记忆值）。
+16. 单轴 `TSingleAxis` / 引出标注 `TLeader` / 墙体造型 `TAddPatch` 已探测暂不封装
+    （2026-06-14，Handoff 23）：`TSingleAxis` 产物裸 LINE(不比 axis_lines 强)；
+    `TLeader` 需内联文字编辑(挂死风险，空回车则 0 实体)；`TAddPatch` 造型需依附墙体，
+    无墙时 0 实体，前置重。任意/人字坡顶 `TSlopeRoof`/`TDualSlopeRoof` 预计为选闭合
+    多段线的选对象步(同 `TSlab` 坑)，未探先记。

@@ -59,6 +59,8 @@
 | 台阶 | `TStep` | 各轮廓点→回车；踏步数/宽走面板记忆值；点数≥2 | `TCH_STEP` | **高** (E2E) |
 | 坡道 | `TAscent` | 点取位置→回车退出循环；宽度/坡长走面板记忆值 | `TCH_ASCENT` | **高** (E2E) |
 | 箭头引注 | `TArrow` | 起点→终点→回车→回车（先结束引线循环再退外层循环）；引注文字走面板记忆值 (附 warning) | `TCH_ARROW` | **高** (E2E) |
+| 矩形屋顶 | `TRectRoof` | 左下角点→右下角点→右上角点→回车退出循环；坡角/出檐走面板记忆值 | `TCH_MOUNTROOF` | **高** (E2E) |
+| 攒尖屋顶 | `TCuspRoof` | 屋顶中心位置→第二点(定半径/朝向)；两点即收尾 (active=0)；边数/屋顶高走面板记忆值 | `TCH_CUSPROOF` | **高** (E2E) |
 | 门窗 | `TOpening` | 墙上插入点→回车（非模态面板不阻塞）；`Width/Height/DoorSill` 可 COM 注入；`window` 调用前需人工把门窗面板切到窗模式 | `TCH_OPENING` | **中**：插入类型随面板当前模式（默认门）；窗模式/`SillHeight` 待验证 |
 | 普通线轴网 | 原生 `LINE` | `axis_lines` 替代路径：按开间/进深生成普通线网格，可旋转；不生成天正智能轴网 | `LINE` | **中** (替代路径) |
 | 几何读回 | 原生 `EXPLODE` | `explode_read`：COPY 副本到暂存区→分解副本→序列化产物→UNDO 回滚，非破坏。TEXPLODE 弹「分解对象」框被弃用（可白名单点击驱动，见 dialog_automation）。已知 T20 缺陷：墙体产物起点侧顶点归零（Handoff 10 §4） | `LINE` 等 | **高** (E2E) |
@@ -90,6 +92,11 @@
 | 箭头引注 | `TArrow` | **已封装为 `arrow`**（Handoff 22，E2E 生成 `TCH_ARROW`；起点→终点→回车→回车，引注文字取面板记忆值）。补完 Handoff 18 未确认的退出语义：两点引线后需补**两个**空回车（先结束本引线"直段下一点<结束>"循环，再退"箭头起点<退出>"外层循环） |
 | 平板 | `TSlab` | 已探测：提示"选择一封闭的多段线或圆"；选对象步不吃脚本点(ssget"_L"/ename/拾取点均不消费，命令滞留或默认退出，0 平板)，同标注族选择步坑，暂不封装（Handoff 22） |
 | 地下坡道 | `TUndergroundRamp` | 已探测：坡道起点→下一点→回车可生成几何，但产物是裸 `LWPOLYLINE`(非干净 TCH_ 实体，一次出 3 个杂实体)，难以断言，暂不封装（Handoff 22） |
+| 矩形屋顶 | `TRectRoof` | **已封装为 `rect_roof`**（Handoff 23，E2E 生成 `TCH_MOUNTROOF`；左下→右下→右上→回车） |
+| 攒尖屋顶 | `TCuspRoof` | **已封装为 `cusp_roof`**（Handoff 23，E2E 生成 `TCH_CUSPROOF`；中心→半径点两点收尾） |
+| 单轴绘制 | `TSingleAxis` | 已探测：起点→终点→回车可成，但产物是裸 `LINE`(非天正智能轴线)，不比 `axis_lines` 强，暂不封装（Handoff 23） |
+| 引出标注 | `TLeader` | 已探测：第一点→引线位置→文字基线位置；文字基线给空回车则放弃(0 实体)，正常完成需内联文字编辑(挂死风险)，暂不封装（Handoff 23） |
+| 墙体造型 | `TAddPatch` | 已探测：外凸/内凹→轮廓点列→结束；无依附墙体时 0 实体(造型需附墙)，前置重，暂不封装（Handoff 23） |
 | 半径/直径/角度/弧弦标注 | `TDimRad`/`TDimDia`/`TDimAng`/`TDimArc` | 已探测：均命令行无弹框，但**选择待标注对象的拾取步不吃脚本点/ename**（报"点无效"，命令滞留 active），vl-cmdf 点序列打不通，暂不封装（Handoff 21） |
 | 局部导出 | `TPartSaveAs` | 空输入无弹框、无实体、无输出（no-op），仍未找到静默导出参数 |
 | BIM导出 | `TGetXML` | 空输入弹 `#32770` “天正模型导出到TGL”，不可静默封装 |
@@ -121,6 +128,8 @@
 | `step` | `step.lsp` | TStep | **已验证** (E2E: 轮廓点列→回车, 生成 TCH_STEP) |
 | `ramp` | `ramp.lsp` | TAscent | **已验证** (E2E: 点取位置→回车, 生成 TCH_ASCENT; 宽度/坡长取面板记忆值) |
 | `arrow` | `arrow.lsp` | TArrow | **已验证** (E2E: 起点→终点→回车→回车, 生成 TCH_ARROW; 引注文字取面板记忆值, 附 warning) |
+| `rect_roof` | `rect_roof.lsp` | TRectRoof | **已验证** (E2E: 三角点→回车, 生成 TCH_MOUNTROOF; 坡角/出檐取面板记忆值) |
+| `cusp_roof` | `cusp_roof.lsp` | TCuspRoof | **已验证** (E2E: 中心→半径点, 生成 TCH_CUSPROOF; 边数/屋顶高取面板记忆值) |
 | `column` | `column.lsp` | TGColumn | **仅 dry-run** (#32770 面板阻塞, execute 已禁用, Handoff 13) |
 | `door` | `door.lsp` | TOpening | **部分验证** (execute 附 warning) |
 | `window` | `window.lsp` | TOpening | **部分验证** (需先人工切窗模式; 窗台高未保证, execute 附 warning) |

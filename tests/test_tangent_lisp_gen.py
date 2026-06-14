@@ -67,6 +67,8 @@ VALID_CASES: dict[str, dict] = {
     "step": {"points": [[0, 0], [3000, 0], [3000, 600], [0, 600]]},
     "ramp": {"x": 0, "y": 0},
     "arrow": {"x1": 0, "y1": 0, "x2": 2000, "y2": 0},
+    "rect_roof": {"x1": 0, "y1": 0, "x2": 6000, "y2": 0, "x3": 6000, "y3": 4000},
+    "cusp_roof": {"center_x": 3000, "center_y": 3000, "base_x": 6000, "base_y": 3000},
     "explode_read": {"handle": "1a3f", "offset_x": 1_000_000, "offset_y": 1_000_000},
     "search_room": {"layer": "SPACE"},
     "export_t3": {"out_path": "C:/temp/out_t3.dwg", "target_ver": "t3"},
@@ -363,6 +365,27 @@ class TestParamInjection:
         assert p1 < p2 < d1 < d2
         assert "TCH_ARROW" in code
 
+    def test_rect_roof_uses_trectroof_three_corners_with_trailing_enter(self) -> None:
+        # TRectRoof 真机试验: 左下 -> 右下 -> 右上 -> 回车, 生成 TCH_MOUNTROOF。
+        code = generate_lisp(
+            "rect_roof", {"x1": 0, "y1": 0, "x2": 6000, "y2": 0, "x3": 6000, "y3": 4000}
+        )
+        assert '"TRECTROOF"' in code
+        p1 = code.index("t20mcp:pt 0 0")
+        p2 = code.index("t20mcp:pt 6000 0")
+        p3 = code.index("t20mcp:pt 6000 4000")
+        assert p1 < p2 < p3 < code.index('""', p3)
+        assert "TCH_MOUNTROOF" in code
+
+    def test_cusp_roof_uses_tcusproof_center_and_radius_point(self) -> None:
+        # TCuspRoof 真机试验: 中心 -> 第二点, 两点即收尾, 生成 TCH_CUSPROOF。
+        code = generate_lisp("cusp_roof", {"center_x": 3000, "center_y": 3000})
+        assert '"TCUSPROOF"' in code
+        c = code.index("t20mcp:pt 3000 3000")
+        # 缺省半径点为中心右侧 3000mm
+        assert code.index("t20mcp:pt 6000 3000") > c
+        assert "TCH_CUSPROOF" in code
+
     def test_float_formatting_is_compact(self) -> None:
         # 整数值不应带小数点; 小数值应保留
         code = generate_lisp("door", {"ins_x": 1500.0, "ins_y": 0, "width": 912.5, "height": 2100})
@@ -490,6 +513,18 @@ class TestInvalidParamsRejected:
     def test_arrow_coincident_points_rejected(self) -> None:
         with pytest.raises(ParamError):
             generate_lisp("arrow", {"x1": 5, "y1": 5, "x2": 5, "y2": 5})
+
+    def test_rect_roof_coincident_corners_rejected(self) -> None:
+        with pytest.raises(ParamError):
+            generate_lisp(
+                "rect_roof", {"x1": 0, "y1": 0, "x2": 0, "y2": 0, "x3": 6000, "y3": 4000}
+            )
+
+    def test_cusp_roof_coincident_points_rejected(self) -> None:
+        with pytest.raises(ParamError):
+            generate_lisp(
+                "cusp_roof", {"center_x": 1, "center_y": 1, "base_x": 1, "base_y": 1}
+            )
 
     def test_balcony_too_few_points_rejected(self) -> None:
         with pytest.raises(ParamError):

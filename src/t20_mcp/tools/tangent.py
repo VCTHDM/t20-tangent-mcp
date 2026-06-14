@@ -801,6 +801,58 @@ def _gen_arrow(data: dict[str, Any]) -> str:
     )
 
 
+def _gen_rect_roof(data: dict[str, Any]) -> str:
+    """矩形屋顶。data: {x1,y1,x2,y2,x3,y3, layer?}
+
+    真机验证序列: 左下角点 -> 右下角点 -> 右上角点 -> 回车退出循环, 生成 TCH_MOUNTROOF。
+    三角点定屋顶底面矩形 (左下/右下/右上); 坡角/出檐/屋顶高走天正面板记忆值。
+    """
+    x1 = _require_coord(data.get("x1"), "x1")
+    y1 = _require_coord(data.get("y1"), "y1")
+    x2 = _require_coord(data.get("x2"), "x2")
+    y2 = _require_coord(data.get("y2"), "y2")
+    x3 = _require_coord(data.get("x3"), "x3")
+    y3 = _require_coord(data.get("y3"), "y3")
+    if (x1, y1) == (x2, y2) or (x2, y2) == (x3, y3) or (x1, y1) == (x3, y3):
+        raise ParamError("矩形屋顶的三个角点不能有重合")
+    return _render(
+        "rect_roof",
+        {
+            "SET_LAYER": _set_layer_cmd(data.get("layer")),
+            "X1": _num(x1),
+            "Y1": _num(y1),
+            "X2": _num(x2),
+            "Y2": _num(y2),
+            "X3": _num(x3),
+            "Y3": _num(y3),
+        },
+    )
+
+
+def _gen_cusp_roof(data: dict[str, Any]) -> str:
+    """攒尖屋顶。data: {center_x, center_y, base_x?, base_y?, layer?}
+
+    真机验证序列: 屋顶中心位置 -> 第二点(定半径/朝向), 两点即收尾, 生成 TCH_CUSPROOF。
+    base 点缺省为中心点正右方 3000mm; 边数/屋顶高走天正面板记忆值。
+    """
+    center_x = _require_coord(data.get("center_x"), "center_x")
+    center_y = _require_coord(data.get("center_y"), "center_y")
+    base_x = _require_coord(data.get("base_x", center_x + 3000.0), "base_x")
+    base_y = _require_coord(data.get("base_y", center_y), "base_y")
+    if center_x == base_x and center_y == base_y:
+        raise ParamError("攒尖屋顶的中心点与半径点不能重合")
+    return _render(
+        "cusp_roof",
+        {
+            "SET_LAYER": _set_layer_cmd(data.get("layer")),
+            "CENTER_X": _num(center_x),
+            "CENTER_Y": _num(center_y),
+            "BASE_X": _num(base_x),
+            "BASE_Y": _num(base_y),
+        },
+    )
+
+
 def _gen_search_room(data: dict[str, Any]) -> str:
     """搜索房间。data: {layer?}
 
@@ -945,6 +997,8 @@ _GENERATORS: dict[str, Callable[[dict[str, Any]], str]] = {
     "step": _gen_step,
     "ramp": _gen_ramp,
     "arrow": _gen_arrow,
+    "rect_roof": _gen_rect_roof,
+    "cusp_roof": _gen_cusp_roof,
     "explode_read": _gen_explode_read,
     "search_room": _gen_search_room,
     "export_t3": _gen_export_t3,
@@ -1064,6 +1118,8 @@ def register_tangent_tool(mcp: Any) -> None:
           step       — 台阶     [已验证; 踏步数/宽取面板记忆值]。{points:[[x,y],...]>=2, layer?}
           ramp       — 坡道     [已验证; 宽度/坡长取面板记忆值]。{x, y, layer?}
           arrow      — 箭头引注 [已验证; 引注文字取面板记忆值, 见 warning]。{x1, y1, x2, y2, layer?}
+          rect_roof  — 矩形屋顶 [已验证; 坡角/出檐取面板记忆值]。{x1, y1, x2, y2, x3, y3, layer?}
+          cusp_roof  — 攒尖屋顶 [已验证; 边数/屋顶高取面板记忆值]。{center_x, center_y, base_x?, base_y?, layer?}
           column     — 标准柱   [仅 dry-run: #32770 面板阻塞]。{x, y, angle?, layer?}
           door       — 普通门   [部分验证]。{ins_x, ins_y, width?, height?, sill_distance?, layer?}
           window     — 普通窗   [部分验证; 调用前需人工切窗模式]。{ins_x, ins_y, width?, height?, sill_height?, layer?}
