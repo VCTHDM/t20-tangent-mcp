@@ -18,7 +18,7 @@ LISP 模板封装。
 |---|---|---|
 | IPC 基础设施（编码链/窗口识别/模态防护/引导加载） | 100% | 全部真机验收通过；WPF 对话框探测盲区已补（Handoff 09，itest_21） |
 | 命令编目 | 100% | 官方表 454 条全部收录并真机探测注册状态（442/451） |
-| 天正实体封装 | ~68% | wall/dimension/wall_thickness_dimension/opening_dimension/two_point_dimension/elevation/coordinate/symmetry/north_arrow/break_line/section_symbol/drawing_name/rectangle/balcony/step/ramp/arrow/rect_roof/cusp_roof/insight/tree/explode_read/search_room 已 E2E 验证，axis_lines 普通线轴网替代可执行，door 部分验证；标准柱/轴网/导出受 #32770 对话框阻碍（仅 dry-run）；坡屋顶(选对象步)/楼梯/平板/索引(文字)/标注族选择步等未动工 |
+| 天正实体封装 | ~70% | wall/dimension/wall_thickness_dimension/opening_dimension/two_point_dimension/elevation/coordinate/symmetry/north_arrow/break_line/section_symbol/drawing_name/rectangle/balcony/step/ramp/arrow/rect_roof/cusp_roof/insight/tree/line_stair/arc_stair/explode_read/search_room 已 E2E 验证，axis_lines 普通线轴网替代可执行，door 部分验证；标准柱/轴网/导出受 #32770 对话框阻碍（仅 dry-run）；坡屋顶(选对象步)/双跑楼梯/平板/电梯(选墙线)/索引(文字)/标注族选择步等未动工 |
 | MCP server 集成 | ~95% | 9 工具已注册（含 `tangent`）；MCP stdio dry-run 冒烟已通过 |
 | 测试与联调管线 | ~88% | 离线测试全绿；`scripts/itest_*.py` 可重复真机管线，E2E 收尾环境已校验 |
 
@@ -64,6 +64,8 @@ MCP 工具共 9 个：上游 8 个（drawing/entity/layer/block/annotation/pid/v
 | `cusp_roof` 攒尖屋顶 | `TCuspRoof` | ✅ E2E 验证（中心→半径点，实体 `TCH_CUSPROOF`；边数/屋顶高取面板记忆值） |
 | `insight` 内视符号 | `TInsight` | ✅ E2E 验证（标注位置→回车，实体 `TCH_TDBINSIGHT`；朝向/编号取面板记忆值） |
 | `tree` 任意布树 | `TSingleTree` | ✅ E2E 验证（插入点→回车，插入 INSERT 树木图块；树种/尺寸取面板记忆值） |
+| `line_stair` 直线梯段 | `TLStair` | ✅ E2E 验证（点取位置→回车，实体 `TCH_LINESTAIR`；梯段宽/踏步数取面板记忆值） |
+| `arc_stair` 圆弧梯段 | `TAStair` | ✅ E2E 验证（点取位置→回车，实体 `TCH_ARCSTAIR`；半径/踏步数取面板记忆值） |
 | `column` 标准柱 | `TGColumn` | ⛔ #32770 标准柱面板阻塞，execute 已禁用（仅 dry-run；点序列到不了放置处理器，0 实体，Handoff 13） |
 | `door` 门 | `TOpening` | 🟡 部分验证（execute 附 warning） |
 | `window` 窗 | `TOpening` | 🟡 类型随面板模式；工具 warning 已明确要求先人工切窗模式，窗台高仍待窗模式真机验证 |
@@ -123,6 +125,7 @@ MCP 工具共 9 个：上游 8 个（drawing/entity/layer/block/annotation/pid/v
 | `docs/handoff/22_claude_ramp_arrow.md` | ramp / arrow 点序列构件 E2E 封装 + 平板/地下坡道坑记录 |
 | `docs/handoff/23_claude_roof_batch.md` | rect_roof / cusp_roof 屋顶构件 E2E 封装 + 单轴/引出/墙体造型坑记录 |
 | `docs/handoff/24_claude_insight_tree.md` | insight / tree 单点插入构件 E2E 封装 + 指向/剖切索引坑记录 |
+| `docs/handoff/25_claude_stair_batch.md` | line_stair / arc_stair 楼梯梯段 E2E 封装 + 电梯选墙线坑记录 |
 | `docs/research/2026-06-13_*.md` | GPT 调研：网搜与安装目录提示词检索（结论：需真机提示捕获） |
 | `scripts/itest_01..37_*.py` | 可重复的联调管线（引导/探测/试驱动/E2E/MCP stdio/恢复/清理/LOGFILEMODE 提示捕获/弹框侦察） |
 

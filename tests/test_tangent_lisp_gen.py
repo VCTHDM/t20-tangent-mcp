@@ -71,6 +71,8 @@ VALID_CASES: dict[str, dict] = {
     "cusp_roof": {"center_x": 3000, "center_y": 3000, "base_x": 6000, "base_y": 3000},
     "insight": {"x": 0, "y": 0},
     "tree": {"x": 0, "y": 0},
+    "line_stair": {"x": 0, "y": 0},
+    "arc_stair": {"x": 0, "y": 0},
     "explode_read": {"handle": "1a3f", "offset_x": 1_000_000, "offset_y": 1_000_000},
     "search_room": {"layer": "SPACE"},
     "export_t3": {"out_path": "C:/temp/out_t3.dwg", "target_ver": "t3"},
@@ -404,6 +406,22 @@ class TestParamInjection:
         assert pt < code.index('""', pt)
         assert '"INSERT"' in code
 
+    def test_line_stair_uses_tlstair_single_point_with_trailing_enter(self) -> None:
+        # TLStair 真机试验: 点取位置 -> 回车退出循环, 生成 TCH_LINESTAIR。
+        code = generate_lisp("line_stair", {"x": 1500, "y": 800})
+        assert '"TLSTAIR"' in code
+        pt = code.index("t20mcp:pt 1500 800")
+        assert pt < code.index('""', pt)
+        assert "TCH_LINESTAIR" in code
+
+    def test_arc_stair_uses_tastair_single_point_with_trailing_enter(self) -> None:
+        # TAStair 真机试验: 点取位置 -> 回车退出循环, 生成 TCH_ARCSTAIR。
+        code = generate_lisp("arc_stair", {"x": 1500, "y": 800})
+        assert '"TASTAIR"' in code
+        pt = code.index("t20mcp:pt 1500 800")
+        assert pt < code.index('""', pt)
+        assert "TCH_ARCSTAIR" in code
+
     def test_float_formatting_is_compact(self) -> None:
         # 整数值不应带小数点; 小数值应保留
         code = generate_lisp("door", {"ins_x": 1500.0, "ins_y": 0, "width": 912.5, "height": 2100})
@@ -551,6 +569,14 @@ class TestInvalidParamsRejected:
     def test_tree_missing_coord_rejected(self) -> None:
         with pytest.raises(ParamError):
             generate_lisp("tree", {"y": 0})  # 缺 x
+
+    def test_line_stair_missing_coord_rejected(self) -> None:
+        with pytest.raises(ParamError):
+            generate_lisp("line_stair", {"x": 0})  # 缺 y
+
+    def test_arc_stair_missing_coord_rejected(self) -> None:
+        with pytest.raises(ParamError):
+            generate_lisp("arc_stair", {"y": 0})  # 缺 x
 
     def test_balcony_too_few_points_rejected(self) -> None:
         with pytest.raises(ParamError):
