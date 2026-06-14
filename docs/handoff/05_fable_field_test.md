@@ -101,3 +101,10 @@
 12. 半径/直径/角度/弧弦标注 `TDimRad`/`TDimDia`/`TDimAng`/`TDimArc` 已探测暂不封装
     （2026-06-14，Handoff 21）：均命令行无弹框，但选择待标注对象的拾取步不吃脚本点/ename
     （报"点无效"，命令滞留 active=1），vl-cmdf 点序列打不通。下一轮若继续需找选择集注入法。
+13. ~~点序列构件 `TAscent` / `TArrow`~~ **已完成**（2026-06-14，Handoff 22：
+    封装为 `ramp` / `arrow`，命令行点序列无弹框；`ramp` 单点循环补空回车退出，
+    `arrow` 两点引线后补**两个**空回车退出双层循环，E2E 生成 `TCH_ASCENT` / `TCH_ARROW`；
+    `arrow` 引注文字走面板记忆值，附 warning）。
+14. 平板 `TSlab` / 地下坡道 `TUndergroundRamp` 已探测暂不封装（2026-06-14，Handoff 22）：
+    `TSlab` 选闭合多段线的选对象步不吃 ssget/拾取点（同标注族选择步坑）；
+    `TUndergroundRamp` 产物是裸 LWPOLYLINE（非干净 TCH_ 实体），难以断言。

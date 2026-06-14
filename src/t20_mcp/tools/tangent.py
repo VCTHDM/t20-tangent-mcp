@@ -759,6 +759,48 @@ def _gen_step(data: dict[str, Any]) -> str:
 _ALLOWED_T3_VERSIONS: dict[str, str] = {"t3": "3", "天正3": "3", "3": "3"}
 
 
+def _gen_ramp(data: dict[str, Any]) -> str:
+    """坡道。data: {x, y, layer?}
+
+    真机验证序列: 点取位置 -> 回车退出循环, 生成 TCH_ASCENT。
+    坡道宽度/坡长等构造参数走天正面板记忆值, 本工具只参数化插入点。
+    """
+    x = _require_coord(data.get("x"), "x")
+    y = _require_coord(data.get("y"), "y")
+    return _render(
+        "ramp",
+        {
+            "SET_LAYER": _set_layer_cmd(data.get("layer")),
+            "X": _num(x),
+            "Y": _num(y),
+        },
+    )
+
+
+def _gen_arrow(data: dict[str, Any]) -> str:
+    """箭头引注。data: {x1, y1, x2, y2, layer?}
+
+    真机验证序列: 箭头起点 -> 直段下一点 -> 回车 -> 回车, 生成 TCH_ARROW。
+    箭头文字/样式走天正面板记忆值, 本工具只参数化起点/终点几何。
+    """
+    x1 = _require_coord(data.get("x1"), "x1")
+    y1 = _require_coord(data.get("y1"), "y1")
+    x2 = _require_coord(data.get("x2"), "x2")
+    y2 = _require_coord(data.get("y2"), "y2")
+    if x1 == x2 and y1 == y2:
+        raise ParamError("箭头引注的起点与终点不能重合")
+    return _render(
+        "arrow",
+        {
+            "SET_LAYER": _set_layer_cmd(data.get("layer")),
+            "X1": _num(x1),
+            "Y1": _num(y1),
+            "X2": _num(x2),
+            "Y2": _num(y2),
+        },
+    )
+
+
 def _gen_search_room(data: dict[str, Any]) -> str:
     """搜索房间。data: {layer?}
 
@@ -901,6 +943,8 @@ _GENERATORS: dict[str, Callable[[dict[str, Any]], str]] = {
     "rectangle": _gen_rectangle,
     "balcony": _gen_balcony,
     "step": _gen_step,
+    "ramp": _gen_ramp,
+    "arrow": _gen_arrow,
     "explode_read": _gen_explode_read,
     "search_room": _gen_search_room,
     "export_t3": _gen_export_t3,
@@ -927,6 +971,10 @@ LOW_CONFIDENCE_WARNINGS: dict[str, str] = {
     "drawing_name": (
         "图名文字/比例取自天正面板记忆值, 本工具只参数化插入位置, "
         "不能通过参数设置图名文本 (COM 文本注入待评估, 见 docs/T20_COMMANDS.md)"
+    ),
+    "arrow": (
+        "箭头文字/样式取自天正面板记忆值, 本工具只参数化起点/终点几何, "
+        "不能通过参数设置引注文本 (COM 文本注入待评估, 见 docs/T20_COMMANDS.md)"
     ),
 }
 
@@ -1014,6 +1062,8 @@ def register_tangent_tool(mcp: Any) -> None:
           rectangle  — 矩形     [已验证]。{x1, y1, x2, y2, layer?}
           balcony    — 阳台     [已验证; 类型/挑出宽取面板记忆值]。{points:[[x,y],...]>=2, layer?}
           step       — 台阶     [已验证; 踏步数/宽取面板记忆值]。{points:[[x,y],...]>=2, layer?}
+          ramp       — 坡道     [已验证; 宽度/坡长取面板记忆值]。{x, y, layer?}
+          arrow      — 箭头引注 [已验证; 引注文字取面板记忆值, 见 warning]。{x1, y1, x2, y2, layer?}
           column     — 标准柱   [仅 dry-run: #32770 面板阻塞]。{x, y, angle?, layer?}
           door       — 普通门   [部分验证]。{ins_x, ins_y, width?, height?, sill_distance?, layer?}
           window     — 普通窗   [部分验证; 调用前需人工切窗模式]。{ins_x, ins_y, width?, height?, sill_height?, layer?}

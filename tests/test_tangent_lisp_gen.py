@@ -65,6 +65,8 @@ VALID_CASES: dict[str, dict] = {
     "rectangle": {"x1": 0, "y1": 0, "x2": 3000, "y2": 2000},
     "balcony": {"points": [[0, 0], [3000, 0], [3000, 1500], [0, 1500]]},
     "step": {"points": [[0, 0], [3000, 0], [3000, 600], [0, 600]]},
+    "ramp": {"x": 0, "y": 0},
+    "arrow": {"x1": 0, "y1": 0, "x2": 2000, "y2": 0},
     "explode_read": {"handle": "1a3f", "offset_x": 1_000_000, "offset_y": 1_000_000},
     "search_room": {"layer": "SPACE"},
     "export_t3": {"out_path": "C:/temp/out_t3.dwg", "target_ver": "t3"},
@@ -341,6 +343,26 @@ class TestParamInjection:
         assert "t20mcp:pt 0 0" in code and "t20mcp:pt 3000 0" in code
         assert "TCH_STEP" in code
 
+    def test_ramp_uses_tascent_single_point_with_trailing_enter(self) -> None:
+        # TAscent 真机试验: 点取位置 -> 回车退出循环, 生成 TCH_ASCENT。
+        code = generate_lisp("ramp", {"x": 1500, "y": 800})
+        assert '"TASCENT"' in code
+        pt = code.index("t20mcp:pt 1500 800")
+        assert pt < code.index('""', pt)
+        assert "TCH_ASCENT" in code
+
+    def test_arrow_uses_tarrow_two_points_with_double_enter(self) -> None:
+        # TArrow 真机试验: 起点 -> 终点 -> 回车 -> 回车, 生成 TCH_ARROW。
+        code = generate_lisp("arrow", {"x1": 0, "y1": 0, "x2": 2000, "y2": 0})
+        assert '"TARROW"' in code
+        p1 = code.index("t20mcp:pt 0 0")
+        p2 = code.index("t20mcp:pt 2000 0")
+        # 两个相邻空回车: 结束本引线循环 + 退出外层循环
+        d1 = code.index('""', p2)
+        d2 = code.index('""', d1 + 2)
+        assert p1 < p2 < d1 < d2
+        assert "TCH_ARROW" in code
+
     def test_float_formatting_is_compact(self) -> None:
         # 整数值不应带小数点; 小数值应保留
         code = generate_lisp("door", {"ins_x": 1500.0, "ins_y": 0, "width": 912.5, "height": 2100})
@@ -460,6 +482,14 @@ class TestInvalidParamsRejected:
             generate_lisp("rectangle", {"x1": 0, "y1": 0, "x2": 0, "y2": 2000})  # 同一垂直线
         with pytest.raises(ParamError):
             generate_lisp("rectangle", {"x1": 0, "y1": 5, "x2": 3000, "y2": 5})  # 同一水平线
+
+    def test_ramp_missing_coord_rejected(self) -> None:
+        with pytest.raises(ParamError):
+            generate_lisp("ramp", {"x": 0})  # 缺 y
+
+    def test_arrow_coincident_points_rejected(self) -> None:
+        with pytest.raises(ParamError):
+            generate_lisp("arrow", {"x1": 5, "y1": 5, "x2": 5, "y2": 5})
 
     def test_balcony_too_few_points_rejected(self) -> None:
         with pytest.raises(ParamError):
