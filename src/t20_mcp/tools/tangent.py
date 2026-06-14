@@ -925,6 +925,49 @@ def _gen_arc_stair(data: dict[str, Any]) -> str:
     )
 
 
+def _gen_double_stair(data: dict[str, Any]) -> str:
+    """双跑楼梯。data: {x, y, layer?}
+
+    真机验证序列: 插入点 -> 回车退出循环, 生成 TCH_RECTSTAIR。
+    命令是循环式插入; 梯段宽/踏步数/楼梯高/井宽走天正面板记忆值, 只参数化插入点。
+    """
+    x = _require_coord(data.get("x"), "x")
+    y = _require_coord(data.get("y"), "y")
+    return _render(
+        "double_stair",
+        {
+            "SET_LAYER": _set_layer_cmd(data.get("layer")),
+            "X": _num(x),
+            "Y": _num(y),
+        },
+    )
+
+
+def _gen_multi_stair(data: dict[str, Any]) -> str:
+    """多跑楼梯。data: {x1,y1,x2,y2,layer?}
+
+    真机验证序列: 起点 -> 下一点 -> 回车退出, 生成 TCH_MULTISTAIR。
+    命令循环式 (起点->下一点 定义一跑后回到"起点<退出>", 空回车走 <退出> 收尾);
+    跑数/梯段宽/踏步数/楼梯高走天正面板记忆值, 只参数化起点与方向点。
+    """
+    x1 = _require_coord(data.get("x1"), "x1")
+    y1 = _require_coord(data.get("y1"), "y1")
+    x2 = _require_coord(data.get("x2"), "x2")
+    y2 = _require_coord(data.get("y2"), "y2")
+    if x1 == x2 and y1 == y2:
+        raise ParamError("多跑楼梯的起点与下一点不能重合")
+    return _render(
+        "multi_stair",
+        {
+            "SET_LAYER": _set_layer_cmd(data.get("layer")),
+            "X1": _num(x1),
+            "Y1": _num(y1),
+            "X2": _num(x2),
+            "Y2": _num(y2),
+        },
+    )
+
+
 def _gen_search_room(data: dict[str, Any]) -> str:
     """搜索房间。data: {layer?}
 
@@ -1075,6 +1118,8 @@ _GENERATORS: dict[str, Callable[[dict[str, Any]], str]] = {
     "tree": _gen_tree,
     "line_stair": _gen_line_stair,
     "arc_stair": _gen_arc_stair,
+    "double_stair": _gen_double_stair,
+    "multi_stair": _gen_multi_stair,
     "explode_read": _gen_explode_read,
     "search_room": _gen_search_room,
     "export_t3": _gen_export_t3,

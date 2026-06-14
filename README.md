@@ -126,8 +126,11 @@ MCP 工具共 9 个：上游 8 个（drawing/entity/layer/block/annotation/pid/v
 | `docs/handoff/23_claude_roof_batch.md` | rect_roof / cusp_roof 屋顶构件 E2E 封装 + 单轴/引出/墙体造型坑记录 |
 | `docs/handoff/24_claude_insight_tree.md` | insight / tree 单点插入构件 E2E 封装 + 指向/剖切索引坑记录 |
 | `docs/handoff/25_claude_stair_batch.md` | line_stair / arc_stair 楼梯梯段 E2E 封装 + 电梯选墙线坑记录 |
+| `docs/handoff/26_codex_claude_dispatch_invariants.md` | Codex + Claude Code 只读协作；补充 dispatch / execute-gating 离线回归测试 |
+| `docs/handoff/27_claude_double_multi_stair.md` | double_stair / multi_stair 楼梯整体 E2E 封装；codex 离线 triage 确认简单候选耗尽（楼梯 Draw 族/风玫瑰弹框、梁需依附） |
 | `docs/research/2026-06-13_*.md` | GPT 调研：网搜与安装目录提示词检索（结论：需真机提示捕获） |
-| `scripts/itest_01..37_*.py` | 可重复的联调管线（引导/探测/试驱动/E2E/MCP stdio/恢复/清理/LOGFILEMODE 提示捕获/弹框侦察） |
+| `docs/research/2026-06-14_remaining_simple_candidates.md` | codex 离线 triage：454 命令对照已封装/已拒，剩余「简单」候选短名单与耗尽结论 |
+| `scripts/itest_01..43_*.py` | 可重复的联调管线（引导/探测/试驱动/E2E/MCP stdio/恢复/清理/LOGFILEMODE 提示捕获/弹框侦察） |
 
 ## 协作规则（模型路由与安全门禁）
 

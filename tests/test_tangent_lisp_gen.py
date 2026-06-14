@@ -14,6 +14,9 @@ import pytest
 
 import t20_mcp.tools.tangent as tangent
 from t20_mcp.tools.tangent import (
+    EXECUTE_DISABLED_SUBCOMMANDS,
+    LOW_CONFIDENCE_SUBCOMMANDS,
+    LOW_CONFIDENCE_WARNINGS,
     ParamError,
     SUBCOMMANDS,
     _render,
@@ -73,6 +76,8 @@ VALID_CASES: dict[str, dict] = {
     "tree": {"x": 0, "y": 0},
     "line_stair": {"x": 0, "y": 0},
     "arc_stair": {"x": 0, "y": 0},
+    "double_stair": {"x": 0, "y": 0},
+    "multi_stair": {"x1": 0, "y1": 0, "x2": 0, "y2": 6000},
     "explode_read": {"handle": "1a3f", "offset_x": 1_000_000, "offset_y": 1_000_000},
     "search_room": {"layer": "SPACE"},
     "export_t3": {"out_path": "C:/temp/out_t3.dwg", "target_ver": "t3"},
@@ -141,6 +146,27 @@ class TestAllSubcommandsGenerateBalanced:
                 _render("_fake_block", {})
         finally:
             tangent._TEMPLATE_CACHE.pop("_fake_block", None)
+
+
+class TestDispatchInvariants:
+    def test_warning_and_disabled_maps_reference_known_subcommands(self) -> None:
+        subcommands = set(SUBCOMMANDS)
+        assert set(LOW_CONFIDENCE_SUBCOMMANDS) <= subcommands
+        assert set(LOW_CONFIDENCE_WARNINGS) <= subcommands
+        assert set(EXECUTE_DISABLED_SUBCOMMANDS) <= subcommands
+
+    def test_low_confidence_warning_keys_match_subcommands(self) -> None:
+        assert set(LOW_CONFIDENCE_WARNINGS) == set(LOW_CONFIDENCE_SUBCOMMANDS)
+
+    def test_low_confidence_and_disabled_subcommands_are_disjoint(self) -> None:
+        assert not (set(LOW_CONFIDENCE_SUBCOMMANDS) & set(EXECUTE_DISABLED_SUBCOMMANDS))
+
+    @pytest.mark.parametrize("sub", sorted(EXECUTE_DISABLED_SUBCOMMANDS))
+    def test_execute_disabled_subcommands_still_generate_lisp(self, sub: str) -> None:
+        # Execute gating lives in the MCP wrapper; dry-run generation must remain available.
+        code = generate_lisp(sub, VALID_CASES[sub])
+        assert is_paren_balanced(code)
+        assert "T20MCP-OK" in code
 
 
 # ---------------------------------------------------------------------------

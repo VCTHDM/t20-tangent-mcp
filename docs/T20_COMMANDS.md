@@ -65,6 +65,8 @@
 | 任意布树 | `TSingleTree` | 插入点→回车退出循环 (每点一棵)；树种/尺寸走面板记忆值；实体为通用 INSERT 图块 | `INSERT` | **高** (E2E) |
 | 直线梯段 | `TLStair` | 点取位置→回车退出循环；梯段宽/踏步数/踏步高走面板记忆值 | `TCH_LINESTAIR` | **高** (E2E) |
 | 圆弧梯段 | `TAStair` | 点取位置→回车退出循环；内外半径/踏步数/圆心角走面板记忆值 | `TCH_ARCSTAIR` | **高** (E2E) |
+| 双跑楼梯 | `TRStair` | 插入点→回车退出循环；梯段宽/踏步数/楼梯高/井宽走面板记忆值 | `TCH_RECTSTAIR` | **高** (E2E) |
+| 多跑楼梯 | `TMultiStair` | 起点→下一点→回车（在"起点<退出>"处空回车收尾）；跑数/梯段宽/楼梯高走面板记忆值 | `TCH_MULTISTAIR` | **高** (E2E) |
 | 门窗 | `TOpening` | 墙上插入点→回车（非模态面板不阻塞）；`Width/Height/DoorSill` 可 COM 注入；`window` 调用前需人工把门窗面板切到窗模式 | `TCH_OPENING` | **中**：插入类型随面板当前模式（默认门）；窗模式/`SillHeight` 待验证 |
 | 普通线轴网 | 原生 `LINE` | `axis_lines` 替代路径：按开间/进深生成普通线网格，可旋转；不生成天正智能轴网 | `LINE` | **中** (替代路径) |
 | 几何读回 | 原生 `EXPLODE` | `explode_read`：COPY 副本到暂存区→分解副本→序列化产物→UNDO 回滚，非破坏。TEXPLODE 弹「分解对象」框被弃用（可白名单点击驱动，见 dialog_automation）。已知 T20 缺陷：墙体产物起点侧顶点归零（Handoff 10 §4） | `LINE` 等 | **高** (E2E) |
@@ -106,6 +108,11 @@
 | 指向索引/剖切索引 | `TPointIndex`/`TSectIndex` | 已探测：索引节点位置→参考点；需编号文字，空回车则 0 实体，暂不封装（Handoff 24） |
 | 直线梯段 | `TLStair` | **已封装为 `line_stair`**（Handoff 25，E2E 生成 `TCH_LINESTAIR`；单点循环补回车退出） |
 | 圆弧梯段 | `TAStair` | **已封装为 `arc_stair`**（Handoff 25，E2E 生成 `TCH_ARCSTAIR`；单点循环补回车退出） |
+| 双跑楼梯 | `TRStair` | **已封装为 `double_stair`**（Handoff 27，E2E 生成 `TCH_RECTSTAIR`；插入点→回车，单点循环补回车退出） |
+| 多跑楼梯 | `TMultiStair` | **已封装为 `multi_stair`**（Handoff 27，E2E 生成 `TCH_MULTISTAIR`；起点→下一点→回车，在"起点<退出>"处空回车收尾） |
+| 双分/转角/三跑/交叉/剪刀/三角楼梯·自动扶梯 | `TDrawParallelStair`/`TDrawCornerStair`/`TDrawDoubleMulStair`/`TDrawScissorsStair`/`TDrawCrossStair`/`TDrawTriangleStair`/`tdrawautostair` | 已探测：均**先弹 #32770 模态参数面板**（如"双分平行楼梯"框）再取点，命令行点序列到不了放置处理器，同 column/axis_grid 墙2 死路，暂不封装（Handoff 27） |
+| 绘制梁 | `TGirDer` | 已探测：两点序列命令行无弹框但 0 实体（梁需依附墙/柱/轴线，前置重），暂不封装（Handoff 27） |
+| 风玫瑰 | `TWINDROSE` | 已探测：**弹"风玫瑰"模态框**（地区/参数面板），墙2 死路，暂不封装（Handoff 27） |
 | 电梯 | `TElevator` | 已探测：电梯间角点→对角点→**点取开电梯门的墙线**(选墙线步，需前置墙，空回车则 0 实体)，暂不封装（Handoff 25） |
 | 半径/直径/角度/弧弦标注 | `TDimRad`/`TDimDia`/`TDimAng`/`TDimArc` | 已探测：均命令行无弹框，但**选择待标注对象的拾取步不吃脚本点/ename**（报"点无效"，命令滞留 active），vl-cmdf 点序列打不通，暂不封装（Handoff 21） |
 | 局部导出 | `TPartSaveAs` | 空输入无弹框、无实体、无输出（no-op），仍未找到静默导出参数 |
@@ -144,6 +151,8 @@
 | `tree` | `tree.lsp` | TSingleTree | **已验证** (E2E: 插入点→回车, 插入 INSERT 树木图块; 树种/尺寸取面板记忆值) |
 | `line_stair` | `line_stair.lsp` | TLStair | **已验证** (E2E: 点取位置→回车, 生成 TCH_LINESTAIR; 梯段宽/踏步数取面板记忆值) |
 | `arc_stair` | `arc_stair.lsp` | TAStair | **已验证** (E2E: 点取位置→回车, 生成 TCH_ARCSTAIR; 半径/踏步数取面板记忆值) |
+| `double_stair` | `double_stair.lsp` | TRStair | **已验证** (E2E: 插入点→回车, 生成 TCH_RECTSTAIR; 梯段宽/楼梯高取面板记忆值) |
+| `multi_stair` | `multi_stair.lsp` | TMultiStair | **已验证** (E2E: 起点→下一点→回车, 生成 TCH_MULTISTAIR; 跑数/梯段宽取面板记忆值) |
 | `column` | `column.lsp` | TGColumn | **仅 dry-run** (#32770 面板阻塞, execute 已禁用, Handoff 13) |
 | `door` | `door.lsp` | TOpening | **部分验证** (execute 附 warning) |
 | `window` | `window.lsp` | TOpening | **部分验证** (需先人工切窗模式; 窗台高未保证, execute 附 warning) |
