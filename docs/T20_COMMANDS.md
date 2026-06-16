@@ -69,13 +69,10 @@
 | 双跑楼梯 | `TRStair` | 插入点→回车退出循环；梯段宽/踏步数/楼梯高/井宽走面板记忆值 | `TCH_RECTSTAIR` | **高** (E2E) |
 | 多跑楼梯 | `TMultiStair` | 起点→下一点→回车（在"起点<退出>"处空回车收尾）；跑数/梯段宽/楼梯高走面板记忆值 | `TCH_MULTISTAIR` | **高** (E2E) |
 | 轮椅直径 | `TWheelchairDaim` | 中心点→半径/方向点→回车；edge 缺省为中心正右 1500mm；官方命令拼写为 `Daim` | `TCH_RADIUSDIM` | **高** (E2E) |
-| 门窗 | `TOpening` | 墙上插入点→回车（非模态面板不阻塞）；`Width/Height/DoorSill` 可 COM 注入；`window` 调用前需人工把门窗面板切到窗模式 | `TCH_OPENING` | **中**：插入类型随面板当前模式（默认门）；窗模式/`SillHeight` 待验证 |
+| 门窗 | `TOpening` | 墙上插入点→回车（非模态面板不阻塞）；`Width/Height/DoorSill` 可 COM 注入；`window` 调用前需人工把门窗面板切到窗模式 | `TCH_OPENING` | **中**：插入类型随面板当前模式（默认门） |
 | 普通线轴网 | 原生 `LINE` | `axis_lines` 替代路径：按开间/进深生成普通线网格，可旋转；不生成天正智能轴网 | `LINE` | **中** (替代路径) |
-| 几何读回 | 原生 `EXPLODE` | `explode_read`：COPY 副本到暂存区→分解副本→序列化产物→UNDO 回滚，非破坏。TEXPLODE 弹「分解对象」框被弃用（可白名单点击驱动，见 dialog_automation）。已知 T20 缺陷：墙体产物起点侧顶点归零（Handoff 10 §4） | `LINE` 等 | **高** (E2E) |
+| 几何读回 | 原生 `EXPLODE` | `explode_read`：COPY 副本到暂存区→分解副本→序列化产物→UNDO 回滚，非破坏。已知 T20 缺陷：墙体产物起点侧顶点归零 | `LINE` 等 | **高** (E2E) |
 | 搜索房间 | `TUpdSpace` | `search_room`：全图选择 `TCH_WALL` → 选择集 → 回车；闭合墙体围合区域生成房间对象 | `TCH_SPACE` | **高** (E2E) |
-| 绘制轴网(直线) | `TRectAxis` | **不可命令行驱动**：模态对话框 (#32770)。工具层已禁止 execute | — | **禁** (仅 dry-run) |
-| 图形导出(T3) | `TSaveAs` | **不可静默**：天正自绘导出框 (WPF)，无视 FILEDIA=0。工具层已禁止 execute | — | **禁** (仅 dry-run) |
-| 标准柱 | `TGColumn` | **不可命令行驱动**：弹 #32770 标准柱面板且命令保持 active，vl-cmdf 点序列到不了绘图区放置处理器 → 0 实体（2026-06-13 复测，Handoff 13）。工具层已禁止 execute | — | **禁** (仅 dry-run) |
 
 ### 1.2 已验证存在、待封装评估
 
@@ -127,71 +124,25 @@
 | 搜索房间 | `TUpdSpace` | **已封装为 `search_room`**（Handoff 11，E2E 验证） |
 
 > 其余 ~440 条见 `docs/T20_OFFICIAL_COMMANDS.md`（含真机注册标记）。
-> 未注册的 9 条集中在渲染/动画模块（延迟加载 ARX）与官方表笔误
-> （如 `TOuterDimTOuterDim` 应为 `TOuterDim`）。
+> 未注册的 9 条集中在渲染/动画模块（延迟加载 ARX）与官方表笔误。
 
-## 2. 当前 `tangent` 工具子命令状态
+## 2. 未封装/暂拒命令
 
-| 子命令 | 模板 | 命令 | 状态 |
-|---|---|---|---|
-| `wall` | `wall.lsp` | TgWall | **已验证** (E2E: 实体+COM 回读) |
-| `dimension` | `dimension.lsp` | TDimMP | **已验证** (E2E) |
-| `wall_thickness_dimension` | `wall_thickness_dimension.lsp` | TDimWall | **已验证** (E2E) |
-| `opening_dimension` | `opening_dimension.lsp` | TDim3 | **已验证** (E2E) |
-| `two_point_dimension` | `two_point_dimension.lsp` | TDimTP | **已验证** (E2E: 穿越三墙生成 TCH_DIMENSION2) |
-| `elevation` | `elevation.lsp` | TMElev | **已验证** (双点序列生成 TCH_ELEVATION；execute 附 warning) |
-| `coordinate` | `coordinate.lsp` | TCoord | **已验证** (E2E: 生成 TCH_COORD) |
-| `symmetry` | `symmetry.lsp` | TSymmetry | **已验证** (E2E: 生成 TCH_SYMMETRY) |
-| `north_arrow` | `north_arrow.lsp` | TNorthThumb | **已验证** (E2E: 生成 TCH_NORTHTHUMB) |
-| `break_line` | `break_line.lsp` | TSymbCut | **已验证** (E2E: 起点→终点→回车, 生成 TCH_RUPTURE) |
-| `section_symbol` | `section_symbol.lsp` | TSection | **已验证** (E2E: 两剖切点→方向→回车, 生成 TCH_SYMB_SECTION) |
-| `drawing_name` | `drawing_name.lsp` | TDrawingName | **已验证** (E2E: 插入位置→回车, 生成 TCH_DRAWINGNAME; 图名文字取面板记忆值) |
-| `rectangle` | `rectangle.lsp` | TRect | **已验证** (E2E: 两角点→回车, 生成 TCH_RECT) |
-| `balcony` | `balcony.lsp` | TBalcony | **已验证** (E2E: 轮廓点列→回车, 生成 TCH_BALCONY) |
-| `step` | `step.lsp` | TStep | **已验证** (E2E: 轮廓点列→回车, 生成 TCH_STEP) |
-| `ramp` | `ramp.lsp` | TAscent | **已验证** (E2E: 点取位置→回车, 生成 TCH_ASCENT; 宽度/坡长取面板记忆值) |
-| `arrow` | `arrow.lsp` | TArrow | **已验证** (E2E: 起点→终点→回车→回车, 生成 TCH_ARROW; 引注文字取面板记忆值, 附 warning) |
-| `rect_roof` | `rect_roof.lsp` | TRectRoof | **已验证** (E2E: 三角点→回车, 生成 TCH_MOUNTROOF; 坡角/出檐取面板记忆值) |
-| `cusp_roof` | `cusp_roof.lsp` | TCuspRoof | **已验证** (E2E: 中心→半径点, 生成 TCH_CUSPROOF; 边数/屋顶高取面板记忆值) |
-| `insight` | `insight.lsp` | TInsight | **已验证** (E2E: 标注位置→回车, 生成 TCH_TDBINSIGHT; 朝向/编号取面板记忆值) |
-| `tree` | `tree.lsp` | TSingleTree | **已验证** (E2E: 插入点→回车, 插入 INSERT 树木图块; 树种/尺寸取面板记忆值) |
-| `line_stair` | `line_stair.lsp` | TLStair | **已验证** (E2E: 点取位置→回车, 生成 TCH_LINESTAIR; 梯段宽/踏步数取面板记忆值) |
-| `arc_stair` | `arc_stair.lsp` | TAStair | **已验证** (E2E: 点取位置→回车, 生成 TCH_ARCSTAIR; 半径/踏步数取面板记忆值) |
-| `double_stair` | `double_stair.lsp` | TRStair | **已验证** (E2E: 插入点→回车, 生成 TCH_RECTSTAIR; 梯段宽/楼梯高取面板记忆值) |
-| `multi_stair` | `multi_stair.lsp` | TMultiStair | **已验证** (E2E: 起点→下一点→回车, 生成 TCH_MULTISTAIR; 跑数/梯段宽取面板记忆值) |
-| `line_pattern` | `line_pattern.lsp` | TLinePattern | **已验证** (E2E: 起点→终点→回车→回车, 生成 TCH_PATH_ARRAY; 样式取面板记忆值) |
-| `wheelchair_diameter` | `wheelchair_diameter.lsp` | TWheelchairDaim | **已验证** (E2E: 中心点→半径/方向点→回车, 生成 TCH_RADIUSDIM; edge 缺省为中心正右 1500mm) |
-| `column` | `column.lsp` | TGColumn | **仅 dry-run** (#32770 面板阻塞, execute 已禁用, Handoff 13) |
-| `door` | `door.lsp` | TOpening | **部分验证** (execute 附 warning) |
-| `window` | `window.lsp` | TOpening | **部分验证** (需先人工切窗模式; 窗台高未保证, execute 附 warning) |
-| `axis_lines` | `axis_lines.lsp` | 原生 LINE | **替代路径** (普通线网格，可 execute) |
-| `explode_read` | `explode_read.lsp` | 原生 EXPLODE | **已验证** (E2E: 副本分解+回滚; 墙体起点侧缺陷见 Handoff 10) |
-| `search_room` | `search_room.lsp` | TUpdSpace | **已验证** (E2E: 闭合墙生成 TCH_SPACE) |
-| `axis_grid` | `axis_grid.lsp` | TRectAxis | **仅 dry-run** (execute 已禁用) |
-| `export_t3` | `export_t3.lsp` | TSaveAs | **仅 dry-run** (execute 已禁用) |
+已从命令集移除不可行项 (column/axis_grid/export_t3经证实为#32770模态对话框阻塞)。
+当前仅保留已验证可命令行驱动的子命令。完整选型历史见`docs/handoff/`系列。
 
-未覆盖（待后续迭代）：楼梯、房间、屋顶、文字标注、门窗表等。
-（符号标注已覆盖坐标/对称轴/指北针/折断线/剖切符号/图名标注；构件已覆盖矩形/阳台/台阶；
-引出标注 `TLeader`、索引类待探，多为多点引线+文字；半径/直径/角度/弧弦标注因选择步打不通暂搁置。）
+| 命令 | 状态 | 备注 |
+|---|---|---|
+| 标准柱 TGColumn | 已移除 | #32770 面板阻塞, 命令行点序列不可达 |
+| 绘制轴网 TRectAxis | 已移除 | 模态对话框, 不可命令行驱动 |
+| 导出天正3 TSaveAs | 已移除 | WPF 框无视 FILEDIA=0 |
+| 窗模式切换 | 窗台高走面板 | COM 方法路线已排除 (itest_29); window 调用前人工切面板 |
+| 轴网对话框自动化 | 待评估 | TRectAxis控件已侦察, 性价比低, 暂用 axis_lines 替代 |
+| TPartSaveAs/TSingleAxisDim | 待探 | P2 静默导出/轴号提示序列未解密 |
 
-## 3. 后续待办
+## 3. 模板与测试
 
-1. **窗模式驱动**：当前门模式下已验证 `Width/Height/DoorSill` 可写；
-   `SillHeight/WindowSillHeight/OpType/Kind/Type/WinType` 均不可读/不可写
-   （`itest_16`）。**COM 方法路线已排除**（2026-06-13，`itest_29`：
-   `GetKind/SetKind/GetSubKind/SetSubKind/OpeningKind/InsertMode` 经
-   vlax-invoke 全部不可用）。已在工具 warning / `window.lsp` 注释中固化
-   "要求用户人工把面板切到窗模式后再调 `window`"的使用约定。
-   若要免人工，剩余路线为门窗面板 UI 自动化（WPF，难）。
-2. **轴网/导出替代路径**：
-   - 轴网：`axis_lines`（普通线网格）已可执行。`TRectAxis` 对话框已侦察
-     （`itest_28` + `docs/research/2026-06-13_rectaxis_dialog_controls.txt`）：
-     MFC 原生框（#32770 + SysTabControl32 + ListBox/Edit 组合），**技术上可
-     dialog_automation 驱动但语义控件无文本，需控件 ID 映射**，性价比低，
-     暂维持 axis_lines 替代；轴号 `TSingleAxisDim` 序列仍未知。
-   - 导出：评估 `TPartSaveAs`、`TGetXML`，或 UI 自动化。
-3. ~~TExplode + ezdxf 读取管线~~ 已完成：`explode_read` 子命令（Handoff 10）。
-   余项：墙体解析式 outline（vlax-curve + 宽度），TCH_OPENING/TCH_DIMENSION2
-   产物质量验证。
-4. 新封装命令一律走已验证模式：官方表取名 → getcname 预检 → 最小点序列
-   试驱动 → 实体增量校验 → COM 属性注参（`scripts/itest_*.py` 为现成管线）。
+子命令 → 模板 → 命令 已在 `tangent.py` 的 `_GENERATORS` 字典与 docstring
+中维护 (单一事实来源)。离线测试: `uv run pytest -q`。
+真机管线: `scripts/itest_01_bringup.py` (引导) → `scripts/itest_12_e2e.py` (核心)
+→ `scripts/itest_e2e_suite.py` (批量)。

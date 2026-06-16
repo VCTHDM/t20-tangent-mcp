@@ -30,14 +30,6 @@ from t20_mcp.tools.tangent import (
 # ---------------------------------------------------------------------------
 
 VALID_CASES: dict[str, dict] = {
-    "axis_grid": {
-        "base_x": 0,
-        "base_y": 0,
-        "hspacings": [3000, 3600, 3000],
-        "vspacings": [4500, 4500],
-        "angle": 0,
-        "layer": "AXIS",
-    },
     "axis_lines": {
         "base_x": 0,
         "base_y": 0,
@@ -51,7 +43,6 @@ VALID_CASES: dict[str, dict] = {
         "left_width": 120, "right_width": 120, "height": 3000,
         "wall_type": "砖墙", "layer": "WALL",
     },
-    "column": {"x": 0, "y": 0},
     "door": {"ins_x": 1500, "ins_y": 0, "width": 900, "height": 2100},
     "window": {"ins_x": 3000, "ins_y": 0, "width": 1500, "height": 1500, "sill_height": 900},
     "dimension": {"p1_x": 0, "p1_y": 0, "p2_x": 6000, "p2_y": 0},
@@ -82,7 +73,6 @@ VALID_CASES: dict[str, dict] = {
     "wheelchair_diameter": {"center_x": 0, "center_y": 0, "edge_x": 1500, "edge_y": 0},
     "explode_read": {"handle": "1a3f", "offset_x": 1_000_000, "offset_y": 1_000_000},
     "search_room": {"layer": "SPACE"},
-    "export_t3": {"out_path": "C:/temp/out_t3.dwg", "target_ver": "t3"},
 }
 
 
@@ -151,24 +141,16 @@ class TestAllSubcommandsGenerateBalanced:
 
 
 class TestDispatchInvariants:
-    def test_warning_and_disabled_maps_reference_known_subcommands(self) -> None:
+    def test_warning_map_references_known_subcommands(self) -> None:
         subcommands = set(SUBCOMMANDS)
         assert set(LOW_CONFIDENCE_SUBCOMMANDS) <= subcommands
         assert set(LOW_CONFIDENCE_WARNINGS) <= subcommands
-        assert set(EXECUTE_DISABLED_SUBCOMMANDS) <= subcommands
 
     def test_low_confidence_warning_keys_match_subcommands(self) -> None:
         assert set(LOW_CONFIDENCE_WARNINGS) == set(LOW_CONFIDENCE_SUBCOMMANDS)
 
-    def test_low_confidence_and_disabled_subcommands_are_disjoint(self) -> None:
-        assert not (set(LOW_CONFIDENCE_SUBCOMMANDS) & set(EXECUTE_DISABLED_SUBCOMMANDS))
-
-    @pytest.mark.parametrize("sub", sorted(EXECUTE_DISABLED_SUBCOMMANDS))
-    def test_execute_disabled_subcommands_still_generate_lisp(self, sub: str) -> None:
-        # Execute gating lives in the MCP wrapper; dry-run generation must remain available.
-        code = generate_lisp(sub, VALID_CASES[sub])
-        assert is_paren_balanced(code)
-        assert "T20MCP-OK" in code
+    def test_execute_disabled_frozen(self) -> None:
+        assert EXECUTE_DISABLED_SUBCOMMANDS == {}
 
 
 # ---------------------------------------------------------------------------
@@ -178,16 +160,17 @@ class TestDispatchInvariants:
 
 class TestParamInjection:
     def test_axis_grid_injects_spacings_and_base(self) -> None:
-        code = generate_lisp("axis_grid", {
+        # axis_lines 使用 LINE 段而非 t20mcp:pt 点序列
+        code = generate_lisp("axis_lines", {
             "base_x": 100, "base_y": 200,
             "hspacings": [3000, 3600], "vspacings": [4500],
             "angle": 30, "layer": "AXIS",
         })
-        assert "t20mcp:pt 100 200" in code       # 基点 (经 t20mcp:pt 转命令行点)
-        assert "3000 3600" in code               # 开间序列
-        assert "4500" in code                    # 进深序列
-        assert '"30"' in code                    # 旋转角
-        assert '"_.-LAYER" "_M" "AXIS"' in code  # 图层注入
+        assert '"_.-LAYER" "_M" "AXIS"' in code
+        assert '"LINE"' in code
+        assert "list" in code  # LINE 段用 (list x1 y1 x2 y2) 形式
+        assert "3000 3600" not in code  # axis_lines 不用间距字符串
+        assert "{{" not in _strip_line_comments(code)
 
     def test_axis_lines_injects_line_segments(self) -> None:
         code = generate_lisp("axis_lines", {
@@ -223,14 +206,6 @@ class TestParamInjection:
         assert '(cons "LeftWidth" (float 100))' in code
         assert '(cons "RightWidth" (float 140))' in code
         assert '(cons "Height" (float 2900))' in code
-
-    def test_column_uses_tgcolumn_point_sequence(self) -> None:
-        code = generate_lisp("column", {"x": 1200, "y": 2400, "angle": 30, "layer": "COL"})
-        assert '"TGCOLUMN"' in code
-        assert "t20mcp:pt 1200 2400" in code
-        assert '"_.-LAYER" "_M" "COL"' in code
-        assert '(float 30)' in code
-        assert '"TCH_COLUMN"' in code
 
     def test_dimension_uses_tdimmp_pos_first(self) -> None:
         # 真机验证: TDIMMP, 顺序 = 尺寸线位置点 -> 点1 -> 点2 -> 回车
@@ -506,23 +481,6 @@ class TestParamInjection:
         code = generate_lisp("door", {"ins_x": 1500, "ins_y": 0})
         assert "_.-LAYER" not in code
 
-    def test_export_t3_injects_path_and_version(self) -> None:
-        code = generate_lisp("export_t3", {"out_path": "D:/dwg/proj.dwg", "target_ver": "天正3"})
-        assert "D:/dwg/proj.dwg" in code
-        assert '"3"' in code
-
-    def test_string_escaping_keeps_balance(self) -> None:
-        # 含引号的内容应被转义且不破坏括号平衡 (反斜杠路径见 P2-3 归一化测试)
-        code = generate_lisp("export_t3", {"out_path": 'C:/a/b"c.dwg'})
-        assert is_paren_balanced(code)
-        assert '\\"c.dwg' in code          # 引号被转义
-
-    def test_export_path_backslash_normalized_to_slash(self) -> None:
-        # P2-3: 反斜杠路径在渲染产物中应统一为正斜杠
-        code = generate_lisp("export_t3", {"out_path": "C:\\dwg\\proj.dwg"})
-        assert "C:/dwg/proj.dwg" in code
-        assert "C:\\dwg" not in code
-
     def test_layer_name_injection_balanced(self) -> None:
         # 图层名含特殊字符不应破坏平衡
         code = generate_lisp("wall", {
@@ -682,34 +640,6 @@ class TestInvalidParamsRejected:
     def test_axis_grid_empty_spacings_rejected(self) -> None:
         with pytest.raises(ParamError):
             generate_lisp("axis_grid", {"hspacings": [], "vspacings": [3000]})
-
-    def test_axis_grid_spacings_not_list(self) -> None:
-        with pytest.raises(ParamError):
-            generate_lisp("axis_grid", {"hspacings": "3000", "vspacings": [3000]})
-
-    def test_axis_grid_spacing_value_out_of_range(self) -> None:
-        with pytest.raises(ParamError):
-            generate_lisp("axis_grid", {"hspacings": [0], "vspacings": [3000]})
-
-    def test_axis_grid_too_many_spacings(self) -> None:
-        with pytest.raises(ParamError):
-            generate_lisp("axis_grid", {"hspacings": [3000] * 201, "vspacings": [3000]})
-
-    def test_angle_out_of_range(self) -> None:
-        with pytest.raises(ParamError):
-            generate_lisp("axis_grid", {"hspacings": [3000], "vspacings": [3000], "angle": 999})
-
-    def test_export_t3_bad_extension(self) -> None:
-        with pytest.raises(ParamError):
-            generate_lisp("export_t3", {"out_path": "C:/temp/out.dxf"})
-
-    def test_export_t3_bad_version(self) -> None:
-        with pytest.raises(ParamError):
-            generate_lisp("export_t3", {"out_path": "C:/temp/out.dwg", "target_ver": "t5"})
-
-    def test_export_t3_empty_path(self) -> None:
-        with pytest.raises(ParamError):
-            generate_lisp("export_t3", {"out_path": ""})
 
     def test_control_char_in_string_rejected(self) -> None:
         # 换行注入企图破坏单行 LISP 字符串 / 命令序列

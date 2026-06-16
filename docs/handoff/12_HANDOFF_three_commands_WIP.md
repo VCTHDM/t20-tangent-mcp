@@ -1,5 +1,10 @@
 # Handoff 12 — TGColumn / TDimTP / TSWall 提示捕获与封装（进行中，未提交）
 
+> **超覆声明 (2026-06-16)**: TGColumn § 被 Handoff 13 覆盖（真机复测定论: #32770 面板阻塞,
+> delta=1 为假成功不可复现）; TDimTP 已封装为 two_point_dimension (Handoff 13);
+> TSWall 被 Handoff 15 覆盖（no-op, 0 实体, 暂不封装）。
+> 本文件仅作历史审计保留, 结论以 Handoff 13/15 为准。
+
 执行人：fable（额度用尽中断）｜ 日期：2026-06-13 ｜ 环境：T20 V10 + AutoCAD 2024（Drawing1.dwg）
 
 > **接手者必读**：本轮在真机上**破译了三个卡住命令的命令行提示序列**（之前两轮调研+

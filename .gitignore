@@ -48,3 +48,10 @@ C:/temp/
 .vscode/
 .idea/
 *.swp
+
+# PyTest
+.pytest_cache/
+
+# Other caches
+.uv-cache/
+.venv-test/

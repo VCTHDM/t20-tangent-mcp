@@ -1,5 +1,8 @@
 # Handoff 18 — TParallelDim / TArrow 初探停手记录
 
+> **补注 (2026-06-16)**: TArrow 已在 Handoff 22 成功封装为 arrow 子命令
+> (E2E: 起点→终点→回车→回车 → TCH_ARROW)。本文件仅作历史审计保留。
+
 执行者：Codex ｜ 日期：2026-06-13 ｜ 环境：T20 V10 + AutoCAD 2024（Drawing1.dwg）
 
 ## 结论

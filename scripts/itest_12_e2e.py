@@ -110,6 +110,15 @@ async def main() -> int:
     results["door"] = ok
     print(f"[door] ok={ok} exec={r.ok} type={t.payload!r} readback={rb.payload!r}")
 
+    # --- 3b. opening ancillary COM properties (SillHeight/OpType/Kind) ---
+    extra_rb = await backend.execute_lisp(
+        READBACK.replace("{PROPS}",
+            '"SillHeight" "WindowSillHeight" "OpType" "Kind" "Type" "WinType"'))
+    results["door_extra_props"] = (
+        extra_rb.ok and "SillHeight" in str(extra_rb.payload)
+    )
+    print(f"[door_extra_props] ok={results['door_extra_props']} readback={extra_rb.payload!r}")
+
     # --- 清理与环境复位 ---
     for _ in range(3):
         await backend.undo()

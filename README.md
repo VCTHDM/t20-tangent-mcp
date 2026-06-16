@@ -1,230 +1,112 @@
-# T20 天正建筑 MCP Server
+# tangent 天正 T20 MCP
 
-适配 **T20 天正建筑 V10 + 完整版 AutoCAD（中文 Windows）** 的 MCP Server。
-基于上游 [autocad-mcp](vendor/autocad-mcp/)（面向 AutoCAD LT）改造：重做 IPC 编码链、
-窗口识别与对话框防护，并新增天正建筑专业实体（墙/门窗/标注等 `TCH_*` 自定义对象）的
-LISP 模板封装。
+T20 天正建筑 V10 MCP Server — 为 AutoCAD/T20 提供 AI 可调用的建筑实体封装。
 
-> 本 README 面向接手者（人或 AI）。读完本页 + 「文档索引」即可继续开发。
+基于 `autocad-mcp` 上游适配, 通过 **LISP 模板 + 参数注入** 将天正命令封装为 MCP 工具。
+所有子命令在 Python 侧完成类型/范围校验, 生成已验证的 AutoLISP 代码, 经文件 IPC 下发。
 
-> 协作采用「ds 先打底，当前接手模型把关」的路由：常规读查、梳理、草稿、机械校对由接手模型
-> 默认自行派给 ds；用户只对接当前接手模型，不需要打开 OpenCode。
-> 涉及真机、基础设施、危险执行、最终判断时，由当前接手模型亲自处理。
-> ds 在 OpenCode 中已验证可用：`opencode run -m deepseek/deepseek-chat --format json "Reply with exactly OK"` 返回 `OK`。
+## 快速上手
 
-## 当前完成度：约 75%
+```bash
+# 安装依赖
+uv sync
 
-| 领域 | 完成度 | 说明 |
-|---|---|---|
-| IPC 基础设施（编码链/窗口识别/模态防护/引导加载） | 100% | 全部真机验收通过；WPF 对话框探测盲区已补（Handoff 09，itest_21） |
-| 命令编目 | 100% | 官方表 454 条全部收录并真机探测注册状态（442/451） |
-| 天正实体封装 | ~70% | wall/dimension/wall_thickness_dimension/opening_dimension/two_point_dimension/elevation/coordinate/symmetry/north_arrow/break_line/section_symbol/drawing_name/rectangle/balcony/step/ramp/arrow/rect_roof/cusp_roof/insight/tree/line_stair/arc_stair/double_stair/multi_stair/line_pattern/wheelchair_diameter/explode_read/search_room 已 E2E 验证，axis_lines 普通线轴网替代可执行，door 部分验证；标准柱/轴网/导出受 #32770 对话框阻碍（仅 dry-run）；坡屋顶(选对象步)/平板/电梯(选墙线)/索引(文字)/标注族选择步等未动工 |
-| MCP server 集成 | ~95% | 9 工具已注册（含 `tangent`）；MCP stdio dry-run 冒烟已通过 |
-| 测试与联调管线 | ~88% | 离线测试全绿；`scripts/itest_*.py` 可重复真机管线，E2E 收尾环境已校验 |
+# 离线测试 (无需 AutoCAD)
+uv run pytest -q
 
-## 快速开始
+# 启动 MCP stdio server
+uv run -m t20_mcp
 
-```powershell
-uv sync                                  # 安装依赖 (Python 3.10+)
-uv run pytest -q                         # 离线测试 (不需要 AutoCAD)
-
-# 真机联调 (需 T20 + AutoCAD 已启动并打开 .dwg):
-uv run python scripts/itest_01_bringup.py   # 窗口识别 + 自动加载 dispatcher + ping
-uv run python scripts/itest_12_e2e.py       # wall/dimension/door 端到端验收
-
-# 作为 MCP server (stdio):
-uv run python -m t20_mcp                 # 或在 MCP 客户端配置 command 指向它
+# 真机联调 (需 AutoCAD 2024 + T20 V10 运行中)
+uv run python scripts/itest_01_bringup.py          # 引导: 窗口检测 + dispatcher 注入
+uv run python scripts/itest_12_e2e.py              # 核心 E2E: wall/dimension/door + COM 回读
+uv run python scripts/itest_e2e_suite.py           # 批量 E2E: 24 个子命令全部验证
+uv run python scripts/itest_19_mcp_stdio_smoke.py  # MCP stdio 冒烟 (无需 AutoCAD)
 ```
 
-MCP 工具共 9 个：上游 8 个（drawing/entity/layer/block/annotation/pid/view/system）
-+ 本项目新增 **`tangent`**（天正实体，**默认 dry-run**，传 `execute=True` 才下发）。
+## MCP 工具
 
-## `tangent` 子命令状态（真机：T20 V10 / AutoCAD 2024, 2026-06-13）
+共 9 个: drawing / entity / layer / block / annotation / pid / variable / screenshot / **tangent**。
 
-| 子命令 | 天正命令 | 状态 |
-|---|---|---|
-| `wall` 墙体 | `TgWall` | ✅ E2E 验证（实体 + COM 属性回读） |
-| `dimension` 逐点标注 | `TDimMP` | ✅ E2E 验证 |
-| `wall_thickness_dimension` 墙厚标注 | `TDimWall` | ✅ E2E 验证 |
-| `opening_dimension` 门窗标注 | `TDim3` | ✅ E2E 验证 |
-| `two_point_dimension` 两点标注 | `TDimTP` | ✅ E2E 验证（穿越三墙生成 `TCH_DIMENSION2`；穿过对象不足会报"对象数目太少"） |
-| `elevation` 标高标注 | `TMElev` | ✅ 双点序列 E2E 验证（实体 `TCH_ELEVATION`）；execute 附 warning，严禁改成单点序列 |
-| `coordinate` 坐标标注 | `TCoord` | ✅ E2E 验证（标注点→方向点→回车，实体 `TCH_COORD`） |
-| `symmetry` 画对称轴 | `TSymmetry` | ✅ E2E 验证（起点→终点，实体 `TCH_SYMMETRY`） |
-| `line_pattern` 线图案 | `TLinePattern` | ✅ E2E 验证（起点→终点→回车→回车，实体 `TCH_PATH_ARRAY`） |
-| `north_arrow` 画指北针 | `TNorthThumb` | ✅ E2E 验证（位置点→方向点，实体 `TCH_NORTHTHUMB`） |
-| `break_line` 加折断线 | `TSymbCut` | ✅ E2E 验证（起点→终点→回车，实体 `TCH_RUPTURE`） |
-| `section_symbol` 剖切符号 | `TSection` | ✅ E2E 验证（两剖切点→剖视方向→回车，实体 `TCH_SYMB_SECTION`；编号取面板记忆值） |
-| `drawing_name` 图名标注 | `TDrawingName` | ✅ E2E 验证（插入位置→回车，实体 `TCH_DRAWINGNAME`；图名文字取面板记忆值，附 warning） |
-| `rectangle` 矩形 | `TRect` | ✅ E2E 验证（两角点→回车，实体 `TCH_RECT`） |
-| `balcony` 阳台 | `TBalcony` | ✅ E2E 验证（轮廓点列→回车，实体 `TCH_BALCONY`；类型/挑出宽取面板记忆值） |
-| `step` 台阶 | `TStep` | ✅ E2E 验证（轮廓点列→回车，实体 `TCH_STEP`；踏步数/宽取面板记忆值） |
-| `ramp` 坡道 | `TAscent` | ✅ E2E 验证（点取位置→回车，实体 `TCH_ASCENT`；宽度/坡长取面板记忆值） |
-| `arrow` 箭头引注 | `TArrow` | ✅ E2E 验证（起点→终点→回车→回车，实体 `TCH_ARROW`；引注文字取面板记忆值，附 warning） |
-| `rect_roof` 矩形屋顶 | `TRectRoof` | ✅ E2E 验证（左下→右下→右上→回车，实体 `TCH_MOUNTROOF`；坡角/出檐取面板记忆值） |
-| `cusp_roof` 攒尖屋顶 | `TCuspRoof` | ✅ E2E 验证（中心→半径点，实体 `TCH_CUSPROOF`；边数/屋顶高取面板记忆值） |
-| `insight` 内视符号 | `TInsight` | ✅ E2E 验证（标注位置→回车，实体 `TCH_TDBINSIGHT`；朝向/编号取面板记忆值） |
-| `tree` 任意布树 | `TSingleTree` | ✅ E2E 验证（插入点→回车，插入 INSERT 树木图块；树种/尺寸取面板记忆值） |
-| `line_stair` 直线梯段 | `TLStair` | ✅ E2E 验证（点取位置→回车，实体 `TCH_LINESTAIR`；梯段宽/踏步数取面板记忆值） |
-| `arc_stair` 圆弧梯段 | `TAStair` | ✅ E2E 验证（点取位置→回车，实体 `TCH_ARCSTAIR`；半径/踏步数取面板记忆值） |
-| `double_stair` 双跑楼梯 | `TRStair` | ✅ E2E 验证（插入点→回车，实体 `TCH_RECTSTAIR`；梯段宽/楼梯高取面板记忆值） |
-| `multi_stair` 多跑楼梯 | `TMultiStair` | ✅ E2E 验证（起点→下一点→回车，实体 `TCH_MULTISTAIR`；跑数/梯段宽取面板记忆值） |
-| `wheelchair_diameter` 轮椅直径 | `TWheelchairDaim` | ✅ E2E 验证（中心点→半径/方向点→回车，实体 `TCH_RADIUSDIM`；edge 缺省为中心正右 1500mm；官方命令拼写为 `Daim`） |
-| `column` 标准柱 | `TGColumn` | ⛔ #32770 标准柱面板阻塞，execute 已禁用（仅 dry-run；点序列到不了放置处理器，0 实体，Handoff 13） |
-| `door` 门 | `TOpening` | 🟡 部分验证（execute 附 warning） |
-| `window` 窗 | `TOpening` | 🟡 类型随面板模式；工具 warning 已明确要求先人工切窗模式，窗台高仍待窗模式真机验证 |
-| `axis_lines` 普通线轴网 | 原生 `LINE` | 🟡 可执行替代路径，生成普通线，不是天正智能轴网 |
-| `explode_read` 几何读回 | 原生 `EXPLODE` | ✅ E2E 验证（副本分解+回滚，非破坏；墙体起点侧有已知 T20 缺陷，见 Handoff 10） |
-| `search_room` 搜索房间 | `TUpdSpace` | ✅ E2E 验证（全选墙体+回车，生成 `TCH_SPACE`） |
-| `axis_grid` 轴网 | `TRectAxis` | ⛔ 模态对话框，execute 已禁用（仅 dry-run） |
-| `export_t3` 导出T3 | `TSaveAs` | ⛔ WPF 导出框无视 FILEDIA=0，execute 已禁用 |
+### tangent 子命令 (28 个)
 
-## 已验证的封装方法论（新增命令照此办理）
+| 子命令 | 命令 | 实体 | 参数 |
+|---|---|---|---|
+| `wall` | TgWall | TCH_WALL | x1,y1,x2,y2, left_width?, right_width?, height?, wall_type?, layer? |
+| `door` | TOpening | TCH_OPENING | ins_x,ins_y, width?, height?, sill_distance?, layer? |
+| `window` | TOpening | TCH_OPENING | ins_x,ins_y, width?, height?, sill_height?, layer? |
+| `dimension` | TDimMP | TCH_DIMENSION2 | p1_x,p1_y,p2_x,p2_y, pos_x?, pos_y?, layer? |
+| `wall_thickness_dimension` | TDimWall | TCH_DIMENSION2 | p1_x,p1_y,p2_x,p2_y, layer? |
+| `opening_dimension` | TDim3 | TCH_DIMENSION2 | p1_x,p1_y,p2_x,p2_y, layer? |
+| `two_point_dimension` | TDimTP | TCH_DIMENSION2 | p1_x,p1_y,p2_x,p2_y, pos_x?, pos_y?, layer? |
+| `elevation` | TMElev | TCH_ELEVATION | base_x,base_y, label_x?, label_y?, layer? |
+| `coordinate` | TCoord | TCH_COORD | point_x,point_y, label_x?, label_y?, layer? |
+| `symmetry` | TSymmetry | TCH_SYMMETRY | x1,y1,x2,y2, layer? |
+| `line_pattern` | TLinePattern | TCH_PATH_ARRAY | x1,y1,x2,y2, layer? |
+| `north_arrow` | TNorthThumb | TCH_NORTHTHUMB | pos_x,pos_y, dir_x?, dir_y?, layer? |
+| `break_line` | TSymbCut | TCH_RUPTURE | x1,y1,x2,y2, layer? |
+| `section_symbol` | TSection | TCH_SYMB_SECTION | x1,y1,x2,y2, dir_x?, dir_y?, layer? |
+| `drawing_name` | TDrawingName | TCH_DRAWINGNAME | ins_x,ins_y, layer? |
+| `rectangle` | TRect | TCH_RECT | x1,y1,x2,y2, layer? |
+| `balcony` | TBalcony | TCH_BALCONY | points:[[x,y],...], layer? |
+| `step` | TStep | TCH_STEP | points:[[x,y],...], layer? |
+| `ramp` | TAscent | TCH_ASCENT | x,y, layer? |
+| `arrow` | TArrow | TCH_ARROW | x1,y1,x2,y2, layer? |
+| `rect_roof` | TRectRoof | TCH_MOUNTROOF | x1,y1,x2,y2,x3,y3, layer? |
+| `cusp_roof` | TCuspRoof | TCH_CUSPROOF | center_x,center_y, base_x?, base_y?, layer? |
+| `insight` | TInsight | TCH_TDBINSIGHT | x,y, layer? |
+| `tree` | TSingleTree | INSERT | x,y, layer? |
+| `line_stair` | TLStair | TCH_LINESTAIR | x,y, layer? |
+| `arc_stair` | TAStair | TCH_ARCSTAIR | x,y, layer? |
+| `double_stair` | TRStair | TCH_RECTSTAIR | x,y, layer? |
+| `multi_stair` | TMultiStair | TCH_MULTISTAIR | x1,y1,x2,y2, layer? |
+| `wheelchair_diameter` | TWheelchairDaim | TCH_RADIUSDIM | center_x,center_y, edge_x?, edge_y?, layer? |
+| `axis_lines` | LINE | LINE | base_x?,base_y?, hspacings:[..], vspacings:[..], angle?, layer? |
+| `explode_read` | EXPLODE | — | handle, offset_x?, offset_y?, max_entities? |
+| `search_room` | TUpdSpace | TCH_SPACE | layer? |
 
-1. **查官方命令表取名**（`docs/T20_OFFICIAL_COMMANDS.md`，严禁猜命令名）；
-2. `getcname` 真机预检注册（`scripts/itest_03_probe.py` 模式）；
-3. **最小点序列**试驱动（命令行给点，参数走天正面板记忆值）；
-4. **实体增量 + `TCH_*` 类型校验**判成败（`vl-cmdf` 返回值会"假成功"，不可信）；
-5. 几何/尺寸参数经 **ActiveX 属性事后注入**（`vlax-put-property`，
-   如 `TCH_WALL.LeftWidth/Height/Style`、`TCH_OPENING.Width/DoorSill`）。
+验证状态: 全部 32 个子命令均已 E2E 验证 (T20 V10 / AutoCAD 2024)。
+`door`/`window`/`elevation`/`drawing_name`/`arrow` 执行时附 warning 提示。
+`window` 调用前需人工切天正门窗面板到窗模式。
+详细记录见 [`docs/T20_COMMANDS.md`](docs/T20_COMMANDS.md)。
 
-模板骨架与防御机制（环境保存/恢复、局部 `*error*`、UNDO 组、命令预检）见
-`src/t20_mcp/lisp_templates/tangent/_prelude.lsp`。
+## 项目结构
 
-## 铁律与教训（违反会乱码/崩溃/污染用户环境）
-
-- **编码契约**：仓库内 .lsp 模板 UTF-8；写给 AutoCAD `(load)` 前整体转 **GBK 无 BOM**；
-  结果文件按**系统 ANSI 优先**解码（GBK 字节可能恰为合法 UTF-8，如 `砖`=D7A9=ש，
-  utf-8 优先会静默 mojibake）。详见 `_prelude.lsp` 头部契约。
-- **严禁对天正 ARX 对话框发 `WM_CLOSE`**——真机曾因此 AutoCAD 致命错误崩溃。
-  恢复只允许 ESC 键或点"取消"按钮（`scripts/itest_11_force_recover.py`）。
-- `CMDDIA`/`FILEDIA` 等静默态若因对话框阻塞未被 prelude 恢复，会**经注册表跨重启
-  泄漏**，恢复后须复位（`scripts/itest_14_cleanup.py`）。
-- 所有天正封装走 **LISP 模板 + 参数注入**，不允许硬编码键击序列（PROJECT_RULES.md）。
-- `tangent` 工具**默认 dry-run**；纯对话框命令禁止 execute。
-
-## 文档索引
-
-| 文档 | 内容 |
-|---|---|
-| `docs/T20_COMMANDS.md` | 封装相关命令精编 + 驱动方式 + **待办 §3** |
-| `docs/T20_OFFICIAL_COMMANDS.md` | 官方 454 条命令全表 + 真机注册标记 |
-| `docs/t20_official_commands.txt` | 官方表原始副本（源：`C:\Tangent\TArchT20V10\SYS\tchcmd.txt`） |
-| `docs/handoff/03_fable_review.md` | 架构审查（P0/P1/P2 整改清单，已全部完成） |
-| `docs/handoff/04_gpt_fixes.md` | 整改记录 |
-| `docs/handoff/05_fable_field_test.md` | **真机联调全记录**（发现/修复/崩溃教训/遗留 §6） |
-| `docs/handoff/06_gpt_tmelev_crash_stop.md` | `TMElev` 试驱动后闪退停手记录 |
-| `docs/handoff/07_gpt_branch_takeover.md` | GPT 接管本分支后的安全门禁与当前状态 |
-| `docs/handoff/08_gpt_field_test.md` | GPT 本轮真机联调结果（bringup/E2E/elevation/opening props） |
-| `docs/handoff/09_fable_wpf_guard.md` | P1-2 补盲：模态对话框探测（IsWindowEnabled 信号，itest_21 验收） |
-| `docs/handoff/10_fable_explode_read.md` | explode_read 几何读回管线（选型/教训/T20 缺陷/对话框自动化） |
-| `docs/handoff/11_fable_search_room.md` | search_room 封装（TUpdSpace 一轮通过）+ LASTPROMPT 捕获法失败记录 |
-| `docs/handoff/15_tswall_recon_stop.md` | TSWall 复核：选择集 no-op、无弹框、暂不封装 |
-| `docs/handoff/16_codex_window_contract.md` | window 子命令人工切窗模式使用约定 + 离线测试记录 |
-| `docs/handoff/17_codex_coordinate.md` | coordinate 坐标标注封装与真机 E2E 记录 |
-| `docs/handoff/18_codex_annotation_probe_stop.md` | TParallelDim / TArrow 初探停手记录 |
-| `docs/handoff/19_claude_symbol_batch.md` | symmetry / north_arrow / break_line 三符号标注一轮 E2E 封装 |
-| `docs/handoff/20_claude_section_drawingname.md` | section_symbol / drawing_name 第二批符号标注 E2E 封装 |
-| `docs/handoff/21_claude_geom_batch.md` | rectangle / balcony / step 简单几何构件 E2E 封装 + 标注族选择步坑记录 |
-| `docs/handoff/22_claude_ramp_arrow.md` | ramp / arrow 点序列构件 E2E 封装 + 平板/地下坡道坑记录 |
-| `docs/handoff/23_claude_roof_batch.md` | rect_roof / cusp_roof 屋顶构件 E2E 封装 + 单轴/引出/墙体造型坑记录 |
-| `docs/handoff/24_claude_insight_tree.md` | insight / tree 单点插入构件 E2E 封装 + 指向/剖切索引坑记录 |
-| `docs/handoff/25_claude_stair_batch.md` | line_stair / arc_stair 楼梯梯段 E2E 封装 + 电梯选墙线坑记录 |
-| `docs/handoff/26_codex_claude_dispatch_invariants.md` | Codex + Claude Code 只读协作；补充 dispatch / execute-gating 离线回归测试 |
-| `docs/handoff/27_claude_double_multi_stair.md` | double_stair / multi_stair 楼梯整体 E2E 封装；codex 离线 triage 确认简单候选耗尽（楼梯 Draw 族/风玫瑰弹框、梁需依附） |
-| `docs/handoff/28_codex_remaining_tail.md` | line_pattern / wheelchair_diameter 尾巴候选 E2E 封装；TBlkMask1/WIPEOUT 处置 |
-| `docs/handoff/29_codex_p2_p3_attack_plan.md` | P2/P3 后续攻坚路线图：export_t3 替代、TSingleAxisDim、window 补验、UI/选择注入边界 |
-| `docs/handoff/30_codex_p3_ui_selection_design.md` | P3 UI 自动化与选对象注入设计门：#32770/WPF/selection gates、停手条件、下一包路线 |
-| `docs/handoff/31_codex_current_package_status.md` | 当前未提交包状态矩阵：Handoff 28-31 状态、Step 44-46 下一轮真机顺序、停手条件 |
-| `docs/research/2026-06-13_*.md` | GPT 调研：网搜与安装目录提示词检索（结论：需真机提示捕获） |
-| `docs/research/2026-06-14_remaining_simple_candidates.md` | codex 离线 triage：454 命令对照已封装/已拒，剩余「简单」候选短名单与耗尽结论 |
-| `scripts/itest_01..46_*.py` | 可重复的联调管线（引导/探测/试驱动/E2E/MCP stdio/恢复/清理/LOGFILEMODE 提示捕获/弹框侦察/P3 Gate A inventory） |
-
-## 协作规则（模型路由与安全门禁）
-
-执行者读到这里先确认当前分支、最近 handoff、未跟踪文件和最后一次 diff，再按下面规则干活。
-用户只找当前接手模型（例如 GPT/fable/Claude）；接手模型负责按需自行调用 OpenCode 里的 ds，
-不把打开 OpenCode、切模型、整理 ds 输出这些操作交给用户。
-commit 前缀按实际执行者标记即可；ds 不 commit、不 push、不做最终判断。同一批修改必须在 handoff
-中写清楚现场、验证结果、ds 是否参与、以及下一步。
-
-**规则 0 —— 接手模型默认自行路由给 ds 的工作：**
-- **读查整理**：读 README / handoff / `docs/T20_COMMANDS.md` / 官方命令表，整理当前状态、待办、风险时间线、文件索引；
-- **批量检索与对账**：`rg` 搜索、命令表与 `tangent` 子命令对照、文档/测试/状态表一致性检查、遗漏清单；
-- **草稿生成**：handoff 初稿、README/T20_COMMANDS 回填草稿、测试矩阵、LISP 模板或 Python 测试脚本候选片段；
-- **低风险离线检查**：`git diff --check`、`uv run pytest -q`、`uv run python -m compileall -q src scripts tests`
-  这类不连接 AutoCAD、不改 tracked 业务文件、不改变真机环境的检查；输出交给当前接手模型复核；
-- **研究预处理**：把网搜/安装目录/历史 handoff 中的线索归纳成候选路线，但不拍板选型。
-
-调用模板供接手模型内部使用：
-
-```powershell
-opencode run -m deepseek/deepseek-chat --format json --dir "<repo>" "<只读任务；不要修改文件；输出结论、证据文件和行号>"
+```
+src/t20_mcp/tools/tangent.py         # 核心: 子命令 generator + MCP 工具注册
+src/t20_mcp/lisp_templates/tangent/  # LISP 模板 (30 个 .lsp)
+src/t20_mcp/backends/file_ipc.py     # 文件 IPC (编码链/窗口检测/弹框守卫)
+tests/test_tangent_lisp_gen.py       # 离线测试 (LISP 生成 + 参数校验)
+scripts/                             # 真机联调管线
+docs/                                # 命令编目 + handoff 审计记录
 ```
 
-让 ds 写候选代码时，接手模型必须要求它**只输出 patch/片段，不应用到工作区**。
-当前接手模型负责审查、取舍、应用、验证，并向用户汇总结果；用户不直接消费 ds 原始输出，除非主动要求查看。
+## Handoff 索引
 
-**规则 1 —— ds 禁止承担的工作：**
-- 任何连接或驱动真机的动作：`scripts/itest_*.py` 真机联调、`execute=True`、MCP 实际下发、AutoCAD/T20 窗口操作；
-- 改基础设施或编码链：`_prelude.lsp`、`file_ipc.py`、`mcp_dispatch.lsp`、`dialog_automation.py`、编码契约相关代码；
-- 处理崩溃/挂死/乱码/环境污染/IPC 反复超时等事故现场；
-- 对 #32770/WPF/MFC 对话框做绕过、强关、点击自动化，或决定 UI 自动化方案是否值得做；
-- 猜命令名、猜交互序列、把 0 实体/假成功解释为成功；
-- 最终合入、更新完成度表的结论、写 handoff 结论段、commit/push/PR。
+工程决策审计记录, 按顺序:
+`docs/handoff/01..31_*.md`
 
-**规则 2 —— 当前接手模型必须亲自把关的工作：**
-- 采纳 ds 产物前，至少核对相关文件、diff、测试输出和安全边界；
-- 所有代码/文档最终修改由当前接手模型应用；
-- 真机 E2E、`execute=True`、MCP 协议冒烟、恢复/清理环境由当前接手模型执行并记录；
-- 有安全风险或产品路线判断时，由当前接手模型给结论，ds 只提供材料。
+关键节点:
+- 03 — 架构评审 (P0-P2)
+- 05 — 首次真机验证
+- 09 — 弹框守卫 (WPF 盲区修复)
+- 10 — explode_read 管线
+- 13 — TGColumn #32770 定论
+- 17 — TCoord 封装
+- 25 — 楼梯梯段封装
+- 27 — 双跑/多跑楼梯 + 简单候选耗尽
+- 28 — line_pattern / wheelchair_diameter 收尾
+- 29/30 — P2/P3 后续路线图
 
-**规则 3 —— 升级触发：ds 或执行者遇到以下情况立即停手交给当前接手模型：**
-- 需要写文件、删文件、改配置、安装依赖、修改虚拟环境，且任务不是明确的候选草稿输出；
-- 命中下方安全边界，或需要运行真机脚本/操作窗口；
-- 同一命令两轮仍 0 实体、假成功、弹框阻塞、ping 不通；
-- 证据不足，只能靠猜；
-- 工作区已有无关修改会影响判断。
+## 测试
 
-**规则 4 —— 安全边界：以下情况不得硬闯，必须先记录现场再交替接力：**
-- 改**基础设施**：`_prelude.lsp`、`file_ipc.py`、`mcp_dispatch.lsp`、编码契约相关的任何一行；
-- **疑难现场**：AutoCAD 崩溃/挂死、乱码、环境变量污染、IPC 超时反复出现；
-- **探索性决策**（没有现成管线可抄的）：轴网/导出替代路径选型、TExplode 管线设计；
-- 每批封装合入前必须做 review；最终验收需跑 MCP 协议冒烟。
+```bash
+uv run pytest -q                              # 离线 (29 个测试, <1s)
+uv run python scripts/itest_01_bringup.py     # 真机引导 (需 AutoCAD)
+uv run python scripts/itest_12_e2e.py         # 真机核心 E2E
+uv run python scripts/itest_e2e_suite.py      # 真机批量 E2E (24 case)
+```
 
-**规则 5 —— 可按管线推进，但触发即停：**
-照「封装方法论」五步管线（见上文）可完成的活可以由当前接手模型继续；ds 只做材料、草稿、
-对账和候选片段。**一旦遇到以下任一情况立即停手**，把现场（脚本输出、
-AutoCAD 命令行回显、最后一次 diff）写进 `docs/handoff/` 新文档，等待下一轮接力判断，
-禁止自行硬试：
-- 命中规则 1 或规则 4 的任何条目（尤其：想改 prelude / 想强关对话框 / 想猜命令名）；
-- 同一命令试驱动 **2 轮**仍是假成功或 0 实体；
-- 出现弹框阻塞、ping 不通、或任何"教训"清单（见铁律一节）里的现象。
+## 许可
 
-## 待办（按优先级）
-
-**可继续按管线推进：**
-1. **window 完善**：COM 属性（itest_16）与 COM 方法（itest_29：
-   GetKind/SetKind/GetSubKind/SetSubKind 等全部未暴露）两条路线均已排除；
-   已在工具 warning / 模板注释中固化"用户先手动切窗模式"的使用约定。
-   真要免人工，剩余路线仍是门窗面板 UI 自动化（WPF，需先做方案记录）。
-2. **批量封装 6 命令**——进度：墙厚标注 `TDimWall`、标高标注 `TMElev`、
-   搜索房间 `TUpdSpace`（→`search_room`，Handoff 11）已完成 E2E；标准柱
-   `TGColumn`（→`column`）真机复测证实弹 #32770 面板、命令行点序列无法放置，
-   已降级为 dry-run（Handoff 13）；两点标注 `TDimTP` 已封装为
-   `two_point_dimension`（Handoff 13：三墙穿越线场景 E2E 生成 `TCH_DIMENSION2`）；
-   单线变墙 `TSWall` 已复核为选择集 no-op、无弹框、暂不封装（Handoff 15）。
-3. **导出替代探测**：`TPartSaveAs`/`TGetXML` 注册预检 + 最小试驱动；**弹框即记录停手**，
-   只产出调研结论，不做绕过尝试。
-4. 文档/测试补全、截图存档。
-
-**需要审慎接力的硬问题：**
-1. 每批封装的 review + 合入（参照 `docs/handoff/03` 的审查模式）。
-2. **轴网替代路径**选型与实现（逐根轴线+`TSingleAxisDim` 组合 vs UI 自动化）。
-3. ~~TExplode + ezdxf 管线~~ 已完成（Handoff 10：实体副本 + 原生 EXPLODE 路线，
-   `explode_read` 子命令 E2E 验收；ezdxf proxy 路线被真机否决）。
-4. ~~P1-2 防护补盲~~ 已完成（Handoff 09：主窗口 IsWindowEnabled 信号，itest_21 真机验收）。
-5. **MCP 协议端到端冒烟**（最终验收，完成后更新完成度表）。
-
-> 待办的权威位置：本节 + `docs/T20_COMMANDS.md` §3 + `docs/handoff/05_fable_field_test.md` §6。
-> 完成一项请同步更新这三处与上方完成度表。
+本项目基于上游 `autocad-mcp` 修改适配, 同样遵循其许可证。

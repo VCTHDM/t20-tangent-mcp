@@ -283,26 +283,6 @@ def _render(template_name: str, tokens: dict[str, str]) -> str:
 # ---------------------------------------------------------------------------
 
 
-def _gen_axis_grid(data: dict[str, Any]) -> str:
-    """直线轴网。data: {base_x, base_y, hspacings:[...], vspacings:[...], angle?, layer?}"""
-    base_x = _require_coord(data.get("base_x", 0.0), "base_x")
-    base_y = _require_coord(data.get("base_y", 0.0), "base_y")
-    hspacings = _require_spacings(data.get("hspacings"), "hspacings")
-    vspacings = _require_spacings(data.get("vspacings"), "vspacings")
-    angle = _require_range(data.get("angle", 0.0), "angle", *ANGLE_RANGE)
-    return _render(
-        "axis_grid",
-        {
-            "SET_LAYER": _set_layer_cmd(data.get("layer")),
-            "BASE_X": _num(base_x),
-            "BASE_Y": _num(base_y),
-            "HSPACE": " ".join(_num(s) for s in hspacings),
-            "VSPACE": " ".join(_num(s) for s in vspacings),
-            "ANGLE": _num(angle),
-        },
-    )
-
-
 def _gen_axis_lines(data: dict[str, Any]) -> str:
     """普通 LINE 轴线网格。data: {base_x, base_y, hspacings:[...], vspacings:[...], angle?, layer?}"""
     base_x = _require_coord(data.get("base_x", 0.0), "base_x")
@@ -382,68 +362,53 @@ def _gen_wall(data: dict[str, Any]) -> str:
     )
 
 
-def _gen_column(data: dict[str, Any]) -> str:
-    """标准柱。data: {x,y, angle?, layer?}
+def _gen_opening(data: dict[str, Any], mode: str = "door") -> str:
+    """门窗 (TOpening)。data: {ins_x, ins_y, width?, height?, sill_distance?|sill_height?, layer?}
 
-    截面尺寸由天正标准柱面板当前记忆值决定; angle 仅尝试常见 COM 属性名,
-    属性不存在时模板会吞掉错误, 不影响已验证的点序列建柱路径。
+    mode="door": 注入 DoorSill (距墙垛距离), 默认宽900高2100。
+    mode="window": 注入 SillHeight (窗台高), 默认宽1500高1500台高900。
+      调用前需人工切天正门窗面板到窗模式, 否则 TOpening 可能沿用门模式。
     """
-    x = _require_coord(data.get("x"), "x")
-    y = _require_coord(data.get("y"), "y")
-    angle = _require_range(data.get("angle", 0.0), "angle", *ANGLE_RANGE)
+    ins_x = _require_coord(data.get("ins_x"), "ins_x")
+    ins_y = _require_coord(data.get("ins_y"), "ins_y")
+    if mode == "door":
+        width = _require_range(data.get("width", 900.0), "width", *OPENING_WIDTH_RANGE)
+        height = _require_range(data.get("height", 2100.0), "height", *HEIGHT_RANGE)
+        sill = _require_range(data.get("sill_distance", 0.0), "sill_distance", *SILL_RANGE)
+        com = (
+            f'(foreach pv (list (cons "Width" (float {_num(width)}))'
+            f' (cons "Height" (float {_num(height)}))'
+            f' (cons "DoorSill" (float {_num(sill)})))\n'
+            f'           (vl-catch-all-apply \'vlax-put-property (list t20mcp:obj (car pv) (cdr pv))))'
+        )
+    else:
+        width = _require_range(data.get("width", 1500.0), "width", *OPENING_WIDTH_RANGE)
+        height = _require_range(data.get("height", 1500.0), "height", *HEIGHT_RANGE)
+        sill = _require_range(data.get("sill_height", 900.0), "sill_height", *SILL_RANGE)
+        com = (
+            f'(foreach pv (list (cons "Width" (float {_num(width)}))'
+            f' (cons "Height" (float {_num(height)}))'
+            f' (cons "SillHeight" (float {_num(sill)})))\n'
+            f'           (vl-catch-all-apply \'vlax-put-property (list t20mcp:obj (car pv) (cdr pv))))'
+        )
     return _render(
-        "column",
+        "opening",
         {
             "SET_LAYER": _set_layer_cmd(data.get("layer")),
-            "X": _num(x),
-            "Y": _num(y),
-            "ANGLE": _num(angle),
+            "MODE": mode,
+            "INS_X": _num(ins_x),
+            "INS_Y": _num(ins_y),
+            "COM_INJECT": com,
         },
     )
 
 
 def _gen_door(data: dict[str, Any]) -> str:
-    """普通门。data: {ins_x, ins_y, width?, height?, sill_distance?, layer?}"""
-    ins_x = _require_coord(data.get("ins_x"), "ins_x")
-    ins_y = _require_coord(data.get("ins_y"), "ins_y")
-    width = _require_range(data.get("width", 900.0), "width", *OPENING_WIDTH_RANGE)
-    height = _require_range(data.get("height", 2100.0), "height", *HEIGHT_RANGE)
-    sill_distance = _require_range(data.get("sill_distance", 0.0), "sill_distance", *SILL_RANGE)
-    return _render(
-        "door",
-        {
-            "SET_LAYER": _set_layer_cmd(data.get("layer")),
-            "WIDTH": _num(width),
-            "HEIGHT": _num(height),
-            "SILL_DISTANCE": _num(sill_distance),
-            "INS_X": _num(ins_x),
-            "INS_Y": _num(ins_y),
-        },
-    )
+    return _gen_opening(data, "door")
 
 
 def _gen_window(data: dict[str, Any]) -> str:
-    """普通窗。data: {ins_x, ins_y, width?, height?, sill_height?, layer?}
-
-    真机已排除 COM 属性/方法切换门窗类型路线。调用前需要用户先在天正门窗面板
-    人工切到窗模式, 否则 TOpening 可能沿用门模式并生成门对象。
-    """
-    ins_x = _require_coord(data.get("ins_x"), "ins_x")
-    ins_y = _require_coord(data.get("ins_y"), "ins_y")
-    width = _require_range(data.get("width", 1500.0), "width", *OPENING_WIDTH_RANGE)
-    height = _require_range(data.get("height", 1500.0), "height", *HEIGHT_RANGE)
-    sill_height = _require_range(data.get("sill_height", 900.0), "sill_height", *SILL_RANGE)
-    return _render(
-        "window",
-        {
-            "SET_LAYER": _set_layer_cmd(data.get("layer")),
-            "WIDTH": _num(width),
-            "HEIGHT": _num(height),
-            "SILL_HEIGHT": _num(sill_height),
-            "INS_X": _num(ins_x),
-            "INS_Y": _num(ins_y),
-        },
-    )
+    return _gen_opening(data, "window")
 
 
 def _gen_dimension(data: dict[str, Any]) -> str:
@@ -780,9 +745,6 @@ def _gen_step(data: dict[str, Any]) -> str:
     )
 
 
-_ALLOWED_T3_VERSIONS: dict[str, str] = {"t3": "3", "天正3": "3", "3": "3"}
-
-
 def _gen_ramp(data: dict[str, Any]) -> str:
     """坡道。data: {x, y, layer?}
 
@@ -1115,33 +1077,10 @@ def parse_explode_payload(payload: str, off_x: float, off_y: float) -> dict[str,
     }
 
 
-def _gen_export_t3(data: dict[str, Any]) -> str:
-    """图形导出天正3 (T3)。data: {out_path, target_ver?}"""
-    out_path = _require_str(data.get("out_path"), "out_path", max_len=512)
-    if not out_path.lower().endswith(".dwg"):
-        raise ParamError("out_path 必须以 .dwg 结尾")
-    # P2-3: 统一为正斜杠, 消除 FILEDIA=0 命令行交互下反斜杠的转义/分隔歧义。
-    out_path = out_path.replace("\\", "/")
-    ver_key = str(data.get("target_ver", "t3")).lower()
-    if ver_key not in _ALLOWED_T3_VERSIONS:
-        raise ParamError(
-            f"target_ver={data.get('target_ver')!r} 非法, 允许: {sorted(_ALLOWED_T3_VERSIONS)}"
-        )
-    return _render(
-        "export_t3",
-        {
-            "TARGET_VER": _ALLOWED_T3_VERSIONS[ver_key],
-            "OUT_PATH": _lisp_escape(out_path),
-        },
-    )
-
-
 # 子命令 -> 生成器 映射
 _GENERATORS: dict[str, Callable[[dict[str, Any]], str]] = {
-    "axis_grid": _gen_axis_grid,
     "axis_lines": _gen_axis_lines,
     "wall": _gen_wall,
-    "column": _gen_column,
     "door": _gen_door,
     "window": _gen_window,
     "dimension": _gen_dimension,
@@ -1172,7 +1111,6 @@ _GENERATORS: dict[str, Callable[[dict[str, Any]], str]] = {
     "wheelchair_diameter": _gen_wheelchair_diameter,
     "explode_read": _gen_explode_read,
     "search_room": _gen_search_room,
-    "export_t3": _gen_export_t3,
 }
 
 SUBCOMMANDS: tuple[str, ...] = tuple(_GENERATORS)
@@ -1205,27 +1143,8 @@ LOW_CONFIDENCE_WARNINGS: dict[str, str] = {
 
 LOW_CONFIDENCE_SUBCOMMANDS: frozenset[str] = frozenset(LOW_CONFIDENCE_WARNINGS)
 
-# 真机证实「纯对话框、不可命令行驱动」的子命令: 禁止 execute, 仅 dry-run。
-# axis_grid: TAXISGRID 弹模态框 (#32770), 强关曾致 AutoCAD 致命错误;
-# export_t3: TSAVEAS 弹天正自绘导出框 (WPF), 不理会 FILEDIA=0 (编目 §0 坑 1)。
-# column: TGCOLUMN 弹 #32770 标准柱面板且命令保持 active=1, vl-cmdf 点序列
-#   到不了"绘图区放置"处理器 → 0 实体 (2026-06-13 claude 真机复测, Handoff 13)。
-#   Handoff 12 记录的 delta=1 不可复现 (面板恰好开着的顺序依赖假成功)。
-EXECUTE_DISABLED_SUBCOMMANDS: dict[str, str] = {
-    "axis_grid": (
-        "TAXISGRID 为模态对话框命令 (真机证实), 不可命令行驱动, 下发会阻塞 IPC; "
-        "仅支持 dry-run, 请人工绘制轴网或等待 UI 自动化方案"
-    ),
-    "export_t3": (
-        "TSAVEAS 弹出天正自绘导出框且不理会 FILEDIA=0 (真机证实), 下发会阻塞 IPC; "
-        "仅支持 dry-run, 导出请人工操作"
-    ),
-    "column": (
-        "TGCOLUMN 弹 #32770 标准柱面板且命令保持 active, vl-cmdf 点序列无法到达"
-        "绘图区放置处理器 → 0 实体 (2026-06-13 真机复测); 仅支持 dry-run, "
-        "插柱请人工操作或等待面板 UI 自动化方案"
-    ),
-}
+# 所有保留子命令均可命令行驱动 (已剔除 #32770 模态对话框阻塞项)。
+EXECUTE_DISABLED_SUBCOMMANDS: dict[str, str] = {}
 
 
 def generate_lisp(subcommand: str, data: dict[str, Any] | None = None) -> str:
@@ -1267,8 +1186,7 @@ def register_tangent_tool(mcp: Any) -> None:
 
         **execute (默认 False = dry-run)**: 默认只返回渲染后的 LISP 代码而**不**
         下发到 AutoCAD (不产生任何 IPC 文件); 传 execute=True 才经 execute_lisp
-        真正执行。axis_grid / export_t3 / column 经真机证实为纯对话框 (#32770) 命令,
-        **禁止 execute** (会阻塞 IPC), 仅可 dry-run。door/window/elevation 执行成功也会附 warning 字段。
+        真正执行。door/window/elevation 执行成功也会附 warning 字段。
         window 调用前需用户先在天正门窗面板人工切到窗模式; 否则 TOpening 会沿用当前模式。
 
         Operations (data 字段) — 真机验证状态 (T20 V10 / AutoCAD 2024):
@@ -1299,17 +1217,14 @@ def register_tangent_tool(mcp: Any) -> None:
           double_stair — 双跑楼梯 [已验证; 梯段宽/楼梯高取面板记忆值]。{x, y, layer?}
           multi_stair — 多跑楼梯 [已验证; 跑数/梯段宽取面板记忆值]。{x1, y1, x2, y2, layer?}
           wheelchair_diameter — 轮椅直径 [已验证; edge 缺省为中心正右 1500mm]。{center_x, center_y, edge_x?, edge_y?, layer?}
-          column     — 标准柱   [仅 dry-run: #32770 面板阻塞]。{x, y, angle?, layer?}
           door       — 普通门   [部分验证]。{ins_x, ins_y, width?, height?, sill_distance?, layer?}
           window     — 普通窗   [部分验证; 调用前需人工切窗模式]。{ins_x, ins_y, width?, height?, sill_height?, layer?}
-          axis_grid  — 直线轴网 [仅 dry-run]。{base_x?, base_y?, hspacings:[..], vspacings:[..], angle?, layer?}
-          axis_lines — 普通线轴网 [可执行替代]。{base_x?, base_y?, hspacings:[..], vspacings:[..], angle?, layer?}
+          axis_lines — 普通线轴网 [可执行 LINE 替代]。{base_x?, base_y?, hspacings:[..], vspacings:[..], angle?, layer?}
           explode_read — 实体几何读回 [已验证]。{handle, offset_x?, offset_y?, max_entities?}
                        副本分解管线 (原生 EXPLODE, 不弹框), 不修改原实体。
           search_room — 搜索房间 [已验证]。{layer?} 全图墙体围合区域生成 TCH_SPACE。
-          export_t3  — 导出天正3 [仅 dry-run]。{out_path, target_ver?}
 
-        注: 验证记录详见 docs/T20_COMMANDS.md 与 docs/handoff/05_fable_field_test.md。
+        注: 验证记录详见 docs/T20_COMMANDS.md。
         """
         try:
             code = generate_lisp(operation, data or {})
