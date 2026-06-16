@@ -20,7 +20,7 @@ uv run -m t20_mcp
 # 真机联调 (需 AutoCAD 2024 + T20 V10 运行中)
 uv run python scripts/itest_01_bringup.py          # 引导: 窗口检测 + dispatcher 注入
 uv run python scripts/itest_12_e2e.py              # 核心 E2E: wall/dimension/door + COM 回读
-uv run python scripts/itest_e2e_suite.py           # 批量 E2E: 24 个子命令全部验证
+uv run python scripts/itest_e2e_suite.py           # 批量 E2E: 26 case 全部验证
 uv run python scripts/itest_19_mcp_stdio_smoke.py  # MCP stdio 冒烟 (无需 AutoCAD)
 ```
 
@@ -28,7 +28,7 @@ uv run python scripts/itest_19_mcp_stdio_smoke.py  # MCP stdio 冒烟 (无需 Au
 
 共 9 个: drawing / entity / layer / block / annotation / pid / variable / screenshot / **tangent**。
 
-### tangent 子命令 (28 个)
+### tangent 子命令 (32 个)
 
 | 子命令 | 命令 | 实体 | 参数 |
 |---|---|---|---|
@@ -74,7 +74,7 @@ uv run python scripts/itest_19_mcp_stdio_smoke.py  # MCP stdio 冒烟 (无需 Au
 
 ```
 src/t20_mcp/tools/tangent.py         # 核心: 子命令 generator + MCP 工具注册
-src/t20_mcp/lisp_templates/tangent/  # LISP 模板 (30 个 .lsp)
+src/t20_mcp/lisp_templates/tangent/  # LISP 模板 (31 个 .lsp + _prelude)
 src/t20_mcp/backends/file_ipc.py     # 文件 IPC (编码链/窗口检测/弹框守卫)
 tests/test_tangent_lisp_gen.py       # 离线测试 (LISP 生成 + 参数校验)
 scripts/                             # 真机联调管线
@@ -104,7 +104,7 @@ docs/                                # 命令编目 + handoff 审计记录
 uv run pytest -q                              # 离线 (29 个测试, <1s)
 uv run python scripts/itest_01_bringup.py     # 真机引导 (需 AutoCAD)
 uv run python scripts/itest_12_e2e.py         # 真机核心 E2E
-uv run python scripts/itest_e2e_suite.py      # 真机批量 E2E (24 case)
+uv run python scripts/itest_e2e_suite.py      # 真机批量 E2E (26 case)
 ```
 
 ## 许可
