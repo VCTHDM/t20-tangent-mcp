@@ -9,7 +9,7 @@
 > （T20 V10 / AutoCAD 2024）经 `getcname` 批量验证注册状态（442/451 命中），
 > 全表见 **`docs/T20_OFFICIAL_COMMANDS.md`**。
 > 本文档只保留「封装相关命令」的精编条目；**交互序列**仍需逐条真机验证，
-> 验证记录见 `docs/handoff/05_fable_field_test.md`。
+> 验证记录见 `docs/handoff/05_field_test.md`。
 
 ## 0. 关键前提与坑（真机证实）
 

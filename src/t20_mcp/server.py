@@ -26,7 +26,7 @@ log = structlog.get_logger()
 mcp = FastMCP("autocad-mcp")
 
 # 天正 T20 建筑实体工具 (wall/dimension/door 真机已验证, 默认 dry-run;
-# 详见 docs/handoff/05_fable_field_test.md)。
+# 详见 docs/handoff/05_field_test.md)。
 register_tangent_tool(mcp)
 
 

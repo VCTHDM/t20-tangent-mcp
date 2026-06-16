@@ -1,7 +1,7 @@
 """真机联调 Step 30 — TGColumn / column 子命令 #32770 面板阻塞复测 (Handoff 13).
 
 背景: Handoff 12 曾记录 TGCOLUMN 单点序列生成 1 个 TCH_COLUMN (delta=1),
-据此把 column 转正为 "E2E 已验证"。2026-06-13 claude 真机复测**不可复现**:
+据此把 column 转正为 "E2E 已验证"。2026-06-13 真机复测**不可复现**:
 TGCOLUMN 弹 #32770 标准柱面板且命令保持 active=1, vl-cmdf 喂入的点字符串
 到不了"绘图区放置"处理器 -> 0 实体。Handoff 12 的 delta=1 是面板恰好开着的
 顺序依赖假成功。column 已降级为仅 dry-run (EXECUTE_DISABLED_SUBCOMMANDS)。

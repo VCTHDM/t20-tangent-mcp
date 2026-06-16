@@ -20,7 +20,7 @@ import sys
 
 BM_CLICK = 0x00F5
 
-# 唯一获准自动点击的对话框 → 按钮点击序列。新增条目必须 fable review。
+# 唯一获准自动点击的对话框 → 按钮点击序列。新增条目必须经评审。
 TEXPLODE_DIALOG_TITLE = "分解对象"
 TEXPLODE_BUTTONS = ("分解当前选中的天正对象", "确定")
 
