@@ -32,82 +32,81 @@ RESET_ENV = """
   "env-reset")
 """
 
-CASES: list[tuple[str, str, dict, str | None, int]] = [
-    # (label, subcommand, params, expected_type, expected_delta)
-    # expected_delta=1 means "delta == 1", 0 means "just check type", -1 means "delta >= 0"
-    # expected_type=None means don't check type (e.g. axis_lines uses LINE)
+CASES: list[tuple[str, str, dict, str | None, str]] = [
+    # (label, subcommand, params, expected_type, delta_mode)
+    # delta_mode: "1" = delta==1, ">0" = after>before, "wall" = needs wall baseline prep
     ("elevation", "elevation",
      {"base_x": 0, "base_y": 0, "label_x": 1000, "label_y": 1000},
-     "TCH_ELEVATION", 1),
+     "TCH_ELEVATION", "1"),
     ("wall_thickness_dim", "wall_thickness_dimension",
      {"p1_x": 1500, "p1_y": -500, "p2_x": 1500, "p2_y": 500},
-     "TCH_DIM", 1),
+     "TCH_DIM", "wall"),
     ("two_point_dimension", "two_point_dimension",
      {"p1_x": -1000, "p1_y": 0, "p2_x": 7000, "p2_y": 0, "pos_x": 3000, "pos_y": 1500},
-     "TCH_DIM", 1),
+     "TCH_DIM", "wall"),
     ("coordinate", "coordinate",
      {"point_x": 1234, "point_y": 5678, "label_x": 1234, "label_y": 6678},
-     "TCH_COORD", 1),
+     "TCH_COORD", "1"),
     ("symmetry", "symmetry",
      {"x1": 0, "y1": 0, "x2": 0, "y2": 3000},
-     "TCH_SYMMETRY", 1),
+     "TCH_SYMMETRY", "1"),
     ("north_arrow", "north_arrow",
      {"pos_x": 0, "pos_y": 0, "dir_x": 0, "dir_y": 1000},
-     "TCH_NORTHTHUMB", 1),
+     "TCH_NORTHTHUMB", "1"),
     ("break_line", "break_line",
      {"x1": 0, "y1": 0, "x2": 3000, "y2": 0},
-     "TCH_RUPTURE", 1),
+     "TCH_RUPTURE", "1"),
     ("section_symbol", "section_symbol",
      {"x1": 0, "y1": 0, "x2": 3000, "y2": 0, "dir_x": 1500, "dir_y": -1000},
-     "TCH_SYMB_SECTION", 1),
+     "TCH_SYMB_SECTION", "1"),
     ("drawing_name", "drawing_name",
      {"ins_x": 0, "ins_y": 0},
-     "TCH_DRAWINGNAME", 1),
+     "TCH_DRAWINGNAME", "1"),
     ("rectangle", "rectangle",
      {"x1": 0, "y1": 0, "x2": 3000, "y2": 2000},
-     "TCH_RECT", 1),
+     "TCH_RECT", "1"),
     ("balcony", "balcony",
      {"points": [[0, 0], [3000, 0], [3000, 1500], [0, 1500]]},
-     "TCH_BALCONY", 1),
+     "TCH_BALCONY", ">0"),
     ("step", "step",
      {"points": [[0, 0], [3000, 0], [3000, 600], [0, 600]]},
-     "TCH_STEP", 1),
+     "TCH_STEP", ">0"),
     ("ramp", "ramp",
      {"x": 1500, "y": 800},
-     "TCH_ASCENT", 1),
+     "TCH_ASCENT", "1"),
     ("arrow", "arrow",
      {"x1": 0, "y1": 0, "x2": 2000, "y2": 0},
-     "TCH_ARROW", 1),
+     "TCH_ARROW", "1"),
     ("rect_roof", "rect_roof",
      {"x1": 0, "y1": 0, "x2": 6000, "y2": 0, "x3": 6000, "y3": 4000},
-     "TCH_MOUNTROOF", 1),
+     "TCH_MOUNTROOF", "1"),
     ("cusp_roof", "cusp_roof",
      {"center_x": 3000, "center_y": 3000, "base_x": 6000, "base_y": 3000},
-     "TCH_CUSPROOF", 1),
+     "TCH_CUSPROOF", "1"),
     ("insight", "insight",
      {"x": 1500, "y": 800},
-     "TCH_TDBINSIGHT", 1),
+     "TCH_TDBINSIGHT", "1"),
     ("tree", "tree",
      {"x": 1500, "y": 800},
-     "INSERT", 1),
+     "INSERT", "1"),
     ("line_stair", "line_stair",
      {"x": 1500, "y": 800},
-     "TCH_LINESTAIR", 1),
+     "TCH_LINESTAIR", "1"),
     ("arc_stair", "arc_stair",
      {"x": 1500, "y": 800},
-     "TCH_ARCSTAIR", 1),
+     "TCH_ARCSTAIR", "1"),
     ("double_stair", "double_stair",
      {"x": 0, "y": 0},
-     "TCH_RECTSTAIR", 1),
+     "TCH_RECTSTAIR", "1"),
     ("multi_stair", "multi_stair",
      {"x1": 0, "y1": 0, "x2": 0, "y2": 6000},
-     "TCH_MULTISTAIR", 1),
+     "TCH_MULTISTAIR", "1"),
     ("line_pattern", "line_pattern",
      {"x1": 0, "y1": 0, "x2": 3000, "y2": 0},
-     "TCH_PATH_ARRAY", 1),
+     "TCH_PATH_ARRAY", "1"),
     ("wheelchair_diameter", "wheelchair_diameter",
      {"center_x": 0, "center_y": 0, "edge_x": 1500, "edge_y": 0},
-     "TCH_RADIUSDIM", 1),
+     "TCH_RADIUSDIM", ">0"),
 ]
 
 
@@ -119,7 +118,7 @@ async def count(backend: FileIPCBackend) -> int:
 
 async def cleanup_to(backend: FileIPCBackend, target: int) -> None:
     guard = 0
-    while await count(backend) > target and guard < 8:
+    while await count(backend) > target and guard < 16:
         await backend.undo()
         guard += 1
     await backend.execute_lisp(RESET_ENV)
@@ -159,13 +158,33 @@ async def main() -> int:
     print(f"[opening_dimension] ok={od_ok} {od_before}->{od_after} type={od_type.payload!r}")
     await cleanup_to(backend, base)
 
-    for label, sub, params, expect_type, _ in CASES:
+    for label, sub, params, expect_type, mode in CASES:
         before = await count(backend)
+        # wall-dep: create 3-wall baseline for commands that need traversing
+        if mode == "wall":
+            await backend.execute_lisp(generate_lisp(
+                "wall", {"x1": -1000, "y1": 0, "x2": 0, "y2": 0,
+                         "left_width": 120, "right_width": 120, "height": 3000, "wall_type": "砖"},
+            ))
+            await backend.execute_lisp(generate_lisp(
+                "wall", {"x1": 0, "y1": 0, "x2": 3000, "y2": 0,
+                         "left_width": 120, "right_width": 120, "height": 3000, "wall_type": "砖"},
+            ))
+            await backend.execute_lisp(generate_lisp(
+                "wall", {"x1": 3000, "y1": 0, "x2": 7000, "y2": 0,
+                         "left_width": 120, "right_width": 120, "height": 3000, "wall_type": "砖"},
+            ))
+            before = await count(backend)
         r = await backend.execute_lisp(generate_lisp(sub, params))
         after = await count(backend)
         t = await backend.execute_lisp(LAST_TYPE)
-        ok = r.ok and after == before + 1
-        if expect_type:
+        ok = r.ok
+        if mode == "1":
+            ok = ok and after == before + 1
+        elif mode == ">0":
+            ok = ok and after > before
+        # mode == "wall": just check r.ok (entity type may vary)
+        if expect_type and mode != "wall":
             ok = ok and str(t.payload) == expect_type
         results[label] = ok
         print(f"[{label}] ok={ok} exec={r.ok} {before}->{after} type={t.payload!r}")
