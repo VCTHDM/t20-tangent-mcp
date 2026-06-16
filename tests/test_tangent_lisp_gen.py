@@ -61,6 +61,7 @@ VALID_CASES: dict[str, dict] = {
     "elevation": {"base_x": 0, "base_y": 0, "label_x": 1000, "label_y": 1000},
     "coordinate": {"point_x": 1234, "point_y": 5678, "label_x": 1234, "label_y": 6678},
     "symmetry": {"x1": 0, "y1": 0, "x2": 0, "y2": 3000},
+    "line_pattern": {"x1": 0, "y1": 0, "x2": 3000, "y2": 0},
     "north_arrow": {"pos_x": 0, "pos_y": 0, "dir_x": 0, "dir_y": 1000},
     "break_line": {"x1": 0, "y1": 0, "x2": 3000, "y2": 0},
     "section_symbol": {"x1": 0, "y1": 0, "x2": 3000, "y2": 0, "dir_x": 1500, "dir_y": -1000},
@@ -78,6 +79,7 @@ VALID_CASES: dict[str, dict] = {
     "arc_stair": {"x": 0, "y": 0},
     "double_stair": {"x": 0, "y": 0},
     "multi_stair": {"x1": 0, "y1": 0, "x2": 0, "y2": 6000},
+    "wheelchair_diameter": {"center_x": 0, "center_y": 0, "edge_x": 1500, "edge_y": 0},
     "explode_read": {"handle": "1a3f", "offset_x": 1_000_000, "offset_y": 1_000_000},
     "search_room": {"layer": "SPACE"},
     "export_t3": {"out_path": "C:/temp/out_t3.dwg", "target_ver": "t3"},
@@ -301,6 +303,17 @@ class TestParamInjection:
         assert code.index("t20mcp:pt 0 0") < code.index("t20mcp:pt 0 3000")
         assert "TCH_SYMMETRY" in code
 
+    def test_line_pattern_uses_tlinepattern_with_double_enter(self) -> None:
+        code = generate_lisp("line_pattern", {"x1": 0, "y1": 0, "x2": 3000, "y2": 0})
+        assert '"TLINEPATTERN"' in code
+        p1 = code.index("t20mcp:pt 0 0")
+        p2 = code.index("t20mcp:pt 3000 0")
+        d1 = code.index('""', p2)
+        d2 = code.index('""', d1 + 2)
+        assert p1 < p2 < d1 < d2
+        assert '(t20mcp:pt 3000 0)\n                     ""\n                     "")' in code
+        assert "TCH_PATH_ARRAY" in code
+
     def test_north_arrow_uses_tnorththumb_two_points(self) -> None:
         # TNorthThumb 真机试验: 位置点 -> 方向点, 两点收尾, 生成 TCH_NORTHTHUMB。
         code = generate_lisp("north_arrow", {"pos_x": 0, "pos_y": 0, "dir_x": 0, "dir_y": 1000})
@@ -448,6 +461,41 @@ class TestParamInjection:
         assert pt < code.index('""', pt)
         assert "TCH_ARCSTAIR" in code
 
+    def test_wheelchair_diameter_uses_twheelchairdaim_two_points(self) -> None:
+        code = generate_lisp("wheelchair_diameter", {"center_x": 0, "center_y": 0})
+        assert '"TWHEELCHAIRDAIM"' in code
+        center = code.index("t20mcp:pt 0 0")
+        edge = code.index("t20mcp:pt 1500 0")
+        done = code.index('""', edge)
+        assert center < edge < done
+        assert "TCH_RADIUSDIM" in code
+
+    def test_wheelchair_diameter_accepts_explicit_edge_point(self) -> None:
+        code = generate_lisp(
+            "wheelchair_diameter",
+            {"center_x": 100, "center_y": 200, "edge_x": 800, "edge_y": 900},
+        )
+        center = code.index("t20mcp:pt 100 200")
+        edge = code.index("t20mcp:pt 800 900")
+        done = code.index('""', edge)
+        assert center < edge < done
+        assert "t20mcp:pt 1600 200" not in code
+
+    def test_wheelchair_diameter_accepts_partial_edge_defaults(self) -> None:
+        code = generate_lisp(
+            "wheelchair_diameter",
+            {"center_x": 100, "center_y": 200, "edge_y": 900},
+        )
+        assert "t20mcp:pt 100 200" in code
+        assert "t20mcp:pt 1600 900" in code
+
+        code = generate_lisp(
+            "wheelchair_diameter",
+            {"center_x": 100, "center_y": 200, "edge_x": 800},
+        )
+        assert "t20mcp:pt 100 200" in code
+        assert "t20mcp:pt 800 200" in code
+
     def test_float_formatting_is_compact(self) -> None:
         # 整数值不应带小数点; 小数值应保留
         code = generate_lisp("door", {"ins_x": 1500.0, "ins_y": 0, "width": 912.5, "height": 2100})
@@ -546,6 +594,10 @@ class TestInvalidParamsRejected:
         with pytest.raises(ParamError):
             generate_lisp("symmetry", {"x1": 1, "y1": 1, "x2": 1, "y2": 1})
 
+    def test_line_pattern_coincident_points_rejected(self) -> None:
+        with pytest.raises(ParamError):
+            generate_lisp("line_pattern", {"x1": 1, "y1": 1, "x2": 1, "y2": 1})
+
     def test_north_arrow_coincident_points_rejected(self) -> None:
         with pytest.raises(ParamError):
             generate_lisp("north_arrow", {"pos_x": 1, "pos_y": 1, "dir_x": 1, "dir_y": 1})
@@ -603,6 +655,13 @@ class TestInvalidParamsRejected:
     def test_arc_stair_missing_coord_rejected(self) -> None:
         with pytest.raises(ParamError):
             generate_lisp("arc_stair", {"y": 0})  # 缺 x
+
+    def test_wheelchair_diameter_coincident_points_rejected(self) -> None:
+        with pytest.raises(ParamError):
+            generate_lisp(
+                "wheelchair_diameter",
+                {"center_x": 1, "center_y": 1, "edge_x": 1, "edge_y": 1},
+            )
 
     def test_balcony_too_few_points_rejected(self) -> None:
         with pytest.raises(ParamError):

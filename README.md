@@ -18,7 +18,7 @@ LISP 模板封装。
 |---|---|---|
 | IPC 基础设施（编码链/窗口识别/模态防护/引导加载） | 100% | 全部真机验收通过；WPF 对话框探测盲区已补（Handoff 09，itest_21） |
 | 命令编目 | 100% | 官方表 454 条全部收录并真机探测注册状态（442/451） |
-| 天正实体封装 | ~70% | wall/dimension/wall_thickness_dimension/opening_dimension/two_point_dimension/elevation/coordinate/symmetry/north_arrow/break_line/section_symbol/drawing_name/rectangle/balcony/step/ramp/arrow/rect_roof/cusp_roof/insight/tree/line_stair/arc_stair/explode_read/search_room 已 E2E 验证，axis_lines 普通线轴网替代可执行，door 部分验证；标准柱/轴网/导出受 #32770 对话框阻碍（仅 dry-run）；坡屋顶(选对象步)/双跑楼梯/平板/电梯(选墙线)/索引(文字)/标注族选择步等未动工 |
+| 天正实体封装 | ~70% | wall/dimension/wall_thickness_dimension/opening_dimension/two_point_dimension/elevation/coordinate/symmetry/north_arrow/break_line/section_symbol/drawing_name/rectangle/balcony/step/ramp/arrow/rect_roof/cusp_roof/insight/tree/line_stair/arc_stair/double_stair/multi_stair/line_pattern/wheelchair_diameter/explode_read/search_room 已 E2E 验证，axis_lines 普通线轴网替代可执行，door 部分验证；标准柱/轴网/导出受 #32770 对话框阻碍（仅 dry-run）；坡屋顶(选对象步)/平板/电梯(选墙线)/索引(文字)/标注族选择步等未动工 |
 | MCP server 集成 | ~95% | 9 工具已注册（含 `tangent`）；MCP stdio dry-run 冒烟已通过 |
 | 测试与联调管线 | ~88% | 离线测试全绿；`scripts/itest_*.py` 可重复真机管线，E2E 收尾环境已校验 |
 
@@ -51,6 +51,7 @@ MCP 工具共 9 个：上游 8 个（drawing/entity/layer/block/annotation/pid/v
 | `elevation` 标高标注 | `TMElev` | ✅ 双点序列 E2E 验证（实体 `TCH_ELEVATION`）；execute 附 warning，严禁改成单点序列 |
 | `coordinate` 坐标标注 | `TCoord` | ✅ E2E 验证（标注点→方向点→回车，实体 `TCH_COORD`） |
 | `symmetry` 画对称轴 | `TSymmetry` | ✅ E2E 验证（起点→终点，实体 `TCH_SYMMETRY`） |
+| `line_pattern` 线图案 | `TLinePattern` | ✅ E2E 验证（起点→终点→回车→回车，实体 `TCH_PATH_ARRAY`） |
 | `north_arrow` 画指北针 | `TNorthThumb` | ✅ E2E 验证（位置点→方向点，实体 `TCH_NORTHTHUMB`） |
 | `break_line` 加折断线 | `TSymbCut` | ✅ E2E 验证（起点→终点→回车，实体 `TCH_RUPTURE`） |
 | `section_symbol` 剖切符号 | `TSection` | ✅ E2E 验证（两剖切点→剖视方向→回车，实体 `TCH_SYMB_SECTION`；编号取面板记忆值） |
@@ -66,6 +67,9 @@ MCP 工具共 9 个：上游 8 个（drawing/entity/layer/block/annotation/pid/v
 | `tree` 任意布树 | `TSingleTree` | ✅ E2E 验证（插入点→回车，插入 INSERT 树木图块；树种/尺寸取面板记忆值） |
 | `line_stair` 直线梯段 | `TLStair` | ✅ E2E 验证（点取位置→回车，实体 `TCH_LINESTAIR`；梯段宽/踏步数取面板记忆值） |
 | `arc_stair` 圆弧梯段 | `TAStair` | ✅ E2E 验证（点取位置→回车，实体 `TCH_ARCSTAIR`；半径/踏步数取面板记忆值） |
+| `double_stair` 双跑楼梯 | `TRStair` | ✅ E2E 验证（插入点→回车，实体 `TCH_RECTSTAIR`；梯段宽/楼梯高取面板记忆值） |
+| `multi_stair` 多跑楼梯 | `TMultiStair` | ✅ E2E 验证（起点→下一点→回车，实体 `TCH_MULTISTAIR`；跑数/梯段宽取面板记忆值） |
+| `wheelchair_diameter` 轮椅直径 | `TWheelchairDaim` | ✅ E2E 验证（中心点→半径/方向点→回车，实体 `TCH_RADIUSDIM`；edge 缺省为中心正右 1500mm；官方命令拼写为 `Daim`） |
 | `column` 标准柱 | `TGColumn` | ⛔ #32770 标准柱面板阻塞，execute 已禁用（仅 dry-run；点序列到不了放置处理器，0 实体，Handoff 13） |
 | `door` 门 | `TOpening` | 🟡 部分验证（execute 附 warning） |
 | `window` 窗 | `TOpening` | 🟡 类型随面板模式；工具 warning 已明确要求先人工切窗模式，窗台高仍待窗模式真机验证 |
@@ -128,9 +132,13 @@ MCP 工具共 9 个：上游 8 个（drawing/entity/layer/block/annotation/pid/v
 | `docs/handoff/25_claude_stair_batch.md` | line_stair / arc_stair 楼梯梯段 E2E 封装 + 电梯选墙线坑记录 |
 | `docs/handoff/26_codex_claude_dispatch_invariants.md` | Codex + Claude Code 只读协作；补充 dispatch / execute-gating 离线回归测试 |
 | `docs/handoff/27_claude_double_multi_stair.md` | double_stair / multi_stair 楼梯整体 E2E 封装；codex 离线 triage 确认简单候选耗尽（楼梯 Draw 族/风玫瑰弹框、梁需依附） |
+| `docs/handoff/28_codex_remaining_tail.md` | line_pattern / wheelchair_diameter 尾巴候选 E2E 封装；TBlkMask1/WIPEOUT 处置 |
+| `docs/handoff/29_codex_p2_p3_attack_plan.md` | P2/P3 后续攻坚路线图：export_t3 替代、TSingleAxisDim、window 补验、UI/选择注入边界 |
+| `docs/handoff/30_codex_p3_ui_selection_design.md` | P3 UI 自动化与选对象注入设计门：#32770/WPF/selection gates、停手条件、下一包路线 |
+| `docs/handoff/31_codex_current_package_status.md` | 当前未提交包状态矩阵：Handoff 28-31 状态、Step 44-46 下一轮真机顺序、停手条件 |
 | `docs/research/2026-06-13_*.md` | GPT 调研：网搜与安装目录提示词检索（结论：需真机提示捕获） |
 | `docs/research/2026-06-14_remaining_simple_candidates.md` | codex 离线 triage：454 命令对照已封装/已拒，剩余「简单」候选短名单与耗尽结论 |
-| `scripts/itest_01..43_*.py` | 可重复的联调管线（引导/探测/试驱动/E2E/MCP stdio/恢复/清理/LOGFILEMODE 提示捕获/弹框侦察） |
+| `scripts/itest_01..46_*.py` | 可重复的联调管线（引导/探测/试驱动/E2E/MCP stdio/恢复/清理/LOGFILEMODE 提示捕获/弹框侦察/P3 Gate A inventory） |
 
 ## 协作规则（模型路由与安全门禁）
 

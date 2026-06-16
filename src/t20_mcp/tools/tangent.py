@@ -607,6 +607,30 @@ def _gen_symmetry(data: dict[str, Any]) -> str:
     )
 
 
+def _gen_line_pattern(data: dict[str, Any]) -> str:
+    """线图案。data: {x1,y1,x2,y2,layer?}
+
+    真机验证序列: 起点 -> 终点 -> 回车 -> 回车, 生成 TCH_PATH_ARRAY。
+    第二个空回车退出外层循环; 线图案样式走天正面板记忆值。
+    """
+    x1 = _require_coord(data.get("x1"), "x1")
+    y1 = _require_coord(data.get("y1"), "y1")
+    x2 = _require_coord(data.get("x2"), "x2")
+    y2 = _require_coord(data.get("y2"), "y2")
+    if x1 == x2 and y1 == y2:
+        raise ParamError("线图案的起点与终点不能重合")
+    return _render(
+        "line_pattern",
+        {
+            "SET_LAYER": _set_layer_cmd(data.get("layer")),
+            "X1": _num(x1),
+            "Y1": _num(y1),
+            "X2": _num(x2),
+            "Y2": _num(y2),
+        },
+    )
+
+
 def _gen_north_arrow(data: dict[str, Any]) -> str:
     """画指北针。data: {pos_x,pos_y,dir_x?,dir_y?,layer?}
 
@@ -968,6 +992,30 @@ def _gen_multi_stair(data: dict[str, Any]) -> str:
     )
 
 
+def _gen_wheelchair_diameter(data: dict[str, Any]) -> str:
+    """轮椅直径。data: {center_x,center_y,edge_x?,edge_y?,layer?}
+
+    真机验证序列: 中心点 -> 半径/方向点 -> 回车, 生成 TCH_RADIUSDIM。
+    官方命令拼写为 TWheelchairDaim; edge 点缺省为中心点正右 1500mm。
+    """
+    center_x = _require_coord(data.get("center_x"), "center_x")
+    center_y = _require_coord(data.get("center_y"), "center_y")
+    edge_x = _require_coord(data.get("edge_x", center_x + 1500.0), "edge_x")
+    edge_y = _require_coord(data.get("edge_y", center_y), "edge_y")
+    if center_x == edge_x and center_y == edge_y:
+        raise ParamError("轮椅直径的中心点与半径/方向点不能重合")
+    return _render(
+        "wheelchair_diameter",
+        {
+            "SET_LAYER": _set_layer_cmd(data.get("layer")),
+            "CENTER_X": _num(center_x),
+            "CENTER_Y": _num(center_y),
+            "EDGE_X": _num(edge_x),
+            "EDGE_Y": _num(edge_y),
+        },
+    )
+
+
 def _gen_search_room(data: dict[str, Any]) -> str:
     """搜索房间。data: {layer?}
 
@@ -1103,6 +1151,7 @@ _GENERATORS: dict[str, Callable[[dict[str, Any]], str]] = {
     "elevation": _gen_elevation,
     "coordinate": _gen_coordinate,
     "symmetry": _gen_symmetry,
+    "line_pattern": _gen_line_pattern,
     "north_arrow": _gen_north_arrow,
     "break_line": _gen_break_line,
     "section_symbol": _gen_section_symbol,
@@ -1120,6 +1169,7 @@ _GENERATORS: dict[str, Callable[[dict[str, Any]], str]] = {
     "arc_stair": _gen_arc_stair,
     "double_stair": _gen_double_stair,
     "multi_stair": _gen_multi_stair,
+    "wheelchair_diameter": _gen_wheelchair_diameter,
     "explode_read": _gen_explode_read,
     "search_room": _gen_search_room,
     "export_t3": _gen_export_t3,
@@ -1230,6 +1280,7 @@ def register_tangent_tool(mcp: Any) -> None:
           elevation  — 标高标注 [已验证双点序列]。{base_x, base_y, label_x?, label_y?, layer?}
           coordinate — 坐标标注 [已验证]。{point_x, point_y, label_x?, label_y?, layer?}
           symmetry   — 画对称轴 [已验证]。{x1, y1, x2, y2, layer?}
+          line_pattern — 线图案 [已验证; 样式取面板记忆值]。{x1, y1, x2, y2, layer?}
           north_arrow — 画指北针 [已验证]。{pos_x, pos_y, dir_x?, dir_y?, layer?}
           break_line — 加折断线 [已验证]。{x1, y1, x2, y2, layer?}
           section_symbol — 剖切符号 [已验证]。{x1, y1, x2, y2, dir_x?, dir_y?, layer?}
@@ -1245,6 +1296,9 @@ def register_tangent_tool(mcp: Any) -> None:
           tree       — 任意布树 [已验证; 树种/尺寸取面板记忆值, 实体为 INSERT 图块]。{x, y, layer?}
           line_stair — 直线梯段 [已验证; 梯段宽/踏步数取面板记忆值]。{x, y, layer?}
           arc_stair  — 圆弧梯段 [已验证; 半径/踏步数取面板记忆值]。{x, y, layer?}
+          double_stair — 双跑楼梯 [已验证; 梯段宽/楼梯高取面板记忆值]。{x, y, layer?}
+          multi_stair — 多跑楼梯 [已验证; 跑数/梯段宽取面板记忆值]。{x1, y1, x2, y2, layer?}
+          wheelchair_diameter — 轮椅直径 [已验证; edge 缺省为中心正右 1500mm]。{center_x, center_y, edge_x?, edge_y?, layer?}
           column     — 标准柱   [仅 dry-run: #32770 面板阻塞]。{x, y, angle?, layer?}
           door       — 普通门   [部分验证]。{ins_x, ins_y, width?, height?, sill_distance?, layer?}
           window     — 普通窗   [部分验证; 调用前需人工切窗模式]。{ins_x, ins_y, width?, height?, sill_height?, layer?}
