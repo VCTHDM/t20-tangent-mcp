@@ -84,7 +84,7 @@ docs/                                # 命令编目 + handoff 审计记录
 ## Handoff 索引
 
 工程决策审计记录, 按顺序:
-`docs/handoff/01..31_*.md`
+`docs/handoff/01..33_*.md`
 
 关键节点:
 - 03 — 架构评审 (P0-P2)
@@ -96,12 +96,14 @@ docs/                                # 命令编目 + handoff 审计记录
 - 25 — 楼梯梯段封装
 - 27 — 双跑/多跑楼梯 + 简单候选耗尽
 - 28 — line_pattern / wheelchair_diameter 收尾
-- 29/30 — P2/P3 后续路线图
+- 29/30 — P2/P3 后续路线图 (脚本引用已被 32 修订, 见下)
+- 32 — slimming 后当前可用资产清单 + 已删脚本提示 (取代 29/30/31 中已失效的 itest_44/45/46 脚本路径)
+- 33 — P1/P2/P3 真机推进: TPartSaveAs BLOCKED / TSingleAxisDim STOP / door COM 读回 PASS / window SillHeight 待人工切窗模式 / column Gate A inventory (556 子控件)
 
 ## 测试
 
 ```bash
-uv run pytest -q                              # 离线 (29 个测试, <1s)
+uv run pytest -q                              # 离线 (150 测试, <1s)
 uv run python scripts/itest_01_bringup.py     # 真机引导 (需 AutoCAD)
 uv run python scripts/itest_12_e2e.py         # 真机核心 E2E
 uv run python scripts/itest_e2e_suite.py      # 真机批量 E2E (26 case)

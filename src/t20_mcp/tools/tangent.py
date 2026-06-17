@@ -1119,13 +1119,14 @@ SUBCOMMANDS: tuple[str, ...] = tuple(_GENERATORS)
 # execute=True 下发时附 warning。
 LOW_CONFIDENCE_WARNINGS: dict[str, str] = {
     "door": (
-        "部分行为未经真机完全验证: 门/窗类型取决于天正门窗面板当前模式 (默认插门), "
-        "窗台高注入待窗模式验证 (见 docs/T20_COMMANDS.md)"
+        "door 在面板默认门模式下经真机 COM 读回验证 (Width/Height/DoorSill 均匹配, "
+        "Handoff 33); 仍依赖天正面板当前模式 — 若面板被人工切到窗模式, 同一 ins 点会"
+        "落到窗对象。如需保证生成门, 请先确保面板在门模式 (默认状态)。"
     ),
     "window": (
-        "window 需要先人工把天正门窗面板切到窗模式再调用; TOpening 会沿用面板当前模式 "
-        "(默认常为门), 否则可能生成门对象。窗台高 SillHeight 注入仍待窗模式真机验证 "
-        "(COM 属性/方法切换路线已排除, 见 docs/T20_COMMANDS.md)"
+        "window 需要先人工把天正门窗面板切到窗模式再调用; Handoff 33 真机证据显示, "
+        "面板在门模式时 TOpening 仍生成 TCH_OPENING 但仅暴露 DoorSill, SillHeight 注入"
+        "被忽略。窗台高 SillHeight 在窗模式下的 COM 读回验证仍待人工切窗模式后复测。"
     ),
     "elevation": (
         "TMElev 已验证双点序列可生成 TCH_ELEVATION; "

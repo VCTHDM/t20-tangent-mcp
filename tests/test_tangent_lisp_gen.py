@@ -159,8 +159,10 @@ class TestDispatchInvariants:
 
 
 class TestParamInjection:
-    def test_axis_grid_injects_spacings_and_base(self) -> None:
+    def test_axis_lines_injects_spacings_and_base(self) -> None:
         # axis_lines 使用 LINE 段而非 t20mcp:pt 点序列
+        # (历史名 test_axis_grid_*: axis_grid 子命令已在 slimming 提交 441e890 中移除,
+        #  当前仅保留 axis_lines 普通 LINE 轴网替代路径)
         code = generate_lisp("axis_lines", {
             "base_x": 100, "base_y": 200,
             "hspacings": [3000, 3600], "vspacings": [4500],
@@ -637,9 +639,17 @@ class TestInvalidParamsRejected:
         with pytest.raises(ParamError):
             generate_lisp("balcony", {"points": "0,0 3000,0"})
 
-    def test_axis_grid_empty_spacings_rejected(self) -> None:
+    def test_axis_lines_empty_spacings_rejected(self) -> None:
+        # axis_lines: 至少各保留一段间距, 否则 ParamError 来自参数校验层
         with pytest.raises(ParamError):
-            generate_lisp("axis_grid", {"hspacings": [], "vspacings": [3000]})
+            generate_lisp("axis_lines", {"hspacings": [], "vspacings": [3000]})
+
+    def test_removed_axis_grid_subcommand_rejected(self) -> None:
+        # axis_grid 已在 slimming 提交 441e890 中移除, 应作为 unknown subcommand 拒绝;
+        # 这里同时覆盖 column / export_t3 两个同批移除的子命令, 防止意外回归。
+        for removed in ("axis_grid", "column", "export_t3"):
+            with pytest.raises(ParamError):
+                generate_lisp(removed, {})
 
     def test_control_char_in_string_rejected(self) -> None:
         # 换行注入企图破坏单行 LISP 字符串 / 命令序列
