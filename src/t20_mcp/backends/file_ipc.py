@@ -215,16 +215,21 @@ class FileIPCBackend(AutoCADBackend):
         # Clean up stale IPC files
         self._cleanup_stale_files()
 
-        # Ping the dispatcher to verify it's loaded
+        # Ping the dispatcher to verify it's loaded and accepting command-line
+        # triggers. A timeout here is ambiguous: the LISP may be unloaded, or
+        # AutoCAD may simply not have accepted the injected dispatch command.
         result = await self._dispatch("ping", {})
         if not result.ok:
             lisp_path = str(LISP_DIR / "mcp_dispatch.lsp").replace("\\", "/")
             return CommandResult(
                 ok=False,
                 error=(
-                    "AutoCAD/T20 detected but mcp_dispatch.lsp not loaded.\n"
+                    "AutoCAD/T20 detected but dispatcher ping failed. "
+                    "mcp_dispatch.lsp may be unloaded, or AutoCAD may not be "
+                    "accepting command-line input.\n"
                     f'In AutoCAD command line, type:\n  (load "{lisp_path}")\n'
-                    "Or add lisp-code/ to trusted paths for auto-loading."
+                    "Or run scripts/itest_01_bringup.py to load it via the "
+                    "ASCII temp path with COM fallback."
                 ),
             )
 

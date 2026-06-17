@@ -10,7 +10,8 @@
 
 使用 (脚本顶层):
     from _live_lock import live_lock_or_exit
-    live_lock_or_exit(__file__)   # 抢不到就 sys.exit(2) + 提示
+    _lock = live_lock_or_exit(__file__)   # 抢不到就 sys.exit(2) + 提示
+    # 必须把返回值存到变量持有引用; 否则临时对象语句结束即析构, 立即释放锁。
 
 或显式 with:
     from _live_lock import live_lock

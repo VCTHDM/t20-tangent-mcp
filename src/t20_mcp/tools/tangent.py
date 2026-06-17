@@ -1131,7 +1131,8 @@ LOW_CONFIDENCE_WARNINGS: dict[str, str] = {
     ),
     "window": (
         "window 需要先人工把天正门窗面板切到窗模式再调用; SillHeight 参数经 "
-        "Handoff 33 已真机验证 (窗模式下 TCH_OPENING 通过 DoorSill 属性写入窗台高);"
+        "Handoff 33 + Handoff 34 sweep 三参数 (DS=600/1200/300) 已真机精确匹配验证 "
+        "(窗模式下 TCH_OPENING 通过 DoorSill 属性写入窗台高);"
         " 若面板在门模式下调用, 产生的 TOpening 将是门对象 (DXF group71=0)。"
     ),
     "elevation": (
