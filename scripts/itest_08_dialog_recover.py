@@ -17,13 +17,15 @@ import sys
 import time
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))  # for _live_lock
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 
 import win32con
 import win32gui
 import win32process
 
-from t20_mcp.backends.file_ipc import FileIPCBackend, _process_image_name, find_autocad_window
+from _live_lock import live_lock_or_exit  # noqa: E402
+from t20_mcp.backends.file_ipc import FileIPCBackend, _process_image_name, find_autocad_window  # noqa: E402
 
 
 def enum_acad_windows() -> list[tuple[int, str, str]]:
@@ -73,4 +75,5 @@ async def main() -> int:
 
 
 if __name__ == "__main__":
+    _lock = live_lock_or_exit(__file__)
     raise SystemExit(asyncio.run(main()))

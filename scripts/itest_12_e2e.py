@@ -13,10 +13,12 @@ import sys
 from pathlib import Path
 
 sys.stdout.reconfigure(errors="replace")  # 控制台代码页不全时不致崩
+sys.path.insert(0, str(Path(__file__).resolve().parent))  # for _live_lock
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 
-from t20_mcp.backends.file_ipc import FileIPCBackend
-from t20_mcp.tools.tangent import generate_lisp
+from _live_lock import live_lock_or_exit  # noqa: E402
+from t20_mcp.backends.file_ipc import FileIPCBackend  # noqa: E402
+from t20_mcp.tools.tangent import generate_lisp  # noqa: E402
 
 LAST_TYPE = '(if (entlast) (cdr (assoc 0 (entget (entlast)))) "none")'
 
@@ -150,4 +152,5 @@ async def main() -> int:
 
 
 if __name__ == "__main__":
+    _lock = live_lock_or_exit(__file__)
     raise SystemExit(asyncio.run(main()))

@@ -118,7 +118,7 @@
 | 风玫瑰 | `TWINDROSE` | 已探测：**弹"风玫瑰"模态框**（地区/参数面板），墙2 死路，暂不封装（Handoff 27） |
 | 电梯 | `TElevator` | 已探测：电梯间角点→对角点→**点取开电梯门的墙线**(选墙线步，需前置墙，空回车则 0 实体)，暂不封装（Handoff 25） |
 | 半径/直径/角度/弧弦标注 | `TDimRad`/`TDimDia`/`TDimAng`/`TDimArc` | 已探测：均命令行无弹框，但**选择待标注对象的拾取步不吃脚本点/ename**（报"点无效"，命令滞留 active），vl-cmdf 点序列打不通，暂不封装（Handoff 21） |
-| 局部导出 | `TPartSaveAs` | 空输入无弹框、无实体、无输出（no-op），仍未找到静默导出参数 |
+| 局部导出 | `TPartSaveAs` | **Handoff 33 已 BLOCKED**: LOGFILEMODE 抓取确认提示流为 selection-first (`请选择要导出的对象<退出>:`); 选择集到位后必弹 `#32770` "图形导出" 模态框, 即使 `FILEDIA=0` 也跳不过去, 不可静默封装。证据: `scripts/itest_33_tpartsaveas_args_probe.py` 三阶段 + LOGFILEMODE 抓取。|
 | BIM导出 | `TGetXML` | 空输入弹 `#32770` “天正模型导出到TGL”，不可静默封装 |
 | 单线变墙 | `TSWall` | 已复核：选择 LINE 后回车直接结束，0 实体；未观察到弹框；额外 `240` 被当未知命令。暂不封装（Handoff 15） |
 | 搜索房间 | `TUpdSpace` | **已封装为 `search_room`**（Handoff 11，E2E 验证） |
@@ -138,7 +138,8 @@
 | 导出天正3 TSaveAs | 已移除 | WPF 框无视 FILEDIA=0 |
 | 窗模式切换 | 窗台高走 DoorSill | Handoff 33 真机证实: TCH_OPENING 不暴露独立 SillHeight 属性, 门/窗共用 DoorSill, 模式由面板 + DXF group 71 决定; window 子命令已 sweep 验证 sill_height 参数生效。COM 方法切换路线已排除 (itest_29); window 调用前需人工切面板 |
 | 轴网对话框自动化 | 待评估 | TRectAxis控件已侦察, 性价比低, 暂用 axis_lines 替代 |
-| TPartSaveAs/TSingleAxisDim | 待探 | P2 静默导出/轴号提示序列未解密 |
+| TPartSaveAs | Handoff 33 BLOCKED | selection-first 后弹「图形导出」`#32770`, 即便 FILEDIA=0 也无法绕开 (itest_33) |
+| TSingleAxisDim | Handoff 33 STOPPED | 提示 `点取待标注的轴线或[手工绘制(D)]<退出>:` 是 entsel 风格, 命令行坐标输入会被命令吞掉后报「未知命令」, 不接受坐标注入; selection-injection 族, 不包装 (itest_32 LOGFILEMODE 抓取) |
 
 ## 3. 模板与测试
 

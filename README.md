@@ -98,7 +98,7 @@ docs/                                # 命令编目 + handoff 审计记录
 - 28 — line_pattern / wheelchair_diameter 收尾
 - 29/30 — P2/P3 后续路线图 (脚本引用已被 32 修订, 见下)
 - 32 — slimming 后当前可用资产清单 + 已删脚本提示 (取代 29/30/31 中已失效的 itest_44/45/46 脚本路径)
-- 33 — P1/P2/P3 真机推进: TPartSaveAs BLOCKED / TSingleAxisDim STOP / door COM 读回 PASS / window SillHeight 待人工切窗模式 / column Gate A inventory (556 子控件)
+- 33 — P1/P2/P3 真机推进: TPartSaveAs BLOCKED (selection-first 后弹「图形导出」#32770) / TSingleAxisDim STOP (entsel/实体拾取, 不接受坐标注入) / door COM 读回 PASS / window 模式下 sill_height 已通过 DoorSill 写入验证 (TCH_OPENING 不暴露独立 SillHeight; 调用前仍需人工切窗模式) / column Gate A inventory (556 子控件)
 
 ## 测试
 

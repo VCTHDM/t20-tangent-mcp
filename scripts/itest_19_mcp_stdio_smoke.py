@@ -14,9 +14,11 @@ import sys
 from pathlib import Path
 
 sys.stdout.reconfigure(errors="replace")
+sys.path.insert(0, str(Path(__file__).resolve().parent))  # for _live_lock
 
-from mcp import ClientSession, StdioServerParameters
-from mcp.client.stdio import stdio_client
+from _live_lock import live_lock_or_exit  # noqa: E402
+from mcp import ClientSession, StdioServerParameters  # noqa: E402
+from mcp.client.stdio import stdio_client  # noqa: E402
 
 ROOT = Path(__file__).resolve().parent.parent
 
@@ -68,4 +70,5 @@ async def main() -> int:
 
 
 if __name__ == "__main__":
+    _lock = live_lock_or_exit(__file__)
     raise SystemExit(asyncio.run(main()))
