@@ -3,7 +3,7 @@
 > 生成日期: 2026-06-17
 > 依据: Handoff 33 真机证据 + tangent.py::LOW_CONFIDENCE_WARNINGS + docs/T20_COMMANDS.md
 > 当前基线: 32 子命令全部 E2E PASS, pytest 159 passed, EXECUTE_DISABLED_SUBCOMMANDS={}
-> 进度: D1 / D2 已闭合 (Handoff 34, 2026-06-17)
+> 进度: D1 / D2 / C1 / C2 已闭合 (Handoff 34, 2026-06-17)
 
 ---
 
@@ -44,24 +44,20 @@
 
 ## C 级 - 文档/低风险代码
 
-### C1 - TRectAxis Gate A inventory 探针
+### C1 - TRectAxis Gate A inventory 探针  ✅ DONE (Handoff 34)
 
-- 状态: OPEN
-- 参考: scripts/itest_36_column_gate_a_inventory.py (TGColumn 范式)
-- 要求: inventory-only, 严格 ESC-only, 不点击不填框
-- 产出:
-  - scripts/itest_37_trectaxis_gate_a_inventory.py
-  - docs/handoff/34_trectaxis_gate_a_raw.txt
-- 闭合判据: entity_count 调用前后均为 0, remaining_#32770_modals=[]
+- 状态: DONE — 2026-06-17
+- 证据: docs/handoff/34_c1_c2_gate_a_close.md §1 + docs/handoff/34_trectaxis_gate_a_raw.txt
+- 真机结果: itest_37 Exit=0, BLOCKED-by-#32770, 247 子控件全树, baseline/final entity_count = 0/0, ESC 干净
+- 核心收获: SysTabControl32 含"直线轴网/弧线轴网"2 Tab + 内嵌 #32770 子页, A1 Gate B 的 Edit/Button 锚点已侦察
 
-### C2 - TSaveAs / WPF 导出框 Gate A inventory
+### C2 - TSaveAs / WPF 导出框 Gate A inventory  ✅ DONE (Handoff 34, WPF 假说证伪)
 
-- 状态: OPEN
-- 背景: Handoff 09 记录顶层类名为 #32770 (WPF 寄宿其中); Handoff 33 的 TGColumn 全经典 Win32, 需要 Gate A 一次性证伪/证实 TSaveAs 是否真有 WPF 内嵌
-- 产出:
-  - scripts/itest_38_tsaveas_gate_a_inventory.py
-  - docs/handoff/34_tsaveas_gate_a_raw.txt
-- 风险: 若误关 ARX 对话框会导致 AutoCAD 致命崩溃 - 严禁 WM_CLOSE, 仅 ESC
+- 状态: DONE — 2026-06-17
+- 证据: docs/handoff/34_c1_c2_gate_a_close.md §2 + docs/handoff/34_tsaveas_gate_a_raw.txt
+- 真机结果: itest_38 Exit=0, BLOCKED-Win32-modal, 37 子控件, **WPF 子控件数 = 0** (证伪 WPF 内嵌假说)
+- 重要发现: TSaveAs 是纯经典 Win32 (Static/Button/ComboBox/SHELLDLL_DefView/SysListView32/ToolbarWindow32), FILEDIA=0 仍弹, owner_disabled=True 真模态, ESC-only 路线可干净退出
+- 影响: A2 优先级可下调 (WPF 通用守卫的真实落地点暂无, 待未来真 WPF 模态出现再做)
 
 ---
 
@@ -155,16 +151,16 @@ TBlkMask1 / WIPEOUT / TGirDer / TWINDROSE / TSlab / TElevator / TDrawParallelSta
 D1  ->  D2                              ✅ DONE (Handoff 34, 2026-06-17)
             |
             v
-        C1 + C2                          (两份 inventory, 并行可做) <-- 当前
+        C1 + C2                          ✅ DONE (Handoff 34, 2026-06-17)
             |
             v
-        B2                               (低风险 COM 探针, 二选一即结案)
+        B2                               (低风险 COM 探针, 二选一即结案) <-- 当前
             |
             v
         B1                               (TGColumn Gate B, 首次面板自动化范式)
             |
             v
-        A1  ->  A2                       (TRectAxis 全流程 + WPF 通用守卫)
+        A1  ->  A2                       (A2 的 WPF 假说已被 C2 证伪, 优先级可下调)
 ```
 
 S 级不在路径上, 任何时候出现 "再试一次" 的诱惑请回看 Handoff 33。

@@ -1,0 +1,67 @@
+2026-06-17 20:58:21 [info     ] command_line_hwnd              hwnd=461082
+[reg] cn="_TSAVEAS"
+[baseline] entity_count=0 pre_modals=[] top_count=1
+[launch] ok=False payload=None error='Timeout waiting for result (request_id=965bef57f4e7)'
+[after_launch] new_modals=[2887390]
+[after_launch] new_top_windows=[(2887390, '#32770', '图形导出')]
+
+[recover] ESC-only (严禁 WM_CLOSE; ARX 崩溃风险)
+[post] modals=[] new_tops=[]
+[post] entity_count=0 env={'CMDACTIVE': 0, 'CMDDIA': 1, 'FILEDIA': 1, 'OSMODE': 0}
+
+============================================================
+TSaveAs Gate A inventory
+============================================================
+
+# Top hwnd=2887390 class='#32770' title='图形导出'
+  rect=(675, 260, 1246, 772) enabled=True
+  owner_hwnd=657366 owner_disabled=True
+  child_count=37  wpf_child_count=0
+  wpf_classes=[]
+      - [1] hwnd=5705568 class='Static' title='保存在(&I):' style=0x50020102 enabled=True visible=True rect=(689, 302, 775, 316)
+      - [1] hwnd=4198302 class='ComboBox' title='' style=0x50010213 enabled=True visible=True rect=(782, 299, 1043, 321)
+      - [1] hwnd=657192 class='Static' title='' style=0x40000000 enabled=True visible=False rect=(1055, 299, 1175, 322)
+      - [1] hwnd=2559894 class='ToolbarWindow32' title='' style=0x50038945 enabled=True visible=True rect=(1055, 299, 1175, 322)
+      - [1] hwnd=1508302 class='ToolbarWindow32' title='' style=0x5001AB4D enabled=True visible=True rect=(689, 323, 778, 758)
+      - [1] hwnd=2163560 class='ListBox' title='' style=0x40000303 enabled=True visible=False rect=(782, 327, 1232, 609)
+      - [1] hwnd=3475758 class='SHELLDLL_DefView' title='' style=0x56010000 enabled=True visible=True rect=(782, 327, 1232, 609)
+          - [2] hwnd=2559804 class='SysListView32' title='FolderView' style=0x5610134C enabled=True visible=True rect=(782, 327, 1232, 609)
+              - [3] hwnd=3346206 class='SysHeader32' title='' style=0x500100C2 enabled=True visible=True rect=(782, 327, 1232, 351)
+          - [2] hwnd=3346206 class='SysHeader32' title='' style=0x500100C2 enabled=True visible=True rect=(782, 327, 1232, 351)
+      - [1] hwnd=2559804 class='SysListView32' title='FolderView' style=0x5610134C enabled=True visible=True rect=(782, 327, 1232, 609)
+          - [2] hwnd=3346206 class='SysHeader32' title='' style=0x500100C2 enabled=True visible=True rect=(782, 327, 1232, 351)
+      - [1] hwnd=3346206 class='SysHeader32' title='' style=0x500100C2 enabled=True visible=True rect=(782, 327, 1232, 351)
+      - [1] hwnd=5505634 class='Static' title='文件名(&N):' style=0x50020100 enabled=True visible=True rect=(784, 624, 871, 638)
+      - [1] hwnd=4460434 class='ComboBoxEx32' title='' style=0x50010042 enabled=True visible=True rect=(878, 618, 1124, 639)
+          - [2] hwnd=2363078 class='ComboBox' title='' style=0x56000413 enabled=True visible=True rect=(878, 618, 1124, 639)
+              - [3] hwnd=9047964 class='Edit' title='' style=0x54000080 enabled=True visible=True rect=(882, 622, 1104, 634)
+          - [2] hwnd=9047964 class='Edit' title='' style=0x54000080 enabled=True visible=True rect=(882, 622, 1104, 634)
+      - [1] hwnd=2363078 class='ComboBox' title='' style=0x56000413 enabled=True visible=True rect=(878, 618, 1124, 639)
+          - [2] hwnd=9047964 class='Edit' title='' style=0x54000080 enabled=True visible=True rect=(882, 622, 1104, 634)
+      - [1] hwnd=9047964 class='Edit' title='' style=0x54000080 enabled=True visible=True rect=(882, 622, 1104, 634)
+      - [1] hwnd=2886090 class='Static' title='保存类型(&T):' style=0x50020100 enabled=True visible=True rect=(784, 649, 871, 663)
+      - [1] hwnd=4525966 class='ComboBox' title='' style=0x50010203 enabled=True visible=True rect=(878, 646, 1124, 666)
+      - [1] hwnd=2428548 class='Button' title='以只读方式打开(&R)' style=0x48010003 enabled=False visible=False rect=(878, 644, 1118, 658)
+      - [1] hwnd=3017158 class='Button' title='保存(&S)' style=0x50030001 enabled=True visible=True rect=(1142, 618, 1232, 641)
+      - [1] hwnd=2690988 class='Button' title='取消' style=0x50030000 enabled=True visible=True rect=(1142, 645, 1232, 668)
+      - [1] hwnd=4655400 class='Button' title='帮助(&H)' style=0x48030000 enabled=False visible=False rect=(1142, 645, 1232, 668)
+      - [1] hwnd=2559842 class='ScrollBar' title='' style=0x56020014 enabled=True visible=True rect=(1221, 747, 1238, 764)
+      - [1] hwnd=2951658 class='Static' title='CAD版本:' style=0x50000000 enabled=True visible=True rect=(784, 674, 871, 688)
+      - [1] hwnd=2363066 class='ComboBox' title='' style=0x50000203 enabled=True visible=True rect=(878, 671, 1124, 691)
+      - [1] hwnd=2363224 class='Static' title='导出内容:' style=0x50000000 enabled=True visible=True rect=(784, 699, 871, 713)
+      - [1] hwnd=1445808 class='ComboBox' title='' style=0x50000203 enabled=True visible=True rect=(878, 696, 1124, 716)
+      - [1] hwnd=9570446 class='Button' title='绑定参照' style=0x50000002 enabled=True visible=True rect=(784, 724, 871, 738)
+      - [1] hwnd=2820588 class='Button' title='绑定' style=0x58030009 enabled=False visible=True rect=(878, 724, 916, 738)
+      - [1] hwnd=2494226 class='Button' title='插入' style=0x58010009 enabled=False visible=True rect=(923, 724, 961, 738)
+      - [1] hwnd=2690946 class='Button' title='视口转块' style=0x40000002 enabled=True visible=False rect=(991, 724, 1086, 738)
+      - [1] hwnd=2231932 class='#32770' title='' style=0x5000044C enabled=True visible=True rect=(683, 291, 683, 764)
+
+=== Step38 Gate A verdict ===
+  TSaveAs 弹 #32770                            : YES
+  WPF 内嵌存在 (HwndWrapper/...)               : no
+  FILEDIA=0 未拦住模态                         : YES
+  ESC 后无残留 (modal+top)                     : YES
+  环境恢复 (CMDACTIVE=0)                       : YES
+  无实体生成 (entity delta=0)                  : YES
+  baseline / final entity_count = 0 / 0
+  -> 结论: BLOCKED-Win32-modal
