@@ -2,10 +2,11 @@
 ;;; tangent::opening  —  插入门窗 (TOpening)
 ;;; 命令: TOPENING   置信度: 中 — 真机部分验证 (T20 V10):
 ;;;   墙上插入点 → 回车 可生成 TCH_OPENING (非模态参数面板, 不阻塞);
-;;;   Width/Height 可经 ActiveX 注入 (真机回读验证)。
-;;;   door 模式: 注入 DoorSill (距墙垛距离); 面板默认门模式。
-;;;   window 模式: 注入 SillHeight (窗台高); 需先人工切面板到窗模式，
-;;;     否则 TOpening 可能沿用门模式并生成门对象。
+;;;   Width/Height/DoorSill 可经 ActiveX 注入 (Handoff 33 真机 sweep 验证)。
+;;;   door 模式: 注入 DoorSill (距墙垛距离); 面板默认门模式; DXF group 71 = 0。
+;;;   window 模式: 注入 DoorSill (实为窗台高 — TCH_OPENING 不暴露独立 SillHeight,
+;;;     门/窗共用 DoorSill, 模式由面板 + DXF group 71 决定); group 71 = 1。
+;;;     需先人工切面板到窗模式, 否则 TOpening 沿用门模式生成门对象。
 ;;; ----------------------------------------------------------------------------
 ;;; 本文件由 t20_mcp/tools/tangent.py 注入参数后下发, 占位符形如 {{TOKEN}}。
 ;;; 状态管理走 _prelude.lsp, 模板内禁止手写 setq/setvar。

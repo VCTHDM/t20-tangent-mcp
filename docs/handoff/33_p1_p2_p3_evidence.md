@@ -180,6 +180,83 @@ entity_count=0  env={CMDACTIVE:0, CMDDIA:1, FILEDIA:1, OSMODE:0}
 - 控件全部经典 Win32 (Static/Button/Edit/嵌套 #32770), **没有 WPF HwndWrapper**。
 - ESC-only 恢复 100% 干净, 没有残留模态/未知实体。
 
+---
+
+## 附录 A: window 模式 SillHeight 参数修复 (2026-06-17 真机切窗模式后)
+
+### 问题根因 (前)
+
+Handoff 29/30/31 假定 TCH_OPENING 在窗模式下有独立 `SillHeight` COM 属性,
+并在 `_gen_opening` window 分支注入 `SillHeight`。Handoff 33 真机枚举彻底证伪:
+
+```
+SillHeight=ERR(ActiveX 服务器返回错误: 未知名称: SillHeight)
+WindowSillHeight=ERR(未知名称)
+WinSillHeight=ERR(未知名称)
+... 所有变体均 ERR
+```
+
+**TCH_OPENING 在 door 模式和 window 模式下暴露的 COM 属性集合完全相同**:
+`Width` / `Height` / `DoorSill` / `Application` / `AreaRatio` / `Layer` / `Handle`。
+门/窗的真正区分是 **DXF group 71**: `0` = 门, `1` = 窗, 由天正面板模式决定。
+
+### 面板切窗模式的实证
+
+```
+OSMODE=16384  (天正切窗模式后的非默认值)
+新图层: 3T_BAR / 3T_GLASS / 3T_WOOD / _TCH_KEY  (天正切窗模式后自动注册)
+DXF group 71=1 (window 调用后产出对象均为组 1)
+```
+
+### 修复前 sweep 测试 (面板切窗模式后, sill_height=600/1200/300)
+
+```
+ix=1500 sh_in=600  W=1000.0 H=1500.0 DS=900.0 group71=1
+ix=3500 sh_in=1200 W=1000.0 H=1500.0 DS=900.0 group71=1
+ix=5500 sh_in=300  W=1000.0 H=1500.0 DS=900.0 group71=1
+```
+
+全部 DoorSill 固定为 **900** (面板记忆值), 传入 `sill_height` **完全不生效**。
+因为 `SillHeight` 注入被 `vl-catch-all-apply` 吞掉了 (ERR), 所以 DoorSill 没被改。
+
+### 修复
+
+**`tangent.py _gen_opening` window 分支**: 把写入属性名从 `SillHeight` 改为 `DoorSill`。
+语义上, window 模式的 `DoorSill` 就是"窗台高"。添加 Handoff 33 证据注释。
+
+**`opening.lsp` 模板头注释**: 更新 "注入 SillHeight (窗台高)" 为 "注入 DoorSill (实为窗台高)"。
+
+**`LOW_CONFIDENCE_WARNINGS["window"]`**: 去掉"仍待验证"字样, 改为已验证 + 注明语义共享。
+
+**`docs/T20_COMMANDS.md` 窗模式切换一行**: 更新为 "窗台高走 DoorSill" + 附上 Handoff 33 结论。
+
+### 修复后 sweep 测试 (PASS PASS PASS)
+
+```
+ix=1500 sh_in=600  W=1000.0 H=1500.0 DS=600.0 group71=1
+ix=3500 sh_in=1200 W=1000.0 H=1500.0 DS=1200.0 group71=1
+ix=5500 sh_in=300  W=1000.0 H=1500.0 DS=300.0 group71=1
+```
+
+三组 sill_height 全部与传入值精确匹配。PASS。
+
+### 验证的安全边界
+
+- 仅改 `tangent.py` (一行属性名 + 注释) + `opening.lsp` (注释)。
+- 未触碰 `_prelude.lsp` / `file_ipc.py` / `mcp_dispatch.lsp` / `dialog_automation.py`。
+- 未改动 32 子命令集合, `EXECUTE_DISABLED_SUBCOMMANDS` 仍空。
+- pytest 150 passed, 无回归。
+
+---
+
+## 附录 B: 本轮新增脚本说明
+
+| 脚本 | 用途 |
+|---|---|
+| `scripts/itest_33_tpartsaveas_args_probe.py` | TPartSaveAs 三阶段探针 (reg/path/selection) |
+| `scripts/itest_35_opening_readback.py` | door/window Width/Height/DoorSill 读回探针 |
+| `scripts/itest_36_column_gate_a_inventory.py` | TGColumn Gate A 子控件抓取 (ESC-only) |
+
 ### P2-A 结论
 
 - Handoff 13 / itest_30 BLOCKED 结论复现, 但**第一次拿到完整子控件 inventory**。

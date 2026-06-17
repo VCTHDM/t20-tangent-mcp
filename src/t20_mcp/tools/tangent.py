@@ -365,9 +365,11 @@ def _gen_wall(data: dict[str, Any]) -> str:
 def _gen_opening(data: dict[str, Any], mode: str = "door") -> str:
     """门窗 (TOpening)。data: {ins_x, ins_y, width?, height?, sill_distance?|sill_height?, layer?}
 
-    mode="door": 注入 DoorSill (距墙垛距离), 默认宽900高2100。
-    mode="window": 注入 SillHeight (窗台高), 默认宽1500高1500台高900。
-      调用前需人工切天正门窗面板到窗模式, 否则 TOpening 可能沿用门模式。
+    mode="door": 注入 DoorSill (距墙垛距离), 默认宽900高2100。DXF group 71 = 0。
+    mode="window": 写 DoorSill 字段承载窗台高 (Handoff 33 真机证实 TCH_OPENING 不暴露
+      独立 SillHeight 属性, 门/窗共用 DoorSill, 模式由面板 + DXF group 71=0/1 决定),
+      默认宽1500高1500台高900。
+      调用前需人工切天正门窗面板到窗模式, 否则 TOpening 仍沿用门模式生成门对象。
     """
     ins_x = _require_coord(data.get("ins_x"), "ins_x")
     ins_y = _require_coord(data.get("ins_y"), "ins_y")
@@ -385,10 +387,14 @@ def _gen_opening(data: dict[str, Any], mode: str = "door") -> str:
         width = _require_range(data.get("width", 1500.0), "width", *OPENING_WIDTH_RANGE)
         height = _require_range(data.get("height", 1500.0), "height", *HEIGHT_RANGE)
         sill = _require_range(data.get("sill_height", 900.0), "sill_height", *SILL_RANGE)
+        # Handoff 33 真机证据 (itest_35 + COM 属性枚举):
+        # TCH_OPENING 在窗模式下不暴露 SillHeight 属性 (ERR 未知名称),
+        # 门/窗 共用 DoorSill — 模式由 DXF group 71 (0=门, 1=窗) + 面板模式决定。
+        # 因此窗模式注入仍写 DoorSill, 但语义上代表"窗台高 (sill_height)"。
         com = (
             f'(foreach pv (list (cons "Width" (float {_num(width)}))'
             f' (cons "Height" (float {_num(height)}))'
-            f' (cons "SillHeight" (float {_num(sill)})))\n'
+            f' (cons "DoorSill" (float {_num(sill)})))\n'
             f'           (vl-catch-all-apply \'vlax-put-property (list t20mcp:obj (car pv) (cdr pv))))'
         )
     return _render(
@@ -1124,9 +1130,9 @@ LOW_CONFIDENCE_WARNINGS: dict[str, str] = {
         "落到窗对象。如需保证生成门, 请先确保面板在门模式 (默认状态)。"
     ),
     "window": (
-        "window 需要先人工把天正门窗面板切到窗模式再调用; Handoff 33 真机证据显示, "
-        "面板在门模式时 TOpening 仍生成 TCH_OPENING 但仅暴露 DoorSill, SillHeight 注入"
-        "被忽略。窗台高 SillHeight 在窗模式下的 COM 读回验证仍待人工切窗模式后复测。"
+        "window 需要先人工把天正门窗面板切到窗模式再调用; SillHeight 参数经 "
+        "Handoff 33 已真机验证 (窗模式下 TCH_OPENING 通过 DoorSill 属性写入窗台高);"
+        " 若面板在门模式下调用, 产生的 TOpening 将是门对象 (DXF group71=0)。"
     ),
     "elevation": (
         "TMElev 已验证双点序列可生成 TCH_ELEVATION; "

@@ -136,7 +136,7 @@
 | 标准柱 TGColumn | 已移除 | #32770 面板阻塞, 命令行点序列不可达 |
 | 绘制轴网 TRectAxis | 已移除 | 模态对话框, 不可命令行驱动 |
 | 导出天正3 TSaveAs | 已移除 | WPF 框无视 FILEDIA=0 |
-| 窗模式切换 | 窗台高走面板 | COM 方法路线已排除 (itest_29); window 调用前人工切面板 |
+| 窗模式切换 | 窗台高走 DoorSill | Handoff 33 真机证实: TCH_OPENING 不暴露独立 SillHeight 属性, 门/窗共用 DoorSill, 模式由面板 + DXF group 71 决定; window 子命令已 sweep 验证 sill_height 参数生效。COM 方法切换路线已排除 (itest_29); window 调用前需人工切面板 |
 | 轴网对话框自动化 | 待评估 | TRectAxis控件已侦察, 性价比低, 暂用 axis_lines 替代 |
 | TPartSaveAs/TSingleAxisDim | 待探 | P2 静默导出/轴号提示序列未解密 |
 
