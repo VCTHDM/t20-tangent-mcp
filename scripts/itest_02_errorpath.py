@@ -15,10 +15,12 @@ import asyncio
 import sys
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))  # for _live_lock
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 
-from t20_mcp.backends.file_ipc import FileIPCBackend
-from t20_mcp.tools.tangent import _load_prelude
+from _live_lock import live_lock_or_exit  # noqa: E402
+from t20_mcp.backends.file_ipc import FileIPCBackend  # noqa: E402
+from t20_mcp.tools.tangent import _load_prelude  # noqa: E402
 
 ENV_VARS = ["CMDDIA", "FILEDIA", "OSMODE", "ATTDIA", "ATTREQ", "EXPERT", "DIMZIN"]
 
@@ -74,4 +76,5 @@ async def main() -> int:
 
 
 if __name__ == "__main__":
+    _lock = live_lock_or_exit(__file__)
     raise SystemExit(asyncio.run(main()))

@@ -21,14 +21,16 @@ import time
 from pathlib import Path
 
 sys.stdout.reconfigure(errors="replace")
+sys.path.insert(0, str(Path(__file__).resolve().parent))  # for _live_lock
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 
 import win32con
 import win32gui
 import win32process
 
-from t20_mcp.backends.file_ipc import FileIPCBackend, _process_image_name
-from t20_mcp.tools.tangent import _load_prelude
+from _live_lock import live_lock_or_exit  # noqa: E402
+from t20_mcp.backends.file_ipc import FileIPCBackend, _process_image_name  # noqa: E402
+from t20_mcp.tools.tangent import _load_prelude  # noqa: E402
 
 RESET_ENV = """
 (progn
@@ -200,4 +202,5 @@ async def main() -> int:
 
 
 if __name__ == "__main__":
+    _lock = live_lock_or_exit(__file__)
     raise SystemExit(asyncio.run(main()))
