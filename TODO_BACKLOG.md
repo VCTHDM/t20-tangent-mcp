@@ -91,6 +91,62 @@
 - 产出: scripts/itest_40_label_text_com_probe.py + 决策记录
 - 闭合判据: 三命令各自得出二选一结论 (可注入 / 永久 STOPPED)
 
+### B3 - window 占位 + 切面板后替换 工作流 (绕开 §S-4 面板锁死的工程方案)
+
+- 状态: OPEN — 设计草稿 (用户提出于 2026-06-17 会话, 经 ZCode 评估可行)
+- 背景:
+  - §S-4 "面板记忆值锁死" 是机制级永久无解 (COM/DXF/PostMessage 均失败, Handoff 33+34 已三方证伪)
+  - 但本方案不"破解"机制, 而是把"切面板"这一人工动作从 N 次 (每次 window 调用前)
+    降到整个会话 1 次, 让 LLM agent 可以 fire-and-forget 批量画窗占位, 用户随后一键替换
+  - 工程价值: 50 个 window 的会话工效提升约 50x, 是 agent 自动化场景刚需
+- 设计 (双子命令工作流):
+  1. **`tangent.window_placeholder` (新)** — 不依赖面板状态:
+     - 用 COM 在墙上插占位"临时块" (自定义图层 `T20MCP_PLACEHOLDER_WINDOW`)
+     - 块定义: 窗洞虚线矩形 + `W=xxxx` 文字标注 (用户肉眼可辨)
+     - xdata schema (App ID `T20MCP_WIN`, v1):
+       ```
+       1001 "T20MCP_WIN"
+       1000 "v1"                ; schema version
+       1011 (ins_x ins_y 0)     ; 插入点世界坐标
+       1040 width
+       1040 height
+       1040 sill_height
+       1005 wall_handle         ; 墙的 entity handle (跨命令稳定)
+       1000 layer_name          ; 用户指定图层
+       ```
+  2. **`tangent.window_replace` (新)** — 必须人工切窗模式后调用:
+     - **preflight**: 屏幕外 (-100000, -100000) 偷偷建临时墙 + TOpening 探针,
+       读 DXF group 71; ≠1 立即报警 "请先切窗模式" + SKIP, 探针整组 undo;
+     - **替换循环**: ssget 拣回所有 PLACEHOLDER, 逐个 handent(wall_handle) 找墙
+       (容忍墙体 STRETCH/MOVE/COPY 后的位置漂移), 在原位置插真天正窗,
+       COM 注入 Width/Height/DoorSill, 校验 group71=1 + type=TCH_OPENING 后 erase 占位;
+     - **失败容忍**: 墙已删除 → 跳过 + warn; 单条替换失败 → 单条回滚 + 占位保留, 不污染整批。
+- 工程价值矩阵:
+  | 维度 | 现状 (直接 tangent.window) | B3 占位+替换 |
+  |---|---|---|
+  | 切面板时机 | 每次调用前 | 整会话 1 次 |
+  | 切错代价 | 沉默生成门 (现 SKIP 兜底) | preflight 报警, 显性 |
+  | Agent UX | 每个窗都要停下来求人 | 批量画占位, 最后一键替换 |
+  | 跨墙变换 | 一调即定, 改墙后漂移 | xdata wall_handle 延迟绑定, 跟得上 |
+- 风险:
+  - preflight 探针实体如果 cleanup 不彻底, 会污染图纸 — 必须严格 try/finally + entity 计数对账
+  - xdata App ID 需注册并持久化 — 注意跨重启的 (regapp ...) 调用
+  - 替换过程的 "撤销/重做" 一致性 — 整批替换最好包在一对 (command "_undo" "_begin"/"_end") 里, 一键 undo 退回到全部占位状态
+  - 现有 `tangent.window` 不删除, 保留兼容路径; 用户可以在 docstring 里看到二选一
+- 闭合判据 (真机):
+  - itest_41_window_placeholder_smoke.py — 单占位插入, xdata 读回校验, 撤销干净
+  - itest_42_window_replace_preflight.py — preflight 探针在门模式正确报警 + cleanup 干净
+  - itest_43_window_replace_e2e.py — 切窗模式后 5 个占位批量替换, 全部 group71=1, 占位全部 erase
+  - itest_44_window_replace_wall_moved.py — 占位插入后用 STRETCH 改墙, 替换仍能命中正确位置
+  - itest_45_window_replace_wall_deleted.py — 墙删除后单条跳过 + warn, 其它占位继续
+  - itest_46_window_replace_undo.py — 批量替换后单次 undo 回到全占位状态
+  - 至少 8 个新 LISP/参数校验 pytest case
+- 难度评估: B 级偏上, 估时 2~3 天 (介于 B1 与 A1 之间)
+- 触发条件: 当用户开始让 agent 频繁调用 window (例如布置户型批量窗) 时优先级上升;
+  当前如果只是手动单次, 现有"切一次面板就别关"路径已够用, 不需要 B3
+- 落地顺序建议: B2 (低风险 COM 评估) -> B1 (TGColumn Gate B 范式) -> B3 (复用 B1 的 xdata + 块工具链)
+- 与 §S-4 关系: 本方案 **不修改 §S-4 判定** (机制级结论保持 STOPPED), B3 是工程绕道, 不是机制突破
+
 ---
 
 ## A 级 - 困难但理论可行
@@ -160,8 +216,14 @@ D1  ->  D2                              ✅ DONE (Handoff 34, 2026-06-17)
         B1                               (TGColumn Gate B, 首次面板自动化范式)
             |
             v
+        B3 (可选, agent 批量化场景触发)  (window 占位+替换 工作流)
+            |
+            v
         A1  ->  A2                       (A2 的 WPF 假说已被 C2 证伪, 优先级可下调)
 ```
+
+> B3 不在主线必经路径上, 仅当用户开始用 agent 批量化插窗 (如户型一次 50+ 扇)
+> 时才触发推进; 个人手工流可继续走"切一次面板就别关"。
 
 S 级不在路径上, 任何时候出现 "再试一次" 的诱惑请回看 Handoff 33。
 
