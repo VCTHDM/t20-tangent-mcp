@@ -154,14 +154,23 @@
 
 ## A 级 - 困难但理论可行
 
-### A1 - TRectAxis Gate B 矩形轴网封装
+### A1 - TRectAxis Gate B 矩形轴网封装  🛑 STOPPED (Handoff 37, 价值裁定)
 
-- 状态: OPEN (依赖 C1)
-- 范围: 参数面板 -> 开间/进深字符串拼接 -> "确定" BM_CLICK 端到端
-- 复杂度高于 B1 原因: 参数面板含动态行 (开间数量可变), 需要状态机判断 "添加行"/"删除行" 按钮序列
-- 新增子命令 tangent rect_axis: {base_x, base_y, h_spacings:[..], v_spacings:[..], layer?}
-- 闭合判据: 真机生成天正智能轴网 (而非 axis_lines 的普通 LINE 替代), 实体类型为 TCH_AXIS 系列
-- 回退预案: 失败则保留 axis_lines 普通线轴网替代路径不动
+- 状态: STOPPED — 2026-07-02, Gate B 机制打通但**不封装** (WON'T-SHIP)
+- 证据: docs/handoff/37_rectaxis_gate_b_close.md + 37_rectaxis_gate_b_raw.txt
+  + 37_trectaxis_control_map.md (opencode 整理, claude 复核)
+- 机制侧 (全部真机 PASS, 复用 Handoff 36 范式):
+  - bind: 选方向 radio + 键入 `个数*轴间距` (COUNT*SPACING) + Enter → 总开间/
+    总进深联动; commit: **WM_COMMAND(IDOK)** 关框 (owner-draw 按钮点击全无效) →
+    命令行打插入点 → 确定性落图 (3*3000+2*4500 稳定 7 根 LINE)
+- **裁定原因 (非机制失败)**: TRectAxis 本配置产物 = 纯 LINE @ DOTE, **无 xdata /
+  无 TCH_AXIS / 无轴号**, 与既有 axis_lines (entmake 纯 LINE) 同类。A1 原判据
+  "生成 TCH_AXIS 系而非普通 LINE"前提被证伪 → 封装只得更慢更脆的 axis_lines,
+  净负收益。需 DOTE 轴网直接 `axis_lines` + `layer="DOTE"`。
+- 重启条件: 若发现 T20 有产 TCH_AXIS 的轴网命令 / 本命令有产轴号开关, 复用
+  itest_41 机制重启。
+- 排查经验: `"3000*2"` 被读成 3000 跨×2mm (COUNT*SPACING 语法) 曾致 3003 实体
+  假象, 正确写法 `"3*3000"`; 封装前先验产物实体类型是否优于既有替代。
 
 ### A2 - WPF #32770 寄宿场景的通用守卫扩展
 
@@ -220,10 +229,10 @@ D1  ->  D2                              ✅ DONE (Handoff 34, 2026-06-17)
         B1                               ✅ DONE (Handoff 36, 2026-07-02, column 上线)
             |
             v
-        A1                               (TRectAxis Gate B; B1 范式直接迁移, 优先级上调) <-- 当前
+        A1                               🛑 STOPPED (Handoff 37, 机制通但产物无增益, 不封装)
             |
             v
-        B3 (可选, agent 批量化场景触发)  (window 占位+替换 工作流)
+        B3 (可选, agent 批量化场景触发)  (window 占位+替换 工作流) <-- 当前候选
             |
             v
         A2                               (WPF 假说已被 C2 证伪, 优先级下调, 待真 WPF 模态出现)

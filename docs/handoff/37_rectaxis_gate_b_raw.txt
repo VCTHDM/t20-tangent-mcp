@@ -1,0 +1,34 @@
+2026-07-02 13:36:50 [info     ] command_line_hwnd              hwnd=4130568
+baseline entity=0
+[launch] ok=True payload='active=0'
+[locate] rel={'input_edit': (43, 324, 351, 337), 'angle_edit': (260, 355, 286, 369), 'bay_total': (58, 356, 88, 369), 'depth_total': (145, 356, 178, 369)}
+[locate] radios=4 ok_cancel=2
+[bind] 初值: input='3*3000' angle='90' bay_total='9000' depth_total='9000' radio_checked=[False, True, False, False]
+[bind] 下开 radio=True 键入'3*3000'+Enter -> 总开间='9000' (期望 9000)
+[bind] 左进 radio=True 键入'2*4500'+Enter -> 总进深='9000' (期望 9000)
+[bind] H1 verdict: PASS
+
+[commit] WM_COMMAND(IDOK) 确认对话框
+[commit] dialog_gone=True
+[commit] count 0->7 (预期 +7)
+[commit] 'types=(("LINE" . 7)) layers=(("DOTE" . 7)) sample= #0:len=11000 #1:len=11000 #3:len=11000 #6:len=11000 | seglen short<200=0 mid=0 long>=2000=7 | bbox=(39000,39000)-(50000,50000)'
+
+=== Step41 Gate B verdict ===
+  H1 bind (选向+键入 N*S -> 总计联动)  : PASS
+  H2 IDOK 关框 + 打点落图              : PASS (delta +7)
+  实体根数符合 N*S 语义 (+7)       : PASS
+  智能轴对象 (TCH_AXIS 系)             : NO (纯 LINE)
+
+  --- A1 价值裁定 ---
+  TRectAxis 产出 = 纯 LINE @ DOTE, 无 xdata, 无 TCH_AXIS, 无轴号;
+  与既有 axis_lines (entmake 纯 LINE) 同类, 驱动对话框零增益。
+  => 机制 PASS, 但 A1 WON'T-SHIP: 不封装 rect_axis (详见 Handoff 37)。
+[cleanup] rounds=1 final=0 (baseline 0) env={'CMDACTIVE': 0, 'CMDDIA': 1, 'FILEDIA': 1, 'OSMODE': 0} residual=[]
+  cleanup clean             : PASS
+
+=== diag (owner-draw 点击法甄别) ===
+[diag] 方法=idok_cmd       ok_cancel_ctrlids=[188, 182] -> dialog_gone=True CMDACTIVE={'CMDACTIVE': 1}
+[diag] 方法=enter_key      ok_cancel_ctrlids=[188, 182] -> dialog_gone=True CMDACTIVE={'CMDACTIVE': 0}
+[diag] 方法=bm_click[0]    ok_cancel_ctrlids=[188, 182] -> dialog_gone=False CMDACTIVE={'CMDACTIVE': 1}
+[diag] 方法=mouse[0]       ok_cancel_ctrlids=[188, 182] -> dialog_gone=False CMDACTIVE={'CMDACTIVE': 1}
+[diag] 方法=parent_cmd[0]  ok_cancel_ctrlids=[188, 182] -> dialog_gone=False CMDACTIVE={'CMDACTIVE': 1}

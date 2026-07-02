@@ -136,7 +136,7 @@ column 曾同列, Handoff 36 经面板 UI 自动化复活为 `column` 子命令)
 | 命令 | 状态 | 备注 |
 |---|---|---|
 | 标准柱 TGColumn | **已封装为 `column`** (Handoff 36) | 面板 UI 自动化突破: WM_SETTEXT+通知补发填参 (柱高/转角/截面/材料) + 命令行 WM_CHAR 打插入点 + ESC 退出; 五参数 COM 读回精确匹配 (Height/Rotation/Width/Deep/Style); 历史"点序列不可达"结论仍成立, 本路线绕开点序列 |
-| 绘制轴网 TRectAxis | 已移除 | 模态对话框, 不可命令行驱动 |
+| 绘制轴网 TRectAxis | 不封装 (Handoff 37, 价值裁定) | Gate B 机制已打通 (WM_COMMAND IDOK 关框 + 命令行打点, COUNT*SPACING 语法), 但产物为纯 LINE@DOTE 无 xdata/无 TCH_AXIS/无轴号, 与 axis_lines 同类零增益 → 不封装 rect_axis; 需 DOTE 轴网用 `axis_lines` + `layer="DOTE"` |
 | 导出天正3 TSaveAs | 已移除 | WPF 框无视 FILEDIA=0 |
 | 窗模式切换 | 窗台高走 DoorSill (已闭合) | Handoff 33 + Handoff 34 真机证实: TCH_OPENING 不暴露独立 SillHeight 属性, 门/窗共用 DoorSill, 模式由面板 + DXF group 71 决定; window 子命令已 sweep 三参数 (DS=600/1200/300) 精确匹配, group71=1。COM 方法切换路线已排除 (itest_29); window 调用前需人工切面板 (该人工前提不可消除) |
 | 轴网对话框自动化 | 待评估 | TRectAxis控件已侦察, 性价比低, 暂用 axis_lines 替代 |

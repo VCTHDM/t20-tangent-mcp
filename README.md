@@ -85,7 +85,7 @@ docs/                                # 命令编目 + handoff 审计记录
 ## Handoff 索引
 
 工程决策审计记录, 按顺序:
-`docs/handoff/01..36_*.md`
+`docs/handoff/01..37_*.md`
 
 关键节点:
 - 03 — 架构评审 (P0-P2)
@@ -103,6 +103,7 @@ docs/                                # 命令编目 + handoff 审计记录
 - 34 — D1 闭合: window 模式 SillHeight 真机 sweep (DS=600/1200/300) 与 group71=1 精确匹配; tangent.window 参数语义闭合, sill_height 走 DoorSill 字段语义经第二轮真机确认
 - 35 — B2 闭合: drawing_name/arrow/elevation 文本 COM 注入证实可行 (NameText/ScaleText, Text/Text2, Text 真机写入+读回精确匹配), 三子命令文本参数上线; S-4 收窄为仅门/窗模式切换
 - 36 — B1 闭合: TGColumn 面板 UI 自动化突破 (项目首例), `column` 子命令上线; WM_SETTEXT+通知补发 填参 + 命令行 WM_CHAR 打插入点, 五参数 COM 读回精确匹配; "面板命令不可脚本驱动"结论修正为"点序列不可达, 控件级可达"
+- 37 — A1 裁定: TRectAxis Gate B 机制打通 (WM_COMMAND IDOK 关框 + 打点, COUNT*SPACING 语法) 但**不封装** — 产物纯 LINE@DOTE 无 xdata/TCH_AXIS/轴号, 与 axis_lines 同类零增益; 沉淀"封装前先验产物实体类型"方法论 (机制可行 ≠ 值得封装)
 
 ## 测试
 
