@@ -49,19 +49,19 @@ VALID_CASES: dict[str, dict] = {
     "wall_thickness_dimension": {"p1_x": 1500, "p1_y": -500, "p2_x": 1500, "p2_y": 500},
     "opening_dimension": {"p1_x": -200, "p1_y": 600, "p2_x": 3200, "p2_y": 600},
     "two_point_dimension": {"p1_x": -1000, "p1_y": 0, "p2_x": 7000, "p2_y": 0, "pos_x": 3000, "pos_y": 1500},
-    "elevation": {"base_x": 0, "base_y": 0, "label_x": 1000, "label_y": 1000},
+    "elevation": {"base_x": 0, "base_y": 0, "label_x": 1000, "label_y": 1000, "text": "3.000"},
     "coordinate": {"point_x": 1234, "point_y": 5678, "label_x": 1234, "label_y": 6678},
     "symmetry": {"x1": 0, "y1": 0, "x2": 0, "y2": 3000},
     "line_pattern": {"x1": 0, "y1": 0, "x2": 3000, "y2": 0},
     "north_arrow": {"pos_x": 0, "pos_y": 0, "dir_x": 0, "dir_y": 1000},
     "break_line": {"x1": 0, "y1": 0, "x2": 3000, "y2": 0},
     "section_symbol": {"x1": 0, "y1": 0, "x2": 3000, "y2": 0, "dir_x": 1500, "dir_y": -1000},
-    "drawing_name": {"ins_x": 0, "ins_y": 0},
+    "drawing_name": {"ins_x": 0, "ins_y": 0, "name_text": "一层平面图", "scale_text": "1:100"},
     "rectangle": {"x1": 0, "y1": 0, "x2": 3000, "y2": 2000},
     "balcony": {"points": [[0, 0], [3000, 0], [3000, 1500], [0, 1500]]},
     "step": {"points": [[0, 0], [3000, 0], [3000, 600], [0, 600]]},
     "ramp": {"x": 0, "y": 0},
-    "arrow": {"x1": 0, "y1": 0, "x2": 2000, "y2": 0},
+    "arrow": {"x1": 0, "y1": 0, "x2": 2000, "y2": 0, "text": "见详图", "text2": "1:20"},
     "rect_roof": {"x1": 0, "y1": 0, "x2": 6000, "y2": 0, "x3": 6000, "y3": 4000},
     "cusp_roof": {"center_x": 3000, "center_y": 3000, "base_x": 6000, "base_y": 3000},
     "insight": {"x": 0, "y": 0},
@@ -385,6 +385,47 @@ class TestParamInjection:
         assert p1 < p2 < d1 < d2
         assert "TCH_ARROW" in code
 
+    # --- 标注文本 COM 注入 (Handoff 35: itest_40 真机验证可写) ---
+
+    def test_drawing_name_injects_nametext_and_scaletext(self) -> None:
+        code = generate_lisp("drawing_name", {
+            "ins_x": 0, "ins_y": 0, "name_text": "一层平面图", "scale_text": "1:50",
+        })
+        assert '(list t20mcp:obj "NameText" "一层平面图")' in code
+        assert '(list t20mcp:obj "ScaleText" "1:50")' in code
+        assert "vlax-put-property" in code
+
+    def test_drawing_name_without_text_params_has_no_injection(self) -> None:
+        code = generate_lisp("drawing_name", {"ins_x": 0, "ins_y": 0})
+        assert "vlax-put-property" not in code
+
+    def test_arrow_injects_text_and_text2(self) -> None:
+        code = generate_lisp("arrow", {
+            "x1": 0, "y1": 0, "x2": 2000, "y2": 0, "text": "做法见详图", "text2": "1:20",
+        })
+        assert '(list t20mcp:obj "Text" "做法见详图")' in code
+        assert '(list t20mcp:obj "Text2" "1:20")' in code
+
+    def test_arrow_without_text_params_has_no_injection(self) -> None:
+        code = generate_lisp("arrow", {"x1": 0, "y1": 0, "x2": 2000, "y2": 0})
+        assert "vlax-put-property" not in code
+
+    def test_elevation_injects_text_override(self) -> None:
+        code = generate_lisp("elevation", {"base_x": 0, "base_y": 0, "text": "3.000"})
+        assert '(list t20mcp:obj "Text" "3.000")' in code
+
+    def test_elevation_without_text_keeps_auto_value(self) -> None:
+        code = generate_lisp("elevation", {"base_x": 0, "base_y": 0})
+        assert "vlax-put-property" not in code
+
+    def test_label_text_quotes_are_escaped(self) -> None:
+        # 文本内的双引号必须转义, 不能逃逸出 LISP 字符串字面量。
+        code = generate_lisp("arrow", {
+            "x1": 0, "y1": 0, "x2": 2000, "y2": 0, "text": '打"引号"的文字',
+        })
+        assert '\\"引号\\"' in code
+        assert is_paren_balanced(code)
+
     def test_rect_roof_uses_trectroof_three_corners_with_trailing_enter(self) -> None:
         # TRectRoof 真机试验: 左下 -> 右下 -> 右上 -> 回车, 生成 TCH_MOUNTROOF。
         code = generate_lisp(
@@ -587,6 +628,21 @@ class TestInvalidParamsRejected:
     def test_arrow_coincident_points_rejected(self) -> None:
         with pytest.raises(ParamError):
             generate_lisp("arrow", {"x1": 5, "y1": 5, "x2": 5, "y2": 5})
+
+    @pytest.mark.parametrize("bad_text", [
+        "",                 # 空字符串
+        "x" * 101,          # 超长 (LABEL_TEXT_MAX=100)
+        "换\n行",           # 控制字符
+        "带\U0001f600表情",  # GBK 无法编码 (emoji)
+        123,                # 非字符串
+    ])
+    def test_label_text_invalid_rejected(self, bad_text) -> None:
+        with pytest.raises(ParamError):
+            generate_lisp("arrow", {"x1": 0, "y1": 0, "x2": 2000, "y2": 0, "text": bad_text})
+        with pytest.raises(ParamError):
+            generate_lisp("drawing_name", {"ins_x": 0, "ins_y": 0, "name_text": bad_text})
+        with pytest.raises(ParamError):
+            generate_lisp("elevation", {"base_x": 0, "base_y": 0, "text": bad_text})
 
     def test_rect_roof_coincident_corners_rejected(self) -> None:
         with pytest.raises(ParamError):

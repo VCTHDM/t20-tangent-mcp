@@ -173,6 +173,25 @@ def _lisp_escape(text: str) -> str:
     return text.replace("\\", "\\\\").replace('"', '\\"')
 
 
+# 标注类文本参数上限 (drawing_name/arrow/elevation 的 COM 文本注入)。
+LABEL_TEXT_MAX: int = 100
+
+
+def _com_put_text(props: list[tuple[str, str]]) -> str:
+    """生成 ``{{COM_INJECT}}`` 占位内容: 逐属性 vlax-put-property 注入文本。
+
+    props 为 (COM 属性名, 已经 _require_str 校验的文本) 列表; 空列表返回空串
+    (模板中该占位符所在行留白, 不注入)。Handoff 35 真机验证:
+    TDbDrawingName.NameText/ScaleText、TDbSymbArrow.Text/Text2、
+    TDbSymbElevation.Text 均可写且读回精确匹配。
+    """
+    return "\n".join(
+        f"        (vl-catch-all-apply 'vlax-put-property"
+        f' (list t20mcp:obj "{prop}" "{_lisp_escape(text)}"))'
+        for prop, text in props
+    )
+
+
 def _set_layer_cmd(layer: Any) -> str:
     """生成 ``{{SET_LAYER}}`` 占位内容: 设置/新建当前图层, 或空 (不指定图层)。"""
     if layer is None:
@@ -511,7 +530,11 @@ def _gen_two_point_dimension(data: dict[str, Any]) -> str:
 
 
 def _gen_elevation(data: dict[str, Any]) -> str:
-    """标高标注。data: {base_x,base_y,label_x?,label_y?,layer?}"""
+    """标高标注。data: {base_x,base_y,label_x?,label_y?,text?,layer?}
+
+    text (标高文字, 如 "3.000") 经 ActiveX 注入 Text (Handoff 35 真机验证);
+    未提供时由天正按基准点自动计算。
+    """
     base_x = _require_coord(data.get("base_x"), "base_x")
     base_y = _require_coord(data.get("base_y"), "base_y")
     # TMElev 真机试验中单点序列会挂起等待输入; 缺省给出第二点, 永远双点下发。
@@ -519,6 +542,9 @@ def _gen_elevation(data: dict[str, Any]) -> str:
     label_y = _require_coord(data.get("label_y", base_y + 1000.0), "label_y")
     if base_x == label_x and base_y == label_y:
         raise ParamError("标高基准点与标注放置点不能重合")
+    props: list[tuple[str, str]] = []
+    if data.get("text") is not None:
+        props.append(("Text", _require_str(data["text"], "text", max_len=LABEL_TEXT_MAX)))
     return _render(
         "elevation",
         {
@@ -527,6 +553,7 @@ def _gen_elevation(data: dict[str, Any]) -> str:
             "BASE_Y": _num(base_y),
             "LABEL_X": _num(label_x),
             "LABEL_Y": _num(label_y),
+            "COM_INJECT": _com_put_text(props),
         },
     )
 
@@ -679,19 +706,30 @@ def _gen_section_symbol(data: dict[str, Any]) -> str:
 
 
 def _gen_drawing_name(data: dict[str, Any]) -> str:
-    """图名标注。data: {ins_x,ins_y,layer?}
+    """图名标注。data: {ins_x,ins_y,name_text?,scale_text?,layer?}
 
     真机验证序列: 插入位置点 -> 回车退出循环, 生成 TCH_DRAWINGNAME。
-    图名文字/比例走天正面板记忆值, 本模板只参数化插入位置 (见 warning)。
+    name_text (图名文字) / scale_text (比例文字, 如 "1:50") 经 ActiveX 注入
+    NameText/ScaleText (Handoff 35 真机验证); 未提供时走天正面板记忆值。
     """
     ins_x = _require_coord(data.get("ins_x"), "ins_x")
     ins_y = _require_coord(data.get("ins_y"), "ins_y")
+    props: list[tuple[str, str]] = []
+    if data.get("name_text") is not None:
+        props.append(
+            ("NameText", _require_str(data["name_text"], "name_text", max_len=LABEL_TEXT_MAX))
+        )
+    if data.get("scale_text") is not None:
+        props.append(
+            ("ScaleText", _require_str(data["scale_text"], "scale_text", max_len=LABEL_TEXT_MAX))
+        )
     return _render(
         "drawing_name",
         {
             "SET_LAYER": _set_layer_cmd(data.get("layer")),
             "INS_X": _num(ins_x),
             "INS_Y": _num(ins_y),
+            "COM_INJECT": _com_put_text(props),
         },
     )
 
@@ -770,10 +808,11 @@ def _gen_ramp(data: dict[str, Any]) -> str:
 
 
 def _gen_arrow(data: dict[str, Any]) -> str:
-    """箭头引注。data: {x1, y1, x2, y2, layer?}
+    """箭头引注。data: {x1, y1, x2, y2, text?, text2?, layer?}
 
     真机验证序列: 箭头起点 -> 直段下一点 -> 回车 -> 回车, 生成 TCH_ARROW。
-    箭头文字/样式走天正面板记忆值, 本工具只参数化起点/终点几何。
+    text (上标文字) / text2 (下标文字) 经 ActiveX 注入 Text/Text2 (Handoff 35
+    真机验证); 未提供时走天正面板记忆值; 箭头样式仍走面板。
     """
     x1 = _require_coord(data.get("x1"), "x1")
     y1 = _require_coord(data.get("y1"), "y1")
@@ -781,6 +820,11 @@ def _gen_arrow(data: dict[str, Any]) -> str:
     y2 = _require_coord(data.get("y2"), "y2")
     if x1 == x2 and y1 == y2:
         raise ParamError("箭头引注的起点与终点不能重合")
+    props: list[tuple[str, str]] = []
+    if data.get("text") is not None:
+        props.append(("Text", _require_str(data["text"], "text", max_len=LABEL_TEXT_MAX)))
+    if data.get("text2") is not None:
+        props.append(("Text2", _require_str(data["text2"], "text2", max_len=LABEL_TEXT_MAX)))
     return _render(
         "arrow",
         {
@@ -789,6 +833,7 @@ def _gen_arrow(data: dict[str, Any]) -> str:
             "Y1": _num(y1),
             "X2": _num(x2),
             "Y2": _num(y2),
+            "COM_INJECT": _com_put_text(props),
         },
     )
 
@@ -1137,15 +1182,19 @@ LOW_CONFIDENCE_WARNINGS: dict[str, str] = {
     ),
     "elevation": (
         "TMElev 已验证双点序列可生成 TCH_ELEVATION; "
-        "不要改成单点序列, 点不足曾导致 IPC 超时并触发 AutoCAD 闪退事故"
+        "不要改成单点序列, 点不足曾导致 IPC 超时并触发 AutoCAD 闪退事故。"
+        "text 参数经 COM 注入 Text 覆盖标高文字 (Handoff 35 真机验证); "
+        "未提供时由天正按基准点自动计算"
     ),
     "drawing_name": (
-        "图名文字/比例取自天正面板记忆值, 本工具只参数化插入位置, "
-        "不能通过参数设置图名文本 (COM 文本注入待评估, 见 docs/T20_COMMANDS.md)"
+        "name_text/scale_text 参数经 COM 注入 NameText/ScaleText, Handoff 35 真机"
+        "写入+读回验证; 未提供这两个参数时图名/比例取天正面板记忆值。"
+        "字体样式/字高仍走面板, 不可参数化。"
     ),
     "arrow": (
-        "箭头文字/样式取自天正面板记忆值, 本工具只参数化起点/终点几何, "
-        "不能通过参数设置引注文本 (COM 文本注入待评估, 见 docs/T20_COMMANDS.md)"
+        "text/text2 参数经 COM 注入 Text(上标)/Text2(下标), Handoff 35 真机"
+        "写入+读回验证; 未提供时引注文字取天正面板记忆值。"
+        "箭头样式/大小仍走面板, 不可参数化。"
     ),
 }
 
@@ -1203,19 +1252,19 @@ def register_tangent_tool(mcp: Any) -> None:
           wall_thickness_dimension — 墙厚标注 [已验证]。{p1_x, p1_y, p2_x, p2_y, layer?}
           opening_dimension — 门窗标注 [已验证]。{p1_x, p1_y, p2_x, p2_y, layer?}
           two_point_dimension — 两点标注 [已验证]。{p1_x, p1_y, p2_x, p2_y, pos_x?, pos_y?, layer?}
-          elevation  — 标高标注 [已验证双点序列]。{base_x, base_y, label_x?, label_y?, layer?}
+          elevation  — 标高标注 [已验证双点序列; text 经 COM 注入]。{base_x, base_y, label_x?, label_y?, text?, layer?}
           coordinate — 坐标标注 [已验证]。{point_x, point_y, label_x?, label_y?, layer?}
           symmetry   — 画对称轴 [已验证]。{x1, y1, x2, y2, layer?}
           line_pattern — 线图案 [已验证; 样式取面板记忆值]。{x1, y1, x2, y2, layer?}
           north_arrow — 画指北针 [已验证]。{pos_x, pos_y, dir_x?, dir_y?, layer?}
           break_line — 加折断线 [已验证]。{x1, y1, x2, y2, layer?}
           section_symbol — 剖切符号 [已验证]。{x1, y1, x2, y2, dir_x?, dir_y?, layer?}
-          drawing_name — 图名标注 [已验证; 图名文字取面板记忆值, 见 warning]。{ins_x, ins_y, layer?}
+          drawing_name — 图名标注 [已验证; name_text/scale_text 经 COM 注入]。{ins_x, ins_y, name_text?, scale_text?, layer?}
           rectangle  — 矩形     [已验证]。{x1, y1, x2, y2, layer?}
           balcony    — 阳台     [已验证; 类型/挑出宽取面板记忆值]。{points:[[x,y],...]>=2, layer?}
           step       — 台阶     [已验证; 踏步数/宽取面板记忆值]。{points:[[x,y],...]>=2, layer?}
           ramp       — 坡道     [已验证; 宽度/坡长取面板记忆值]。{x, y, layer?}
-          arrow      — 箭头引注 [已验证; 引注文字取面板记忆值, 见 warning]。{x1, y1, x2, y2, layer?}
+          arrow      — 箭头引注 [已验证; text/text2 经 COM 注入]。{x1, y1, x2, y2, text?, text2?, layer?}
           rect_roof  — 矩形屋顶 [已验证; 坡角/出檐取面板记忆值]。{x1, y1, x2, y2, x3, y3, layer?}
           cusp_roof  — 攒尖屋顶 [已验证; 边数/屋顶高取面板记忆值]。{center_x, center_y, base_x?, base_y?, layer?}
           insight    — 内视符号 [已验证; 朝向/编号取面板记忆值]。{x, y, layer?}

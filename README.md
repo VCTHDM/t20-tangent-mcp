@@ -39,19 +39,19 @@ uv run python scripts/itest_19_mcp_stdio_smoke.py  # MCP stdio 冒烟 (无需 Au
 | `wall_thickness_dimension` | TDimWall | TCH_DIMENSION2 | p1_x,p1_y,p2_x,p2_y, layer? |
 | `opening_dimension` | TDim3 | TCH_DIMENSION2 | p1_x,p1_y,p2_x,p2_y, layer? |
 | `two_point_dimension` | TDimTP | TCH_DIMENSION2 | p1_x,p1_y,p2_x,p2_y, pos_x?, pos_y?, layer? |
-| `elevation` | TMElev | TCH_ELEVATION | base_x,base_y, label_x?, label_y?, layer? |
+| `elevation` | TMElev | TCH_ELEVATION | base_x,base_y, label_x?, label_y?, text?, layer? |
 | `coordinate` | TCoord | TCH_COORD | point_x,point_y, label_x?, label_y?, layer? |
 | `symmetry` | TSymmetry | TCH_SYMMETRY | x1,y1,x2,y2, layer? |
 | `line_pattern` | TLinePattern | TCH_PATH_ARRAY | x1,y1,x2,y2, layer? |
 | `north_arrow` | TNorthThumb | TCH_NORTHTHUMB | pos_x,pos_y, dir_x?, dir_y?, layer? |
 | `break_line` | TSymbCut | TCH_RUPTURE | x1,y1,x2,y2, layer? |
 | `section_symbol` | TSection | TCH_SYMB_SECTION | x1,y1,x2,y2, dir_x?, dir_y?, layer? |
-| `drawing_name` | TDrawingName | TCH_DRAWINGNAME | ins_x,ins_y, layer? |
+| `drawing_name` | TDrawingName | TCH_DRAWINGNAME | ins_x,ins_y, name_text?, scale_text?, layer? |
 | `rectangle` | TRect | TCH_RECT | x1,y1,x2,y2, layer? |
 | `balcony` | TBalcony | TCH_BALCONY | points:[[x,y],...], layer? |
 | `step` | TStep | TCH_STEP | points:[[x,y],...], layer? |
 | `ramp` | TAscent | TCH_ASCENT | x,y, layer? |
-| `arrow` | TArrow | TCH_ARROW | x1,y1,x2,y2, layer? |
+| `arrow` | TArrow | TCH_ARROW | x1,y1,x2,y2, text?, text2?, layer? |
 | `rect_roof` | TRectRoof | TCH_MOUNTROOF | x1,y1,x2,y2,x3,y3, layer? |
 | `cusp_roof` | TCuspRoof | TCH_CUSPROOF | center_x,center_y, base_x?, base_y?, layer? |
 | `insight` | TInsight | TCH_TDBINSIGHT | x,y, layer? |
@@ -84,7 +84,7 @@ docs/                                # 命令编目 + handoff 审计记录
 ## Handoff 索引
 
 工程决策审计记录, 按顺序:
-`docs/handoff/01..33_*.md`
+`docs/handoff/01..35_*.md`
 
 关键节点:
 - 03 — 架构评审 (P0-P2)
@@ -100,11 +100,12 @@ docs/                                # 命令编目 + handoff 审计记录
 - 32 — slimming 后当前可用资产清单 + 已删脚本提示 (取代 29/30/31 中已失效的 itest_44/45/46 脚本路径)
 - 33 — P1/P2/P3 真机推进: TPartSaveAs BLOCKED (selection-first 后弹「图形导出」#32770) / TSingleAxisDim STOP (entsel/实体拾取, 不接受坐标注入) / door COM 读回 PASS / window 模式下 sill_height 已通过 DoorSill 写入验证 (TCH_OPENING 不暴露独立 SillHeight; 调用前仍需人工切窗模式) / column Gate A inventory (556 子控件)
 - 34 — D1 闭合: window 模式 SillHeight 真机 sweep (DS=600/1200/300) 与 group71=1 精确匹配; tangent.window 参数语义闭合, sill_height 走 DoorSill 字段语义经第二轮真机确认
+- 35 — B2 闭合: drawing_name/arrow/elevation 文本 COM 注入证实可行 (NameText/ScaleText, Text/Text2, Text 真机写入+读回精确匹配), 三子命令文本参数上线; S-4 收窄为仅门/窗模式切换
 
 ## 测试
 
 ```bash
-uv run pytest -q                              # 离线 (150 测试, <1s)
+uv run pytest -q                              # 离线 (171 测试, <1s)
 uv run python scripts/itest_01_bringup.py     # 真机引导 (需 AutoCAD)
 uv run python scripts/itest_12_e2e.py         # 真机核心 E2E
 uv run python scripts/itest_e2e_suite.py      # 真机批量 E2E (26 case)

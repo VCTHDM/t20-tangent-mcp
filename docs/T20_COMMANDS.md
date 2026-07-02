@@ -47,19 +47,19 @@
 | 墙厚标注 | `TDimWall` | 直线第一点→直线第二点；两点连线穿过墙体 | `TCH_DIMENSION2` | **高** (E2E) |
 | 门窗标注 | `TDim3` | 线选起点→线选终点→回车；线选段穿过墙体/门窗 | `TCH_DIMENSION2` | **高** (E2E) |
 | 两点标注 | `TDimTP` | 穿越线起点→穿越线终点→标注位置→回车；三墙场景 E2E 生成尺寸，穿过对象不足会报"对象数目太少" | `TCH_DIMENSION2` | **高** (E2E) |
-| 标高标注 | `TMElev` | 标高基准点→标注放置点→回车；单点序列会挂起等待输入，严禁改成单点序列 | `TCH_ELEVATION` | **高** (E2E) |
+| 标高标注 | `TMElev` | 标高基准点→标注放置点→回车；单点序列会挂起等待输入，严禁改成单点序列；`text` 经 COM 注入 `Text` 覆盖自动计算标高 (Handoff 35) | `TCH_ELEVATION` | **高** (E2E) |
 | 坐标标注 | `TCoord` | 标注点→坐标标注方向点→回车 | `TCH_COORD` | **高** (E2E) |
 | 画对称轴 | `TSymmetry` | 起点→终点；两点即收尾 (active=0) | `TCH_SYMMETRY` | **高** (E2E) |
 | 线图案 | `TLinePattern` | 起点→终点→回车→回车（补第二个空回车退出循环）；样式走面板记忆值 | `TCH_PATH_ARRAY` | **高** (E2E) |
 | 画指北针 | `TNorthThumb` | 指北针位置点→方向点；两点即收尾 (active=0) | `TCH_NORTHTHUMB` | **高** (E2E) |
 | 加折断线 | `TSymbCut` | 起点→终点→回车 (接受 `<不切割>` 默认)；两点后命令仍 active, 必须补空回车 | `TCH_RUPTURE` | **高** (E2E) |
 | 剖切符号 | `TSection` | 第一剖切点→第二剖切点→剖视方向→回车退出循环；编号文字走面板记忆值 | `TCH_SYMB_SECTION` | **高** (E2E) |
-| 图名标注 | `TDrawingName` | 插入位置→回车退出循环；图名文字/比例走面板记忆值 (不可参数化, 附 warning) | `TCH_DRAWINGNAME` | **高** (E2E) |
+| 图名标注 | `TDrawingName` | 插入位置→回车退出循环；`name_text`/`scale_text` 经 COM 注入 `NameText/ScaleText` (Handoff 35)；未提供时走面板记忆值；样式不可参数化 | `TCH_DRAWINGNAME` | **高** (E2E) |
 | 矩形 | `TRect` | 第一角点→第二角点→回车退出循环 | `TCH_RECT` | **高** (E2E) |
 | 阳台 | `TBalcony` | 各轮廓点→回车；类型/挑出宽走面板记忆值；点数≥2 | `TCH_BALCONY` | **高** (E2E) |
 | 台阶 | `TStep` | 各轮廓点→回车；踏步数/宽走面板记忆值；点数≥2 | `TCH_STEP` | **高** (E2E) |
 | 坡道 | `TAscent` | 点取位置→回车退出循环；宽度/坡长走面板记忆值 | `TCH_ASCENT` | **高** (E2E) |
-| 箭头引注 | `TArrow` | 起点→终点→回车→回车（先结束引线循环再退外层循环）；引注文字走面板记忆值 (附 warning) | `TCH_ARROW` | **高** (E2E) |
+| 箭头引注 | `TArrow` | 起点→终点→回车→回车（先结束引线循环再退外层循环）；`text`/`text2` 经 COM 注入 `Text/Text2` 上下标文字 (Handoff 35)；未提供时走面板记忆值 | `TCH_ARROW` | **高** (E2E) |
 | 矩形屋顶 | `TRectRoof` | 左下角点→右下角点→右上角点→回车退出循环；坡角/出檐走面板记忆值 | `TCH_MOUNTROOF` | **高** (E2E) |
 | 攒尖屋顶 | `TCuspRoof` | 屋顶中心位置→第二点(定半径/朝向)；两点即收尾 (active=0)；边数/屋顶高走面板记忆值 | `TCH_CUSPROOF` | **高** (E2E) |
 | 内视符号 | `TInsight` | 标注位置点→回车退出循环 (每点一个)；朝向/编号走面板记忆值 | `TCH_TDBINSIGHT` | **高** (E2E) |

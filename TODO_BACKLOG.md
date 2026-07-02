@@ -80,16 +80,20 @@
 - 产出: scripts/itest_39_column_gate_b_e2e.py + Handoff 35 文档
 - 回退预案: 任一控件 BM_CLICK/WM_SETTEXT 失败 -> 立即 ESC + 回滚至 EXECUTE_DISABLED
 
-### B2 - drawing_name / arrow / elevation 文本 COM 注入评估
+### B2 - drawing_name / arrow / elevation 文本 COM 注入评估  ✅ DONE (Handoff 35)
 
-- 状态: OPEN
-- 背景: 当前面板记忆值不可参数化, 已带 warning
-- 行动:
-  1. 用 vlax-dump-object 枚举 TCH_DRAWINGNAME / TCH_ARROW / TCH_ELEVATION 的 COM 属性
-  2. 若暴露 Text / Style / Scale 等 -> 真机 vlax-put-property 验证写入
-  3. 若全部返回 vl-catch-all-error -> 该项降为 S 级 (面板锁死)
-- 产出: scripts/itest_40_label_text_com_probe.py + 决策记录
-- 闭合判据: 三命令各自得出二选一结论 (可注入 / 永久 STOPPED)
+- 状态: DONE — 2026-07-02, 结论: **三命令全部可注入** (S-4 候补判定被证伪)
+- 证据: docs/handoff/35_label_text_com_probe.md + 35_label_com_raw.txt
+- 真机结果 (itest_40 probe all + inject 两轮, cleanup 全绿):
+  - drawing_name: NameText/ScaleText 可写 (IComDrawingName)
+  - arrow: Text(上标)/Text2(下标) 可写 (IComSymbArrow)
+  - elevation: Text 可写, 覆盖自动计算标高文字 (IComSymbElev)
+  - 样式类属性 (NameStyle/ScaleStyle/FontStyle) put ERR, 仍走面板
+- 超范围加成: 三子命令的文本参数已一并封装上线
+  (name_text/scale_text, text/text2, text), 离线 159 → 171 passed,
+  inject E2E 中文读回精确匹配
+- 方法论: LOGFILEMODE 捕获 vlax-dump-object (中文版段落标记是 ";特性值:");
+  其它"取面板记忆值"命令 (balcony/step/ramp/insight/tree...) 未来可同法评估
 
 ### B3 - window 占位 + 切面板后替换 工作流 (绕开 §S-4 面板锁死的工程方案)
 
@@ -197,7 +201,8 @@ TBlkMask1 / WIPEOUT / TGirDer / TWINDROSE / TSlab / TElevator / TDrawParallelSta
 ### S-4 - 面板记忆值锁死 (参数化无解)
 
 - door / window 的门/窗模式切换 - DXF group 71 由面板决定, COM 不暴露
-- drawing_name / arrow / elevation 的文本 - 待 B2 评估; 若 B2 全 ERR 则正式落入此级
+- ~~drawing_name / arrow / elevation 的文本~~ — B2 证伪 (Handoff 35):
+  三命令文本全部 COM 可注入, 已参数化上线; S-4 仅剩门/窗模式切换一项
 
 ---
 
@@ -210,10 +215,10 @@ D1  ->  D2                              ✅ DONE (Handoff 34, 2026-06-17)
         C1 + C2                          ✅ DONE (Handoff 34, 2026-06-17)
             |
             v
-        B2                               (低风险 COM 探针, 二选一即结案) <-- 当前
+        B2                               ✅ DONE (Handoff 35, 2026-07-02, 结论: 可注入+已封装)
             |
             v
-        B1                               (TGColumn Gate B, 首次面板自动化范式)
+        B1                               (TGColumn Gate B, 首次面板自动化范式) <-- 当前
             |
             v
         B3 (可选, agent 批量化场景触发)  (window 占位+替换 工作流)

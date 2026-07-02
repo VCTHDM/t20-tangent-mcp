@@ -1,0 +1,215 @@
+2026-07-02 08:27:28 [info     ] command_line_hwnd              hwnd=4130568
+start clean: entity=0 (undo x0)
+
+===== [drawing_name] baseline=0 =====
+[create] ok=True payload='' count 0->1
+[dump] ok=True payload='handle=2BC log=C:\\Users\\Administrator\\documents\\codex\\2026-05-28\\files-mentioned-by-the-user-tianzheng\\cad-html-work\\Drawing1_1e92e7abb.log'
+[dump-raw] (48 行, log=C:\Users\Administrator\documents\codex\2026-05-28\files-mentioned-by-the-user-tianzheng\cad-html-work\Drawing1_1e92e7abb.log)
+  ; IComDrawingName: IComDrawingName Interface
+  ;特性值:
+  ;   Application (RO) = #<VLA-OBJECT IAcadApplication 00007ff60edc5ca0>
+  ;   DimStyle = "传统"
+  ;   Document (RO) = #<VLA-OBJECT IAcadDocument 0000017704100ab8>
+  ;   EntityTransparency = "ByLayer"
+  ;   Handle (RO) = "2BC"
+  ;   HasExtensionDictionary (RO) = 0
+  ;   Hyperlinks (RO) = #<VLA-OBJECT IAcadHyperlinks 0000017763f52dc8>
+  ;   Layer = "DIM_SYMB"
+  ;   LayoutRotation = 0.0
+  ;   Linetype = "ByLayer"
+  ;   LinetypeScale = 1.0
+  ;   Lineweight = -1
+  ;   Material = "ByLayer"
+  ;   NameHeight = "7.0"
+  ;   NameStyle = "Standard"
+  ;   NameText = "天正图名标注输入"
+  ;   ObjectControl = "无"
+  ;   ObjectID (RO) = 48
+  ;   ObjectName (RO) = "TDbDrawingName"
+  ;   OwnerID (RO) = 43
+  ;   PlotStyleName = "ByLayer"
+  ;   Scale = 100.0
+  ;   ScaleHeight = "5.0"
+  ;   ScaleStyle = "Standard"
+  ;   ScaleText = "1:100"
+  ;   ShowScale = "是"
+  ;   SpaceCoef = "0.60"
+  ;   TextColor = 7
+  ;   TrueColor = #<VLA-OBJECT IAcadAcCmColor 0000017763f52100>
+  ;   Visible = -1
+  ;支持的方法:
+  ;   ArrayPolar (3)
+  ;   ArrayRectangular (6)
+  ;   Copy ()
+  ;   Delete ()
+  ;   GetBoundingBox (2)
+  ;   GetExtensionDictionary ()
+  ;   GetXData (3)
+  ;   Highlight (1)
+  ;   IntersectWith (2)
+  ;   Mirror (2)
+  ;   Mirror3D (3)
+  ;   Move (2)
+  ;   Rotate (2)
+  ;   Rotate3D (3)
+  ;   
+[entget-strs] 'dxf-strs: (0 . "TCH_DRAWINGNAME") (5 . "2BC") (100 . "AcDbEntity") (410 . "Model") (8 . "DIM_SYMB") (100 . "TDbEntity") (100 . "TDbDrawingName")'
+[com-probe] dump 候选 13: ['NameHeight', 'NameStyle', 'NameText', 'ScaleText', 'TextColor', 'DimStyle', 'LayoutRotation', 'ObjectControl', 'Scale', 'ScaleHeight', 'ScaleStyle', 'ShowScale', 'SpaceCoef']
+[com-probe 1] ok=True '|NameHeight: old="7.0" put=OK new="0.0"|NameStyle: old="Standard" put=ERR new="Standard"|NameText: old="天正图名标注输入" put=OK new="T20MCP-B2"|ScaleText: old="1:100" put=OK new="T20MCP-B2"|TextColor: old=7 put=OK new=123|DimStyle: old="传统" put=OK new="传统"|LayoutRotation: old=0.0 put=OK new=123.0|ObjectControl: old="无" put=OK new="无"'
+[com-probe 2] ok=True '|Scale: old=100.0 put=OK new=123.0|ScaleHeight: old="5.0" put=OK new="0.0"|ScaleStyle: old="Standard" put=ERR new="Standard"|ShowScale: old="是" put=OK new="否"|SpaceCoef: old="0.60" put=OK new="0.00"'
+[dxf-probe] 无字符串组可探 (仅 0/100 类结构组)
+[verdict] drawing_name: INJECTABLE-COM 文本属性可写 ['NameText', 'ScaleText'] (全部命中 ['NameText', 'ScaleText', 'LayoutRotation', 'Scale']) (etype 预期 TCH_DRAWINGNAME)
+[cleanup] rounds=1 final=0 (baseline 0) env={'CMDACTIVE': 0, 'CMDDIA': 1, 'FILEDIA': 1, 'OSMODE': 0, 'LOGFILEMODE': 0}
+[drawing_name] cleanup clean: PASS
+
+===== [arrow] baseline=0 =====
+[create] ok=True payload='' count 0->1
+[dump] ok=True payload='handle=2BD log=C:\\Users\\Administrator\\documents\\codex\\2026-05-28\\files-mentioned-by-the-user-tianzheng\\cad-html-work\\Drawing1_1e92e7abb.log'
+[dump-raw] (49 行, log=C:\Users\Administrator\documents\codex\2026-05-28\files-mentioned-by-the-user-tianzheng\cad-html-work\Drawing1_1e92e7abb.log)
+  ; IComSymbArrow: IComSymbArrow Interface
+  ;特性值:
+  ;   Alignment = "在线端"
+  ;   Application (RO) = #<VLA-OBJECT IAcadApplication 00007ff60edc5ca0>
+  ;   ArrowSize = "3.0"
+  ;   ArrowStyle = "箭头"
+  ;   Document (RO) = #<VLA-OBJECT IAcadDocument 0000017704100ab8>
+  ;   EntityTransparency = "ByLayer"
+  ;   FontStyle = "_TCH_DIM"
+  ;   Handle (RO) = "2BD"
+  ;   HasExtensionDictionary (RO) = 0
+  ;   Height = "3.5"
+  ;   Hyperlinks (RO) = #<VLA-OBJECT IAcadHyperlinks 00000177ad44a4c8>
+  ;   Layer = "DIM_SYMB"
+  ;   LayoutRotation = 0.0
+  ;   Linetype = "ByLayer"
+  ;   LinetypeScale = 1.0
+  ;   Lineweight = -1
+  ;   MaskFlag = "否"
+  ;   Material = "ByLayer"
+  ;   ObjectControl = "无"
+  ;   ObjectID (RO) = 49
+  ;   ObjectName (RO) = "TDbSymbArrow"
+  ;   OwnerID (RO) = 43
+  ;   PlotStyleName = "ByLayer"
+  ;   Scale = 100.0
+  ;   Text = "上"
+  ;   Text2 = "下"
+  ;   Text2BaseRatio = "0.30"
+  ;   TextColor = 7
+  ;   TextLayer = "DIM_SYMB"
+  ;   TrueColor = #<VLA-OBJECT IAcadAcCmColor 00000177ad44a940>
+  ;   Visible = -1
+  ;支持的方法:
+  ;   ArrayPolar (3)
+  ;   ArrayRectangular (6)
+  ;   Copy ()
+  ;   Delete ()
+  ;   GetBoundingBox (2)
+  ;   GetExtensionDictionary ()
+  ;   GetXData (3)
+  ;   Highlight (1)
+  ;   IntersectWith (2)
+  ;   Mirror (2)
+  ;   Mirror3D (3)
+  ;   Move (2)
+  ;   Rotate (2)
+  ;   Rotate3D (3)
+  ;   ScaleEntit
+[entget-strs] 'dxf-strs: (0 . "TCH_ARROW") (5 . "2BD") (100 . "AcDbEntity") (410 . "Model") (8 . "DIM_SYMB") (100 . "TDbEntity") (100 . "TDbSymbWithText") (410 . "DIM_SYMB") (100 . "TDbSymbArrow")'
+[com-probe] dump 候选 14: ['Text', 'Text2', 'Text2BaseRatio', 'TextColor', 'TextLayer', 'Alignment', 'ArrowSize', 'ArrowStyle', 'FontStyle', 'Height', 'LayoutRotation', 'MaskFlag', 'ObjectControl', 'Scale']
+[com-probe 1] ok=True '|Text: old="上" put=OK new="T20MCP-B2"|Text2: old="下" put=OK new="T20MCP-B2"|Text2BaseRatio: old="0.30" put=OK new="0.00"|TextColor: old=7 put=OK new=123|TextLayer: old="DIM_SYMB" put=OK new="0"|Alignment: old="在线端" put=OK new="在线端"|ArrowSize: old="3.0" put=OK new="0.0"|ArrowStyle: old="箭头" put=OK new="箭头"'
+[com-probe 2] ok=True '|FontStyle: old="_TCH_DIM" put=ERR new="_TCH_DIM"|Height: old="3.5" put=OK new="0.0"|LayoutRotation: old=0.0 put=OK new=123.0|MaskFlag: old="否" put=OK new="否"|ObjectControl: old="无" put=OK new="无"|Scale: old=100.0 put=OK new=123.0'
+[dxf-probe] 无字符串组可探 (仅 0/100 类结构组)
+[verdict] arrow: INJECTABLE-COM 文本属性可写 ['Text', 'Text2'] (全部命中 ['Text', 'Text2', 'LayoutRotation', 'Scale']) (etype 预期 TCH_ARROW)
+[cleanup] rounds=1 final=0 (baseline 0) env={'CMDACTIVE': 0, 'CMDDIA': 1, 'FILEDIA': 1, 'OSMODE': 0, 'LOGFILEMODE': 0}
+[arrow] cleanup clean: PASS
+
+===== [elevation] baseline=0 =====
+[create] ok=True payload='' count 0->1
+[dump] ok=True payload='handle=2BE log=C:\\Users\\Administrator\\documents\\codex\\2026-05-28\\files-mentioned-by-the-user-tianzheng\\cad-html-work\\Drawing1_1e92e7abb.log'
+[dump-raw] (47 行, log=C:\Users\Administrator\documents\codex\2026-05-28\files-mentioned-by-the-user-tianzheng\cad-html-work\Drawing1_1e92e7abb.log)
+  ; IComSymbElev: IComSymbElev Interface
+  ;特性值:
+  ;   Application (RO) = #<VLA-OBJECT IAcadApplication 00007ff60edc5ca0>
+  ;   Document (RO) = #<VLA-OBJECT IAcadDocument 0000017704100ab8>
+  ;   EntityTransparency = "ByLayer"
+  ;   FillMode = "否"
+  ;   FloorsOnLeftSide = "右侧"
+  ;   FontStyle = "_TCH_DIM"
+  ;   Handle (RO) = "2BE"
+  ;   HasBaseLine = "否"
+  ;   HasExtensionDictionary (RO) = 0
+  ;   HasLeader = "否"
+  ;   Hyperlinks (RO) = #<VLA-OBJECT IAcadHyperlinks 00000177ad44aee8>
+  ;   Layer = "DIM_ELEV"
+  ;   LayoutRotation = 0.0
+  ;   Linetype = "ByLayer"
+  ;   LinetypeScale = 1.0
+  ;   Lineweight = -1
+  ;   Material = "ByLayer"
+  ;   ObjectControl = "无"
+  ;   ObjectID (RO) = 50
+  ;   ObjectName (RO) = "TDbSymbElevation"
+  ;   OwnerID (RO) = 43
+  ;   PlotStyleName = "ByLayer"
+  ;   Precision = "0.000"
+  ;   Scale = 100.0
+  ;   SitePlanElevMode = "标准样式"
+  ;   Text = "0.00000"
+  ;   Text2BaseRatio = "0.30"
+  ;   TextColor = 7
+  ;   TextHeight = "3.5"
+  ;   TextLayer = "DIM_ELEV"
+  ;   TrueColor = #<VLA-OBJECT IAcadAcCmColor 00000177ad44b7e0>
+  ;   Visible = -1
+  ;支持的方法:
+  ;   ArrayPolar (3)
+  ;   ArrayRectangular (6)
+  ;   Copy ()
+  ;   Delete ()
+  ;   GetBoundingBox (2)
+  ;   GetExtensionDictionary ()
+  ;   GetXData (3)
+  ;   Highlight (1)
+  ;   IntersectWith (2)
+  ;   Mirror (2)
+  ;   Mirror3D (3)
+  ;   M
+[entget-strs] 'dxf-strs: (0 . "TCH_ELEVATION") (5 . "2BE") (100 . "AcDbEntity") (410 . "Model") (8 . "DIM_ELEV") (100 . "TDbEntity") (100 . "TDbSymbWithText") (410 . "DIM_ELEV") (100 . "TDbSymbElevation")'
+[com-probe] dump 候选 15: ['Text', 'Text2BaseRatio', 'TextColor', 'TextHeight', 'TextLayer', 'FillMode', 'FloorsOnLeftSide', 'FontStyle', 'HasBaseLine', 'HasLeader', 'LayoutRotation', 'ObjectControl', 'Precision', 'Scale', 'SitePlanElevMode']
+[com-probe 1] ok=True '|Text: old="0.00000" put=OK new="T20MCP-B2"|Text2BaseRatio: old="0.30" put=OK new="0.00"|TextColor: old=7 put=OK new=123|TextHeight: old="3.5" put=OK new="0.0"|TextLayer: old="DIM_ELEV" put=OK new="0"|FillMode: old="否" put=OK new="否"|FloorsOnLeftSide: old="右侧" put=OK new="右侧"|FontStyle: old="_TCH_DIM" put=ERR new="_TCH_DIM"'
+[com-probe 2] ok=True '|HasBaseLine: old="否" put=OK new="否"|HasLeader: old="否" put=OK new="否"|LayoutRotation: old=0.0 put=OK new=123.0|ObjectControl: old="无" put=OK new="无"|Precision: old="0.000" put=OK new="0.000"|Scale: old=100.0 put=OK new=123.0|SitePlanElevMode: old="标准样式" put=OK new="标准样式"'
+[dxf-probe] 无字符串组可探 (仅 0/100 类结构组)
+[verdict] elevation: INJECTABLE-COM 文本属性可写 ['Text'] (全部命中 ['Text', 'LayoutRotation', 'Scale']) (etype 预期 TCH_ELEVATION)
+[cleanup] rounds=1 final=0 (baseline 0) env={'CMDACTIVE': 0, 'CMDDIA': 1, 'FILEDIA': 1, 'OSMODE': 0, 'LOGFILEMODE': 0}
+[elevation] cleanup clean: PASS
+
+=== Step40 B2 总结 ===
+  [DONE] drawing_name: INJECTABLE-COM 文本属性可写 ['NameText', 'ScaleText'] (全部命中 ['NameText', 'ScaleText', 'LayoutRotation', 'Scale'])
+  [DONE] arrow: INJECTABLE-COM 文本属性可写 ['Text', 'Text2'] (全部命中 ['Text', 'Text2', 'LayoutRotation', 'Scale'])
+  [DONE] elevation: INJECTABLE-COM 文本属性可写 ['Text'] (全部命中 ['Text', 'LayoutRotation', 'Scale'])
+2026-07-02 08:33:45 [info     ] command_line_hwnd              hwnd=4130568
+start clean: entity=0 (undo x0)
+
+===== [inject drawing_name] baseline=0 =====
+[create] ok=True payload='' count 0->1
+[readback] ok=True '|NameText="一层平面图"|ScaleText="1:50"'
+[cleanup] rounds=1 final=0 (baseline 0) env={'CMDACTIVE': 0, 'CMDDIA': 1, 'FILEDIA': 1, 'OSMODE': 0, 'LOGFILEMODE': 0}
+[inject drawing_name] cleanup clean: PASS
+
+===== [inject arrow] baseline=0 =====
+[create] ok=True payload='' count 0->1
+[readback] ok=True '|Text="做法见详图"|Text2="1:20"'
+[cleanup] rounds=1 final=0 (baseline 0) env={'CMDACTIVE': 0, 'CMDDIA': 1, 'FILEDIA': 1, 'OSMODE': 0, 'LOGFILEMODE': 0}
+[inject arrow] cleanup clean: PASS
+
+===== [inject elevation] baseline=0 =====
+[create] ok=True payload='' count 0->1
+[readback] ok=True '|Text="3.000"'
+[cleanup] rounds=1 final=0 (baseline 0) env={'CMDACTIVE': 0, 'CMDDIA': 1, 'FILEDIA': 1, 'OSMODE': 0, 'LOGFILEMODE': 0}
+[inject elevation] cleanup clean: PASS
+
+=== Step40 B2 总结 ===
+  [DONE] inject drawing_name: PASS 全部精确匹配
+  [DONE] inject arrow: PASS 全部精确匹配
+  [DONE] inject elevation: PASS 全部精确匹配
