@@ -3,6 +3,7 @@ name = "t20-mcp"
 version = "0.1.0"
 description = "T20 天正建筑 MCP Server (AutoCAD + Tangent T20 on Chinese Windows)"
 readme = "README.md"
+license = { file = "LICENSE" }
 requires-python = ">=3.12"
 dependencies = [
     "ezdxf>=1.4.4",

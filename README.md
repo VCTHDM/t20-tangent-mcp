@@ -1,5 +1,8 @@
 # tangent 天正 T20 MCP
 
+![CI](https://github.com/VCTHDM/t20-tangent-mcp/actions/workflows/ci.yml/badge.svg)
+![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)
+
 T20 天正建筑 V10 MCP Server — 为 AutoCAD/T20 提供 AI 可调用的建筑实体封装。
 
 基于 `autocad-mcp` 上游适配, 通过 **LISP 模板 + 参数注入** 将天正命令封装为 MCP 工具。
@@ -116,4 +119,8 @@ uv run python scripts/itest_e2e_suite.py      # 真机批量 E2E (26 case)
 
 ## 许可
 
-本项目基于上游 `autocad-mcp` 修改适配, 同样遵循其许可证。
+MIT License — 见 [`LICENSE`](LICENSE)。
+
+本项目基于上游 [`puran-water/autocad-mcp`](https://github.com/puran-water/autocad-mcp)
+(MIT, Copyright 2024 AutoCAD MCP Server Contributors) 修改适配, 保留其版权声明并
+以同一 MIT 许可证发布。

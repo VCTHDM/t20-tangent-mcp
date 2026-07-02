@@ -1,0 +1,38 @@
+name: CI
+
+# 离线门禁 (offline gate)。真机 itest_* 脚本依赖 AutoCAD + T20 GUI, 无法在
+# CI runner 运行, 故不纳入; 仅跑不需要 AutoCAD 的三项 (对应 TODO_BACKLOG 铁律的
+# 离线子集)。项目为 Windows-only (pywin32 硬依赖), 故 runner 用 windows-latest。
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  offline-gate:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          python-version: "3.12"
+
+      - name: Sync dependencies (incl. dev group)
+        run: uv sync
+
+      - name: Offline tests (pytest)
+        run: uv run pytest -q
+
+      - name: Compile check (compileall)
+        run: uv run python -m compileall -q src scripts tests
+
+      - name: MCP stdio smoke (no AutoCAD required)
+        run: uv run python scripts/itest_19_mcp_stdio_smoke.py
