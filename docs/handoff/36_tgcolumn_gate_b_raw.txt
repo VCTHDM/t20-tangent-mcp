@@ -1,0 +1,107 @@
+2026-07-02 11:18:05 [info     ] command_line_hwnd              hwnd=4130568
+baseline entity=0 modals=[]
+[launch] ok=True payload='active=1'
+[launch] new #32770: [10618684]
+[locate] {'height_edit': '0x20f68', 'material_combo': '0x20f2c', 'rotation_combo': '0x20f64', 'rotation_edit': '0x20f60', 'section_w_edit': '0x20f16', 'section_h_edit': '0x20f0a'}
+[locate] 初值: {'height': '3300', 'rotation': '45', 'sec_w': '500', 'sec_h': '400', 'material_items': ['金属', '钢筋砼', '混凝土', '石材', '毛石', '砖', '耐火砖'], 'material_cur': 0}
+[set] height=True rotation=True sec_w=True sec_h=True material=True (-> '钢筋砼')
+[place] 向命令行打坐标 '20000,15000'
+[exit] panel_gone=True
+[readback] count 0->1 last_type='TCH_COLUMN'
+[readback] COM dump (62 props):
+    Application (ro) = #<VLA-OBJECT IAcadApplication 00007ff60edc5ca0>
+    BottomFace (rw) = "无"
+    ColumnHeightH (rw) = 400.0
+    ColumnIsHatch (rw) = "随按钮"
+    ColumnIsOverThick (rw) = "随按钮"
+    ColumnNumber (rw) = ""
+    ColumnSumH (rw) = -24604.8
+    ColumnThicknessB (rw) = 3300.18
+    ColumnThicknessF (rw) = 500.0
+    ColumnThicknessT (rw) = 0.0
+    ColumnWidthB (rw) = 500.0
+    ColumnWidthD (rw) = 0.0
+    ColumnWidthU (rw) = 0.0
+    Deep (rw) = 400.0
+    Diameter (rw) = 500.0
+    Document (ro) = #<VLA-OBJECT IAcadDocument 0000017704100ab8>
+    Elevation (rw) = 0.0
+    EntityTransparency (rw) = "ByLayer"
+    Handle (ro) = "2D0"
+    HasExtensionDictionary (ro) = 0
+    HatchLayer (rw) = "PUB_HATCH"
+    Height (rw) = 3300.0
+    HideLabel (rw) = "是"
+    Hyperlinks (ro) = #<VLA-OBJECT IAcadHyperlinks 0000017758655208>
+    Insulate (rw) = "无"
+    InsulateLayer (rw) = "SURFACE"
+    InsulateThick (rw) = 80.0
+    Label (rw) = ""
+    Layer (rw) = "COLUMN"
+    LayoutRotation (rw) = 0.0
+    Linetype (rw) = "ByLayer"
+    LinetypeScale (rw) = 1.0
+    Lineweight (rw) = -1
+    Material (rw) = "ByLayer"
+    ObjectControl (rw) = "无"
+    ObjectID (ro) = 58
+    ObjectName (ro) = "TDbColumn"
+    OwnerID (ro) = 43
+    PlotStyleName (rw) = "ByLayer"
+    Rotation (rw) = 45.0
+    Scale (rw) = 100.0
+    SectionArea (ro) = "0.20"
+    SectionPerimeter (ro) = "1.8"
+    SectionShapeText (rw) = "矩形"
+    ShadowType (rw) = "投射和接收阴影"
+    SideArea (ro) = "5.94"
+    SideLength (rw) = 500.0
+    StruDiameter (rw) = 500.0
+    StruElevation (rw) = 0.0
+    StruHatchLayer (rw) = "PUB_HATCH"
+    StruHeight (rw) = 3300.0
+    StruSectionShapeText (rw) = "矩形"
+    StruStyle (rw) = "钢筋砼"
+    Style (rw) = "钢筋砼"
+    TextHeight (rw) = "3.5"
+    TextStyle (rw) = "_TCH_ASD"
+    TopFace (rw) = "无"
+    TrueColor (rw) = #<VLA-OBJECT IAcadAcCmColor 00000177586545a0>
+    Type (rw) = "普通柱"
+    Visible (rw) = -1
+    Volume (ro) = "0.660"
+    Width (rw) = 500.0
+[readback] 写入值 -> 属性命中: {'height': ['Height', 'StruHeight'], 'rotation': ['Rotation'], 'sec_w': ['ColumnThicknessF', 'ColumnWidthB', 'Diameter', 'SideLength', 'StruDiameter', 'Width'], 'sec_h': ['ColumnHeightH', 'Deep']}
+
+=== Step39 Gate B verdict ===
+  面板发现+控件定位 : PASS
+  WM_SETTEXT 回读   : PASS
+  实体 delta=+1     : PASS
+  type=TCH_COLUMN   : PASS ('TCH_COLUMN')
+  参数值命中        : height=True rotation=True sec=True
+  面板 ESC 关闭     : PASS
+[cleanup] stage=readback rounds=1 final=0 (baseline 0) env={'CMDACTIVE': 0, 'CMDDIA': 1, 'FILEDIA': 1, 'OSMODE': 0, 'LOGFILEMODE': 0} residual_modals=[]
+  cleanup clean     : PASS
+  overall           : PASS
+
+============================================================
+第二轮: 库路径 E2E (execute_column, itest_39 重写后)
+============================================================
+2026-07-02 11:23:41 [info     ] command_line_hwnd              hwnd=4130568
+start clean: entity=0 (undo x0)
+
+===== [full] baseline=0 =====
+[full] ok=True payload={'operation': 'column', 'executed': True, 'readback': 'type=TCH_COLUMN handle=2D4 H=3300.0 R=45.0 W=500.0 D=400.0 S="金属"', 'requested': {'x': 20000.0, 'y': 15000.0, 'height': 3300.0, 'rotation': 45.0, 'sec_w': 500.0, 'sec_h': 400.0, 'material': '金属'}} error=None
+[full] readback checks: {'type': True, 'H': True, 'R': True, 'W': True, 'D': True, 'S': True}
+[cleanup] rounds=1 final=0 (baseline 0) env={'CMDACTIVE': 0, 'CMDDIA': 1, 'FILEDIA': 1, 'OSMODE': 0} residual=[]
+
+===== [minimal] baseline=0 =====
+[minimal] ok=True payload={'operation': 'column', 'executed': True, 'readback': 'type=TCH_COLUMN handle=2D5 H=3300.0 R=45.0 W=500.0 D=400.0 S="金属"', 'requested': {'x': 25000.0, 'y': 15000.0}} error=None
+[cleanup] rounds=1 final=0 (baseline 0) env={'CMDACTIVE': 0, 'CMDDIA': 1, 'FILEDIA': 1, 'OSMODE': 0} residual=[]
+
+[badmat] ParamError 如期拒绝: 参数 material='木头' 非法, 合法值: ['金属', '钢筋砼', '混凝土', '石材', '毛石', '砖', '耐火砖'] (entity delta=0)
+
+=== Step39 tangent.column E2E 总结 ===
+  [PASS] full 五参数精确匹配
+  [PASS] minimal 仅坐标
+  [PASS] badmat ParamError 拒绝

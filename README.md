@@ -28,7 +28,7 @@ uv run python scripts/itest_19_mcp_stdio_smoke.py  # MCP stdio 冒烟 (无需 Au
 
 共 9 个: drawing / entity / layer / block / annotation / pid / variable / screenshot / **tangent**。
 
-### tangent 子命令 (32 个)
+### tangent 子命令 (33 个)
 
 | 子命令 | 命令 | 实体 | 参数 |
 |---|---|---|---|
@@ -52,6 +52,7 @@ uv run python scripts/itest_19_mcp_stdio_smoke.py  # MCP stdio 冒烟 (无需 Au
 | `step` | TStep | TCH_STEP | points:[[x,y],...], layer? |
 | `ramp` | TAscent | TCH_ASCENT | x,y, layer? |
 | `arrow` | TArrow | TCH_ARROW | x1,y1,x2,y2, text?, text2?, layer? |
+| `column` | TGColumn | TCH_COLUMN | x,y, height?, material?, rotation?, sec_w?, sec_h? (面板 UI 自动化, 图层强制 COLUMN) |
 | `rect_roof` | TRectRoof | TCH_MOUNTROOF | x1,y1,x2,y2,x3,y3, layer? |
 | `cusp_roof` | TCuspRoof | TCH_CUSPROOF | center_x,center_y, base_x?, base_y?, layer? |
 | `insight` | TInsight | TCH_TDBINSIGHT | x,y, layer? |
@@ -65,8 +66,8 @@ uv run python scripts/itest_19_mcp_stdio_smoke.py  # MCP stdio 冒烟 (无需 Au
 | `explode_read` | EXPLODE | — | handle, offset_x?, offset_y?, max_entities? |
 | `search_room` | TUpdSpace | TCH_SPACE | layer? |
 
-验证状态: 全部 32 个子命令均已 E2E 验证 (T20 V10 / AutoCAD 2024)。
-`door`/`window`/`elevation`/`drawing_name`/`arrow` 执行时附 warning 提示。
+验证状态: 全部 33 个子命令均已 E2E 验证 (T20 V10 / AutoCAD 2024)。
+`door`/`window`/`elevation`/`drawing_name`/`arrow`/`column` 执行时附 warning 提示。
 `window` 调用前需人工切天正门窗面板到窗模式。
 详细记录见 [`docs/T20_COMMANDS.md`](docs/T20_COMMANDS.md)。
 
@@ -84,7 +85,7 @@ docs/                                # 命令编目 + handoff 审计记录
 ## Handoff 索引
 
 工程决策审计记录, 按顺序:
-`docs/handoff/01..35_*.md`
+`docs/handoff/01..36_*.md`
 
 关键节点:
 - 03 — 架构评审 (P0-P2)
@@ -101,11 +102,12 @@ docs/                                # 命令编目 + handoff 审计记录
 - 33 — P1/P2/P3 真机推进: TPartSaveAs BLOCKED (selection-first 后弹「图形导出」#32770) / TSingleAxisDim STOP (entsel/实体拾取, 不接受坐标注入) / door COM 读回 PASS / window 模式下 sill_height 已通过 DoorSill 写入验证 (TCH_OPENING 不暴露独立 SillHeight; 调用前仍需人工切窗模式) / column Gate A inventory (556 子控件)
 - 34 — D1 闭合: window 模式 SillHeight 真机 sweep (DS=600/1200/300) 与 group71=1 精确匹配; tangent.window 参数语义闭合, sill_height 走 DoorSill 字段语义经第二轮真机确认
 - 35 — B2 闭合: drawing_name/arrow/elevation 文本 COM 注入证实可行 (NameText/ScaleText, Text/Text2, Text 真机写入+读回精确匹配), 三子命令文本参数上线; S-4 收窄为仅门/窗模式切换
+- 36 — B1 闭合: TGColumn 面板 UI 自动化突破 (项目首例), `column` 子命令上线; WM_SETTEXT+通知补发 填参 + 命令行 WM_CHAR 打插入点, 五参数 COM 读回精确匹配; "面板命令不可脚本驱动"结论修正为"点序列不可达, 控件级可达"
 
 ## 测试
 
 ```bash
-uv run pytest -q                              # 离线 (171 测试, <1s)
+uv run pytest -q                              # 离线 (183 测试, <1s)
 uv run python scripts/itest_01_bringup.py     # 真机引导 (需 AutoCAD)
 uv run python scripts/itest_12_e2e.py         # 真机核心 E2E
 uv run python scripts/itest_e2e_suite.py      # 真机批量 E2E (26 case)

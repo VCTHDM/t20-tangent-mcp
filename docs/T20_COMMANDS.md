@@ -64,6 +64,7 @@
 | 攒尖屋顶 | `TCuspRoof` | 屋顶中心位置→第二点(定半径/朝向)；两点即收尾 (active=0)；边数/屋顶高走面板记忆值 | `TCH_CUSPROOF` | **高** (E2E) |
 | 内视符号 | `TInsight` | 标注位置点→回车退出循环 (每点一个)；朝向/编号走面板记忆值 | `TCH_TDBINSIGHT` | **高** (E2E) |
 | 任意布树 | `TSingleTree` | 插入点→回车退出循环 (每点一棵)；树种/尺寸走面板记忆值；实体为通用 INSERT 图块 | `INSERT` | **高** (E2E) |
+| 标准柱 | `TGColumn` | **面板 UI 自动化** (Handoff 36, 项目首例)：启动后浮动面板 WM_SETTEXT 填柱高/转角/截面 + CB_SETCURSEL 选材料 (通知补发触发 DDX)，命令行 WM_CHAR 打插入点，ESC 退出；`height/rotation/sec_w/sec_h/material` 五参数 COM 读回精确匹配；图层强制 COLUMN | `TCH_COLUMN` | **高** (E2E) |
 | 直线梯段 | `TLStair` | 点取位置→回车退出循环；梯段宽/踏步数/踏步高走面板记忆值 | `TCH_LINESTAIR` | **高** (E2E) |
 | 圆弧梯段 | `TAStair` | 点取位置→回车退出循环；内外半径/踏步数/圆心角走面板记忆值 | `TCH_ARCSTAIR` | **高** (E2E) |
 | 双跑楼梯 | `TRStair` | 插入点→回车退出循环；梯段宽/踏步数/楼梯高/井宽走面板记忆值 | `TCH_RECTSTAIR` | **高** (E2E) |
@@ -128,12 +129,13 @@
 
 ## 2. 未封装/暂拒命令
 
-已从命令集移除不可行项 (column/axis_grid/export_t3经证实为#32770模态对话框阻塞)。
-当前仅保留已验证可命令行驱动的子命令。完整选型历史见`docs/handoff/`系列。
+已从命令集移除不可行项 (axis_grid/export_t3 经证实为 #32770 模态对话框阻塞;
+column 曾同列, Handoff 36 经面板 UI 自动化复活为 `column` 子命令)。
+完整选型历史见`docs/handoff/`系列。
 
 | 命令 | 状态 | 备注 |
 |---|---|---|
-| 标准柱 TGColumn | 已移除 | #32770 面板阻塞, 命令行点序列不可达 |
+| 标准柱 TGColumn | **已封装为 `column`** (Handoff 36) | 面板 UI 自动化突破: WM_SETTEXT+通知补发填参 (柱高/转角/截面/材料) + 命令行 WM_CHAR 打插入点 + ESC 退出; 五参数 COM 读回精确匹配 (Height/Rotation/Width/Deep/Style); 历史"点序列不可达"结论仍成立, 本路线绕开点序列 |
 | 绘制轴网 TRectAxis | 已移除 | 模态对话框, 不可命令行驱动 |
 | 导出天正3 TSaveAs | 已移除 | WPF 框无视 FILEDIA=0 |
 | 窗模式切换 | 窗台高走 DoorSill (已闭合) | Handoff 33 + Handoff 34 真机证实: TCH_OPENING 不暴露独立 SillHeight 属性, 门/窗共用 DoorSill, 模式由面板 + DXF group 71 决定; window 子命令已 sweep 三参数 (DS=600/1200/300) 精确匹配, group71=1。COM 方法切换路线已排除 (itest_29); window 调用前需人工切面板 (该人工前提不可消除) |

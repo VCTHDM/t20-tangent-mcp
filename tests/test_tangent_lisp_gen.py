@@ -62,6 +62,8 @@ VALID_CASES: dict[str, dict] = {
     "step": {"points": [[0, 0], [3000, 0], [3000, 600], [0, 600]]},
     "ramp": {"x": 0, "y": 0},
     "arrow": {"x1": 0, "y1": 0, "x2": 2000, "y2": 0, "text": "见详图", "text2": "1:20"},
+    "column": {"x": 20000, "y": 15000, "height": 3300, "rotation": 45,
+               "sec_w": 500, "sec_h": 400, "material": "钢筋砼"},
     "rect_roof": {"x1": 0, "y1": 0, "x2": 6000, "y2": 0, "x3": 6000, "y3": 4000},
     "cusp_roof": {"center_x": 3000, "center_y": 3000, "base_x": 6000, "base_y": 3000},
     "insight": {"x": 0, "y": 0},
@@ -417,6 +419,44 @@ class TestParamInjection:
     def test_elevation_without_text_keeps_auto_value(self) -> None:
         code = generate_lisp("elevation", {"base_x": 0, "base_y": 0})
         assert "vlax-put-property" not in code
+
+    # --- column: 面板 UI 驱动 (Handoff 36) ---
+
+    def test_column_launch_lisp_only_starts_tgcolumn(self) -> None:
+        # column 的 LISP 仅是启动片段 (面板填参/插入点在 Python 侧 execute_column);
+        # 不得包含 t20mcp:pt 点序列 (Handoff 13/33: vl-cmdf 点注入对面板命令无效)。
+        code = generate_lisp("column", VALID_CASES["column"])
+        assert '"TGCOLUMN"' in code
+        launch_seg = code.rsplit("(progn", 1)[-1]  # 末段 = 启动 progn
+        assert "t20mcp:pt" not in launch_seg
+        assert is_paren_balanced(code)
+
+    def test_column_minimal_params_accepted(self) -> None:
+        # 只给 x/y, 其余走面板记忆值
+        code = generate_lisp("column", {"x": 0, "y": 0})
+        assert '"TGCOLUMN"' in code
+
+    def test_column_missing_xy_rejected(self) -> None:
+        with pytest.raises(ParamError):
+            generate_lisp("column", {"y": 0, "height": 3000})
+        with pytest.raises(ParamError):
+            generate_lisp("column", {"x": 0, "height": 3000})
+
+    def test_column_bad_material_rejected(self) -> None:
+        with pytest.raises(ParamError, match="material"):
+            generate_lisp("column", {"x": 0, "y": 0, "material": "木头"})
+        with pytest.raises(ParamError, match="material"):
+            generate_lisp("column", {"x": 0, "y": 0, "material": 123})
+
+    @pytest.mark.parametrize("field,value", [
+        ("height", 0), ("height", 200_000),
+        ("rotation", 361), ("rotation", -361),
+        ("sec_w", 0), ("sec_w", 50_000),
+        ("sec_h", 0),
+    ])
+    def test_column_out_of_range_rejected(self, field: str, value: float) -> None:
+        with pytest.raises(ParamError):
+            generate_lisp("column", {"x": 0, "y": 0, field: value})
 
     def test_label_text_quotes_are_escaped(self) -> None:
         # 文本内的双引号必须转义, 不能逃逸出 LISP 字符串字面量。

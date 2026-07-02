@@ -64,6 +64,8 @@ SPACING_COUNT_MAX: int = 200          # 轴网间距段数上限
 POINT_LIST_COUNT_MAX: int = 200       # 轮廓点列点数上限 (阳台/台阶等)
 ANGLE_RANGE: tuple[float, float] = (-360.0, 360.0)
 LAYER_NAME_MAX: int = 255
+COLUMN_HEIGHT_RANGE: tuple[float, float] = (1.0, 100_000.0)   # 柱高
+COLUMN_SECTION_RANGE: tuple[float, float] = (1.0, 20_000.0)   # 柱截面横向/纵向
 
 
 # ---------------------------------------------------------------------------
@@ -838,6 +840,163 @@ def _gen_arrow(data: dict[str, Any]) -> str:
     )
 
 
+def _column_params(data: dict[str, Any]) -> dict[str, Any]:
+    """column 参数校验 (面板 UI 驱动路线, Handoff 36)。
+
+    T20 强制把柱落在 COLUMN 图层, 故不提供 layer 参数。
+    material 合法值 = dialog_automation.COLUMN_MATERIALS (真机枚举)。
+    """
+    from t20_mcp.dialog_automation import COLUMN_MATERIALS
+
+    out: dict[str, Any] = {
+        "x": _require_coord(data.get("x"), "x"),
+        "y": _require_coord(data.get("y"), "y"),
+    }
+    if data.get("height") is not None:
+        out["height"] = _require_range(data["height"], "height", *COLUMN_HEIGHT_RANGE)
+    if data.get("rotation") is not None:
+        out["rotation"] = _require_range(data["rotation"], "rotation", *ANGLE_RANGE)
+    if data.get("sec_w") is not None:
+        out["sec_w"] = _require_range(data["sec_w"], "sec_w", *COLUMN_SECTION_RANGE)
+    if data.get("sec_h") is not None:
+        out["sec_h"] = _require_range(data["sec_h"], "sec_h", *COLUMN_SECTION_RANGE)
+    if data.get("material") is not None:
+        mat = data["material"]
+        if not isinstance(mat, str) or mat not in COLUMN_MATERIALS:
+            raise ParamError(
+                f"参数 material={mat!r} 非法, 合法值: {list(COLUMN_MATERIALS)}"
+            )
+        out["material"] = mat
+    return out
+
+
+def _gen_column(data: dict[str, Any]) -> str:
+    """标准柱 (面板 UI 驱动)。data: {x, y, height?, material?, rotation?, sec_w?, sec_h?}
+
+    与其它子命令不同, TGColumn 的参数在 #32770 浮动面板上, 无法经 vl-cmdf
+    注入 (Handoff 13/33)。本生成器只产出启动 LISP (面板浮起, CMDACTIVE=1);
+    面板填参/插入点/ESC 由 Python 侧 execute_column 经 Win32 编排
+    (Handoff 36 真机验证)。dry-run 时返回的 LISP 单独执行不会生成柱。
+    """
+    _column_params(data)  # 仅校验; 面板驱动在 execute_column
+    return (
+        _load_prelude()
+        + '\n(progn (setvar "CMDECHO" 1)'
+        ' (vl-catch-all-apply (quote vl-cmdf) (list "TGCOLUMN"))'
+        ' (strcat "active=" (itoa (getvar "CMDACTIVE"))))'
+    )
+
+
+# execute_column 的环境复位 (对齐 itest 系列 RESET_ENV)。
+_COLUMN_RESET_LISP = (
+    '(progn (setq n 0)'
+    ' (while (and (< n 8) (> (getvar "CMDACTIVE") 0)) (command) (setq n (1+ n)))'
+    ' (setvar "CMDDIA" 1) (setvar "FILEDIA" 1) (setvar "OSMODE" 0)'
+    ' (strcat "rst CMDACTIVE=" (itoa (getvar "CMDACTIVE"))))'
+)
+
+# TCH_COLUMN 五属性读回 (Handoff 36 dump 确认的属性名)。
+_COLUMN_READBACK_LISP = '''
+(vl-load-com)
+(setq t20mcp:col-o (vlax-ename->vla-object (entlast)))
+(strcat
+  "type=" (cdr (assoc 0 (entget (entlast))))
+  " handle=" (cdr (assoc 5 (entget (entlast))))
+  " H=" (vl-prin1-to-string (vl-catch-all-apply 'vlax-get-property (list t20mcp:col-o "Height")))
+  " R=" (vl-prin1-to-string (vl-catch-all-apply 'vlax-get-property (list t20mcp:col-o "Rotation")))
+  " W=" (vl-prin1-to-string (vl-catch-all-apply 'vlax-get-property (list t20mcp:col-o "Width")))
+  " D=" (vl-prin1-to-string (vl-catch-all-apply 'vlax-get-property (list t20mcp:col-o "Deep")))
+  " S=" (vl-prin1-to-string (vl-catch-all-apply 'vlax-get-property (list t20mcp:col-o "Style"))))
+'''
+
+
+async def execute_column(backend: Any, data: dict[str, Any]) -> "Any":
+    """tangent.column 的真机编排: 启动 TGCOLUMN → Win32 面板填参 → 打插入点
+    → ESC 退出 → IPC 读回校验。失败路径撤销增量实体并复位环境。
+
+    返回 CommandResult (延迟导入避免离线测试依赖 backend 栈)。
+    """
+    import asyncio as _asyncio
+
+    import win32process
+
+    from t20_mcp import dialog_automation as da
+    from t20_mcp.backends.base import CommandResult
+
+    params = _column_params(data)
+    launch_code = _gen_column(data)
+
+    async def _count() -> int:
+        r = await backend.entity_count()
+        return r.payload["count"] if r.ok else -1
+
+    async def _rollback(base: int) -> None:
+        await _asyncio.sleep(0.5)  # 等 ESC PostMessage 生效, 再走 IPC
+        await backend.execute_lisp(_COLUMN_RESET_LISP)
+        rounds = 0
+        while rounds < 8:
+            c = await _count()
+            if c <= base or c < 0:
+                break
+            u = await backend.undo()
+            if not u.ok:
+                break
+            rounds += 1
+        await backend.execute_lisp(_COLUMN_RESET_LISP)
+
+    base = await _count()
+    _, pid = win32process.GetWindowThreadProcessId(backend._hwnd)
+    cmd_hwnd = backend._command_hwnd or backend._hwnd
+    exclude = set(da.find_acad_popups(pid))
+
+    launch = await backend.execute_lisp(launch_code)
+    if not launch.ok:
+        return CommandResult(ok=False, error=f"[tangent.column] 启动 TGCOLUMN 失败: {launch.error}")
+
+    # CMDACTIVE=1 窗口期: 纯 Win32, 禁 IPC (见 dialog_automation 模块 docstring)。
+    drive = await da.drive_column_panel(
+        pid,
+        cmd_hwnd,
+        (params["x"], params["y"]),
+        height=params.get("height"),
+        material=params.get("material"),
+        rotation=params.get("rotation"),
+        sec_w=params.get("sec_w"),
+        sec_h=params.get("sec_h"),
+        exclude=exclude,
+    )
+    if drive != "placed":
+        await _rollback(base)
+        return CommandResult(ok=False, error=f"[tangent.column] 面板驱动失败: {drive} (已 ESC 回滚)")
+
+    await backend.execute_lisp(_COLUMN_RESET_LISP)
+    after = await _count()
+    if after != base + 1:
+        await _rollback(base)
+        return CommandResult(
+            ok=False,
+            error=f"[tangent.column] 实体增量异常 (delta={after - base}, 期望 +1), 已回滚",
+        )
+
+    rb = await backend.execute_lisp(_COLUMN_READBACK_LISP)
+    payload_str = str(rb.payload or "")
+    if "type=TCH_COLUMN" not in payload_str:
+        await _rollback(base)
+        return CommandResult(
+            ok=False,
+            error=f"[tangent.column] 生成实体非 TCH_COLUMN ({payload_str!r}), 已回滚",
+        )
+    return CommandResult(
+        ok=True,
+        payload={
+            "operation": "column",
+            "executed": True,
+            "readback": payload_str,
+            "requested": params,
+        },
+    )
+
+
 def _gen_rect_roof(data: dict[str, Any]) -> str:
     """矩形屋顶。data: {x1,y1,x2,y2,x3,y3, layer?}
 
@@ -1151,6 +1310,7 @@ _GENERATORS: dict[str, Callable[[dict[str, Any]], str]] = {
     "step": _gen_step,
     "ramp": _gen_ramp,
     "arrow": _gen_arrow,
+    "column": _gen_column,
     "rect_roof": _gen_rect_roof,
     "cusp_roof": _gen_cusp_roof,
     "insight": _gen_insight,
@@ -1195,6 +1355,14 @@ LOW_CONFIDENCE_WARNINGS: dict[str, str] = {
         "text/text2 参数经 COM 注入 Text(上标)/Text2(下标), Handoff 35 真机"
         "写入+读回验证; 未提供时引注文字取天正面板记忆值。"
         "箭头样式/大小仍走面板, 不可参数化。"
+    ),
+    "column": (
+        "column 走面板 UI 自动化 (Handoff 36: WM_SETTEXT 填参 + 命令行打插入点), "
+        "五参数 (height/rotation/sec_w/sec_h/material) 经 COM 读回精确匹配验证; "
+        "需要 AutoCAD 图形界面会话; 若 T20 版本升级导致面板控件变化, 驱动会"
+        "安全失败并 ESC 回滚, 不留残留。dry-run 返回的 LISP 仅为启动片段, "
+        "单独执行不生成柱。柱形状固定为面板当前 tab (默认矩形), 图层由 T20 "
+        "强制为 COLUMN。"
     ),
 }
 
@@ -1265,6 +1433,8 @@ def register_tangent_tool(mcp: Any) -> None:
           step       — 台阶     [已验证; 踏步数/宽取面板记忆值]。{points:[[x,y],...]>=2, layer?}
           ramp       — 坡道     [已验证; 宽度/坡长取面板记忆值]。{x, y, layer?}
           arrow      — 箭头引注 [已验证; text/text2 经 COM 注入]。{x1, y1, x2, y2, text?, text2?, layer?}
+          column     — 标准柱   [已验证; 面板 UI 自动化, 见 warning]。{x, y, height?, material?, rotation?, sec_w?, sec_h?}
+                       material 合法值: 金属/钢筋砼/混凝土/石材/毛石/砖/耐火砖; 图层强制 COLUMN。
           rect_roof  — 矩形屋顶 [已验证; 坡角/出檐取面板记忆值]。{x1, y1, x2, y2, x3, y3, layer?}
           cusp_roof  — 攒尖屋顶 [已验证; 边数/屋顶高取面板记忆值]。{center_x, center_y, base_x?, base_y?, layer?}
           insight    — 内视符号 [已验证; 朝向/编号取面板记忆值]。{x, y, layer?}
@@ -1311,6 +1481,16 @@ def register_tangent_tool(mcp: Any) -> None:
             return _json({"error": f"[tangent.{operation}] execute 已禁用: {disabled_reason}"})
 
         backend = await get_backend()
+
+        # column: 面板 UI 驱动编排 (Handoff 36), 不走通用 execute_lisp 路径。
+        if operation == "column":
+            result = await execute_column(backend, data or {})
+            if result.ok and isinstance(result.payload, dict):
+                result = CommandResult(
+                    ok=True,
+                    payload={**result.payload, "warning": LOW_CONFIDENCE_WARNINGS["column"]},
+                )
+            return await add_screenshot_if_available(result, include_screenshot)
 
         # explode_read: 原生 _.EXPLODE 不弹框 (itest_25 真机验证; TEXPLODE 方案
         # 弹「分解对象」框, 见 dialog_automation 模块的选型记录), 直接下发,

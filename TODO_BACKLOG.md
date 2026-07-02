@@ -63,22 +63,21 @@
 
 ## B 级 - dialog_automation.py 首次扩展
 
-### B1 - TGColumn Gate B 控件映射封装
+### B1 - TGColumn Gate B 控件映射封装  ✅ DONE (Handoff 36)
 
-- 状态: OPEN
-- 依据: docs/handoff/33_tgcolumn_gate_a_raw.txt (556 子控件 inventory 已就绪)
-- 范围: 选取最小可用控件子集 - 柱高 Edit / 材料 Combo / 转角 Edit / "确定" Button
-- 新增 API (src/t20_mcp/dialog_automation.py):
-  - set_edit_text(hwnd, text) - WM_SETTEXT + 校验回读
-  - bm_click(hwnd) - 模拟按钮点击, 不发 WM_CLOSE
-- 新增子命令 tangent column: {x, y, height?, material?, rotation?, layer?}
-- 闭合判据:
-  - 真机生成 1 个 TCH_COLUMN
-  - 三参数从面板取值后 COM 读回精确匹配
-  - ESC-only 恢复 100% 干净
-  - pytest 新增至少 4 个 LISP/参数校验离线 case
-- 产出: scripts/itest_39_column_gate_b_e2e.py + Handoff 35 文档
-- 回退预案: 任一控件 BM_CLICK/WM_SETTEXT 失败 -> 立即 ESC + 回滚至 EXECUTE_DISABLED
+- 状态: DONE — 2026-07-02, `column` 子命令上线 (32→33), 项目首例面板 UI 自动化
+- 证据: docs/handoff/36_tgcolumn_gate_b_close.md + 36_tgcolumn_gate_b_raw.txt
+  + 36_tgcolumn_control_map.md (opencode 整理 Gate A raw, claude 复核)
+- 真机结果 (itest_39 探针轮 + 库路径 E2E 轮, cleanup 全绿):
+  - 五参数 (height/rotation/sec_w/sec_h/material) COM 读回精确匹配
+    (超出原判据的三参数)
+  - 实际形态与预设不同: 面板无 "确定" 按钮 (非模态即时生效式),
+    落地走 命令行 WM_CHAR 打插入点, 退出走 ESC — bm_click 未用上
+  - 关键机制: WM_SETTEXT + EN_KILLFOCUS 补发 / CB_SETCURSEL + CBN 补发;
+    CMDACTIVE=1 窗口期严禁走 IPC
+- API 落位: dialog_automation.py 通用原语 + drive_column_panel;
+  tangent.execute_column 编排 (失败全路径 ESC+undo 回滚)
+- 离线 171 → 183 passed (+12 column case)
 
 ### B2 - drawing_name / arrow / elevation 文本 COM 注入评估  ✅ DONE (Handoff 35)
 
@@ -218,13 +217,16 @@ D1  ->  D2                              ✅ DONE (Handoff 34, 2026-06-17)
         B2                               ✅ DONE (Handoff 35, 2026-07-02, 结论: 可注入+已封装)
             |
             v
-        B1                               (TGColumn Gate B, 首次面板自动化范式) <-- 当前
+        B1                               ✅ DONE (Handoff 36, 2026-07-02, column 上线)
+            |
+            v
+        A1                               (TRectAxis Gate B; B1 范式直接迁移, 优先级上调) <-- 当前
             |
             v
         B3 (可选, agent 批量化场景触发)  (window 占位+替换 工作流)
             |
             v
-        A1  ->  A2                       (A2 的 WPF 假说已被 C2 证伪, 优先级可下调)
+        A2                               (WPF 假说已被 C2 证伪, 优先级下调, 待真 WPF 模态出现)
 ```
 
 > B3 不在主线必经路径上, 仅当用户开始用 agent 批量化插窗 (如户型一次 50+ 扇)
