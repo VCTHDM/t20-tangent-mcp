@@ -1,0 +1,43 @@
+;;; floorplan_dump.lsp — dump all entities with geometry for inspection
+(progn
+  (vl-load-com)
+  (setq ss (ssget "X"))
+  (setq n (sslength ss))
+  (setq i 0)
+  (setq out "")
+  (while (< i n)
+    (setq e (ssname ss i))
+    (setq ed (entget e))
+    (setq ty (cdr (assoc 0 ed)))
+    (setq ly (cdr (assoc 8 ed)))
+    (setq hd (cdr (assoc 5 ed)))
+    (setq o (vl-catch-all-apply 'vlax-ename->vla-object (list e)))
+    (setq geo "")
+    (if (not (vl-catch-all-error-p o))
+      (progn
+        ;; wall + opening props
+        (foreach p (list "LeftWidth" "RightWidth" "Height" "Width" "Kind" "OpType" "Type" "WinType" "SillHeight" "DoorSill")
+          (setq v (vl-catch-all-apply 'vlax-get-property (list o p)))
+          (if (not (vl-catch-all-error-p v))
+            (setq geo (strcat geo p "=" (vl-princ-to-string v) " "))))
+        ;; insertion/position
+        (foreach p (list "InsertionPoint" "Position" "Measurement" "Text" "TextOverride")
+          (setq v (vl-catch-all-apply 'vlax-get-property (list o p)))
+          (if (not (vl-catch-all-error-p v))
+            (setq geo (strcat geo p "=" (vl-princ-to-string v) " "))))
+      )
+    )
+    ;; DXF group codes for geometry
+    (setq g10 (assoc 10 ed))
+    (if g10 (setq geo (strcat geo "G10=" (vl-princ-to-string (cdr g10)) " ")))
+    (setq g11 (assoc 11 ed))
+    (if g11 (setq geo (strcat geo "G11=" (vl-princ-to-string (cdr g11)) " ")))
+    (setq g13 (assoc 13 ed))
+    (if g13 (setq geo (strcat geo "G13=" (vl-princ-to-string (cdr g13)) " ")))
+    (setq g14 (assoc 14 ed))
+    (if g14 (setq geo (strcat geo "G14=" (vl-princ-to-string (cdr g14)) " ")))
+    (setq out (strcat out hd "|" ty "|" ly "|" geo "@@"))
+    (setq i (1+ i))
+  )
+  out
+)

@@ -394,6 +394,18 @@ def _gen_opening(data: dict[str, Any], mode: str = "door") -> str:
     """
     ins_x = _require_coord(data.get("ins_x"), "ins_x")
     ins_y = _require_coord(data.get("ins_y"), "ins_y")
+    # TOPENING 忽略 CLAYER, 总是把 TCH_OPENING 放到 WINDOW 图层。
+    # 创建后用 vla-put-Layer 强制修正: 门->DOOR_FIRE, 窗->WINDOW (或用户指定层)。
+    if data.get("layer"):
+        _target_layer = str(data["layer"])
+    elif mode == "door":
+        _target_layer = "DOOR_FIRE"
+    else:
+        _target_layer = "WINDOW"
+    _layer_fix = (
+        f'\n        (vl-catch-all-apply '
+        f"'vlax-put-property (list t20mcp:obj \"Layer\" \"{_lisp_escape(_target_layer)}\")) "
+    )
     if mode == "door":
         width = _require_range(data.get("width", 900.0), "width", *OPENING_WIDTH_RANGE)
         height = _require_range(data.get("height", 2100.0), "height", *HEIGHT_RANGE)
@@ -403,6 +415,7 @@ def _gen_opening(data: dict[str, Any], mode: str = "door") -> str:
             f' (cons "Height" (float {_num(height)}))'
             f' (cons "DoorSill" (float {_num(sill)})))\n'
             f'           (vl-catch-all-apply \'vlax-put-property (list t20mcp:obj (car pv) (cdr pv))))'
+            + _layer_fix
         )
     else:
         width = _require_range(data.get("width", 1500.0), "width", *OPENING_WIDTH_RANGE)
@@ -417,6 +430,7 @@ def _gen_opening(data: dict[str, Any], mode: str = "door") -> str:
             f' (cons "Height" (float {_num(height)}))'
             f' (cons "DoorSill" (float {_num(sill)})))\n'
             f'           (vl-catch-all-apply \'vlax-put-property (list t20mcp:obj (car pv) (cdr pv))))'
+            + _layer_fix
         )
     return _render(
         "opening",
