@@ -43,9 +43,6 @@ CASES: list[tuple[str, str, dict, str | None, str]] = [
     ("wall_thickness_dim", "wall_thickness_dimension",
      {"p1_x": 1500, "p1_y": -500, "p2_x": 1500, "p2_y": 500},
      "TCH_DIM", "wall"),
-    ("two_point_dimension", "two_point_dimension",
-     {"p1_x": -1000, "p1_y": 0, "p2_x": 7000, "p2_y": 0, "pos_x": 3000, "pos_y": 1500},
-     "TCH_DIM", "wall"),
     ("coordinate", "coordinate",
      {"point_x": 1234, "point_y": 5678, "label_x": 1234, "label_y": 6678},
      "TCH_COORD", "1"),
@@ -158,6 +155,35 @@ async def main() -> int:
     od_ok = od_result.ok and od_after == od_before + 1 and str(od_type.payload).startswith("TCH_DIM")
     results["opening_dimension"] = od_ok
     print(f"[opening_dimension] ok={od_ok} {od_before}->{od_after} type={od_type.payload!r}")
+    await cleanup_to(backend, base)
+
+    # --- two_point_dimension needs 3 PARALLEL walls (not collinear) ---
+    # TDIMTP 的穿越线需穿过多个独立对象; 共线墙被视为一面连续墙 → "对象数目太少"。
+    # 改用 3 靓平行墙 + 垂直穿越线, 使 TDIMMP 能标注墙间距。
+    await backend.execute_lisp(generate_lisp(
+        "wall", {"x1": 0, "y1": 0, "x2": 3000, "y2": 0,
+                 "left_width": 120, "right_width": 120, "height": 3000, "wall_type": "砖"},
+    ))
+    await backend.execute_lisp(generate_lisp(
+        "wall", {"x1": 0, "y1": 2000, "x2": 3000, "y2": 2000,
+                 "left_width": 120, "right_width": 120, "height": 3000, "wall_type": "砖"},
+    ))
+    await backend.execute_lisp(generate_lisp(
+        "wall", {"x1": 0, "y1": 4000, "x2": 3000, "y2": 4000,
+                 "left_width": 120, "right_width": 120, "height": 3000, "wall_type": "砖"},
+    ))
+    tpd_before = await count(backend)
+    tpd_result = await backend.execute_lisp(generate_lisp(
+        "two_point_dimension",
+        {"p1_x": 1500, "p1_y": -500, "p2_x": 1500, "p2_y": 4500,
+         "pos_x": 2500, "pos_y": 2000},
+    ))
+    tpd_after = await count(backend)
+    tpd_type = await backend.execute_lisp(LAST_TYPE)
+    tpd_ok = (tpd_result.ok and tpd_after == tpd_before + 1
+              and str(tpd_type.payload).startswith("TCH_DIM"))
+    results["two_point_dimension"] = tpd_ok
+    print(f"[two_point_dimension] ok={tpd_ok} {tpd_before}->{tpd_after} type={tpd_type.payload!r}")
     await cleanup_to(backend, base)
 
     for label, sub, params, expect_type, mode in CASES:

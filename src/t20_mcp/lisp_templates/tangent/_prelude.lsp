@@ -137,8 +137,10 @@
 
 (defun t20mcp:pt (x y)
   ;; 坐标 -> "x,y" 命令行点字符串。env-quiet 已设 DIMZIN=8 抑制尾零;
-  ;; 用 rtos 模式 2(十进制)定点 8 位, 不受 LUPREC 当前值影响。
-  (strcat (rtos x 2 8) "," (rtos y 2 8)))
+  ;; 用 rtos 模式 2(十进制)定点 2 位 — 天正 TDIMTP/TDIMMP 对 8 位小数会
+  ;; 出现浮点精度误差导致标注歪斜 (2026-07-02 真机验证 bug)。
+  ;; 毫米单位下 2 位小数 = 0.01mm 精度，远超建筑绘图需求。
+  (strcat (rtos x 2 2) "," (rtos y 2 2)))
 
 (defun t20mcp:geo1 (e / g ty out pr)
   ;; 实体 -> 简要几何串 "TYPE|x,y|x,y|40=r|s=text"。只消费常见组码
