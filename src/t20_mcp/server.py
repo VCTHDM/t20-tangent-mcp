@@ -8,6 +8,7 @@ from __future__ import annotations
 import structlog
 from mcp.server.fastmcp import FastMCP
 
+from t20_mcp import __version__
 from t20_mcp.client import (
     _error,
     _json,
@@ -551,5 +552,5 @@ def main():
         ],
     )
 
-    log.info("t20_mcp_starting", version="3.1.0")
+    log.info("t20_mcp_starting", version=__version__)
     mcp.run(transport="stdio")

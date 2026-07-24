@@ -1,6 +1,6 @@
 [project]
 name = "t20-mcp"
-version = "0.1.0"
+version = "3.1.0"
 description = "T20 天正建筑 MCP Server (AutoCAD + Tangent T20 on Chinese Windows)"
 readme = "README.md"
 license = { file = "LICENSE" }
@@ -14,10 +14,17 @@ dependencies = [
     "structlog>=26.1.0",
 ]
 
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
 [dependency-groups]
 dev = [
     "pytest>=8.0",
 ]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/t20_mcp"]
 
 [tool.pytest.ini_options]
 pythonpath = ["src"]
