@@ -1,5 +1,8 @@
 # Handoff 29 - P2/P3 attack plan
 
+> 历史规划：其中 door/window 需要人工预切模式的判断已被 Handoff 39 真机证伪；
+> 当前门窗链路以 Handoff 39、README 和 `docs/T20_COMMANDS.md` 为准。
+
 Executor: Codex
 Date: 2026-06-16
 Scope: P2 material consolidation and P3/P4 risk routing after Handoff 28.

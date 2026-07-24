@@ -144,6 +144,23 @@ class _OpeningStatusBackend(_FakeBackend):
         return CommandResult(ok=True, payload=self.payload)
 
 
+class _LiveOpeningBackend(_FakeBackend):
+    """带 FileIPC 窗口字段的门窗自动化假 backend。"""
+
+    def __init__(self, payload: str) -> None:
+        super().__init__()
+        self.payload = payload
+        self._hwnd = 123
+        self._command_hwnd = 456
+        self._needs_cancel = False
+
+    async def execute_lisp(self, code: str) -> CommandResult:
+        self.calls.append(code)
+        if len(self.calls) == 1:
+            return CommandResult(ok=True, payload="active=1")
+        return CommandResult(ok=True, payload=self.payload)
+
+
 def test_command_result_preserves_structured_error_payload() -> None:
     result = CommandResult(
         ok=False,
@@ -255,8 +272,85 @@ class TestTangentDryRun:
         payload = json.loads(out)
         assert payload["dry_run"] is True
         assert "warning" in payload
-        assert "人工" in payload["warning"]
-        assert "窗模式" in payload["warning"]
+        assert "自动" in payload["warning"]
+        assert "group71=1" in payload["warning"]
+
+    def test_opening_live_backend_prepares_mode_before_creation(
+        self, monkeypatch,
+    ) -> None:
+        import win32process
+
+        import t20_mcp.dialog_automation as da
+
+        backend = _LiveOpeningBackend(
+            "T20MCP-OPENING-OK|requested=window|expected=1|actual=1"
+        )
+        driven: list[tuple[int, int, str, set[int] | None]] = []
+
+        monkeypatch.setattr(
+            win32process,
+            "GetWindowThreadProcessId",
+            lambda _hwnd: (77, 2232),
+        )
+        monkeypatch.setattr(da, "find_acad_popups", lambda _pid: [])
+
+        async def fake_drive(pid, cmd_hwnd, mode, *, exclude=None, timeout=5.0):
+            driven.append((pid, cmd_hwnd, mode, exclude))
+            return "mode-selected"
+
+        monkeypatch.setattr(da, "drive_opening_mode", fake_drive)
+        fn = _register_with_fake_backend(monkeypatch, backend)
+        out = asyncio.run(
+            fn(
+                operation="window",
+                data={"ins_x": 1500, "ins_y": 0, "sill_height": 900},
+                execute=True,
+            )
+        )
+        payload = json.loads(out)
+
+        assert payload["ok"] is True
+        assert len(backend.calls) == 2
+        assert '(list "TOpening")' in backend.calls[0]
+        assert "T20MCP-OPENING-OK" in backend.calls[1]
+        assert driven == [(2232, 456, "window", set())]
+
+    def test_opening_mode_automation_failure_stops_before_creation(
+        self, monkeypatch,
+    ) -> None:
+        import win32process
+
+        import t20_mcp.dialog_automation as da
+
+        backend = _LiveOpeningBackend(
+            "T20MCP-OPENING-OK|requested=door|expected=0|actual=0"
+        )
+        monkeypatch.setattr(
+            win32process,
+            "GetWindowThreadProcessId",
+            lambda _hwnd: (77, 2232),
+        )
+        monkeypatch.setattr(da, "find_acad_popups", lambda _pid: [])
+
+        async def fake_drive(*_args, **_kwargs):
+            return "panel-still-open"
+
+        monkeypatch.setattr(da, "drive_opening_mode", fake_drive)
+        fn = _register_with_fake_backend(monkeypatch, backend)
+        out = asyncio.run(
+            fn(
+                operation="door",
+                data={"ins_x": 1500, "ins_y": 0},
+                execute=True,
+            )
+        )
+        payload = json.loads(out)
+
+        assert payload["ok"] is False
+        assert payload["payload"]["code"] == "OPENING_MODE_AUTOMATION_FAILED"
+        assert payload["payload"]["automation"] == "panel-still-open"
+        assert len(backend.calls) == 1
+        assert backend._needs_cancel is True
 
     @pytest.mark.parametrize(
         ("operation", "actual", "target_zh", "data"),

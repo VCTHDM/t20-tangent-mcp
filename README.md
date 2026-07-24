@@ -71,8 +71,9 @@ uv run python scripts/itest_19_mcp_stdio_smoke.py  # MCP stdio 冒烟 (无需 Au
 
 验证状态: 全部 33 个子命令均已 E2E 验证 (T20 V10 / AutoCAD 2024)。
 `dimension`/`door`/`window`/`elevation`/`drawing_name`/`arrow`/`column` 执行时附 warning 提示。
-`door`/`window` 创建后校验 DXF group71 (0=门, 1=窗)。模式不符时错误实体自动删除，
-MCP 返回 `OPENING_MODE_MISMATCH`，模型必须请用户切换门窗面板后原参数重试。
+`door`/`window` 会先自动驱动「门窗参数」面板切换插门/插窗模式，再创建并校验
+DXF group71 (0=门, 1=窗)。group71 仍是最终门禁；模式不符时错误实体自动删除，
+不会把错误类型伪装成成功。
 详细记录见 [`docs/T20_COMMANDS.md`](docs/T20_COMMANDS.md)。
 
 ## 项目结构
@@ -89,7 +90,7 @@ docs/                                # 命令编目 + handoff 审计记录
 ## Handoff 索引
 
 工程决策审计记录, 按顺序:
-`docs/handoff/01..38_*.md`
+`docs/handoff/01..39_*.md`
 
 关键节点:
 - 03 — 架构评审 (P0-P2)
@@ -103,20 +104,22 @@ docs/                                # 命令编目 + handoff 审计记录
 - 28 — line_pattern / wheelchair_diameter 收尾
 - 29/30 — P2/P3 后续路线图 (脚本引用已被 32 修订, 见下)
 - 32 — slimming 后当前可用资产清单 + 已删脚本提示 (取代 29/30/31 中已失效的 itest_44/45/46 脚本路径)
-- 33 — P1/P2/P3 真机推进: TPartSaveAs BLOCKED (selection-first 后弹「图形导出」#32770) / TSingleAxisDim STOP (entsel/实体拾取, 不接受坐标注入) / door COM 读回 PASS / window 模式下 sill_height 已通过 DoorSill 写入验证 (TCH_OPENING 不暴露独立 SillHeight；当时要求预切窗模式，现已被 Handoff 38 的 mismatch 回滚与原参数重试协议取代) / column Gate A inventory (556 子控件)
+- 33 — P1/P2/P3 真机推进: TPartSaveAs BLOCKED (selection-first 后弹「图形导出」#32770) / TSingleAxisDim STOP (entsel/实体拾取, 不接受坐标注入) / door COM 读回 PASS / window 模式下 sill_height 已通过 DoorSill 写入验证 (TCH_OPENING 不暴露独立 SillHeight；当时要求预切窗模式，先被 Handoff 38 的 mismatch 回滚保护、再由 Handoff 39 自动切换取代) / column Gate A inventory (556 子控件)
 - 34 — D1 闭合: window 模式 SillHeight 真机 sweep (DS=600/1200/300) 与 group71=1 精确匹配; tangent.window 参数语义闭合, sill_height 走 DoorSill 字段语义经第二轮真机确认
 - 35 — B2 闭合: drawing_name/arrow/elevation 文本 COM 注入证实可行 (NameText/ScaleText, Text/Text2, Text 真机写入+读回精确匹配), 三子命令文本参数上线; S-4 收窄为仅门/窗模式切换
 - 36 — B1 闭合: TGColumn 面板 UI 自动化突破 (项目首例), `column` 子命令上线; WM_SETTEXT+通知补发 填参 + 命令行 WM_CHAR 打插入点, 五参数 COM 读回精确匹配; "面板命令不可脚本驱动"结论修正为"点序列不可达, 控件级可达"
 - 37 — A1 裁定: TRectAxis Gate B 机制打通 (WM_COMMAND IDOK 关框 + 打点, COUNT*SPACING 语法) 但**不封装** — 产物纯 LINE@DOTE 无 xdata/TCH_AXIS/轴号, 与 axis_lines 同类零增益; 沉淀"封装前先验产物实体类型"方法论 (机制可行 ≠ 值得封装)
 - 38 — 门窗两阶段模式门禁: 创建后校验 DXF group71; 模式错则删除错误实体并返回结构化 `OPENING_MODE_MISMATCH`，要求模型请用户切换后原参数重试
+- 39 — 门窗模式自动化闭合: 精确识别「门窗参数」+ `ToolbarWindow32` 强结构指纹，后台消息切换插门/插窗，空回车退出；window→door 双向真机验证 group71/图层/实体增量/清理全绿，Handoff 38 的人工切换降为异常兜底
 
 ## 测试
 
 ```bash
 uv run pytest -q                              # 离线测试 (通常 <2s)
 uv run python scripts/itest_01_bringup.py     # 真机引导 (需 AutoCAD)
+uv run python scripts/itest_42_opening_panel_mode_auto.py  # 门窗自动切换双向门禁
 uv run python scripts/itest_12_e2e.py         # 真机核心 E2E
-uv run python scripts/itest_e2e_suite.py      # 真机批量 E2E (26 case)
+uv run python scripts/itest_e2e_suite.py      # 真机批量 E2E (25 case)
 ```
 
 ## 许可

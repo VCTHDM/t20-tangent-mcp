@@ -1,5 +1,8 @@
 # Handoff 30 - P3 UI and selection design gate
 
+> 历史设计：其中 window 保持 manual-first 的判断已被 Handoff 39 真机证伪；
+> 当前门窗链路以 Handoff 39、README 和 `docs/T20_COMMANDS.md` 为准。
+
 Executor: Codex
 Date: 2026-06-16
 Scope: design-only packet for UI automation and selection-object injection routes.

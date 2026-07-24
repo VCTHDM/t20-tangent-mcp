@@ -1350,14 +1350,14 @@ LOW_CONFIDENCE_WARNINGS: dict[str, str] = {
         "坐标标注时，请调用 annotation.create_dimension_linear。"
     ),
     "door": (
-        "door 依赖天正门窗面板当前为门模式。MCP 会在创建后校验 DXF group71=0; "
-        "若面板是窗模式，错误实体会被删除，并返回 OPENING_MODE_MISMATCH，要求用户"
-        "切到门模式后以相同参数重试。"
+        "door 会先通过门窗参数面板自动切到门模式，再创建并校验 DXF group71=0。"
+        "最终 group71 门禁仍是权威证据；若自动切换未生效，错误实体会被删除并返回"
+        "结构化失败，不会把窗伪装成门。"
     ),
     "window": (
-        "window 依赖人工把天正门窗面板切到窗模式。MCP 会在创建后校验 DXF group71=1; "
-        "若面板是门模式，错误实体会被删除，并返回 OPENING_MODE_MISMATCH，要求用户"
-        "切到窗模式后以相同参数重试。窗台高通过 DoorSill 字段写入。"
+        "window 会先通过门窗参数面板自动切到窗模式，再创建并校验 DXF group71=1。"
+        "最终 group71 门禁仍是权威证据；若自动切换未生效，错误实体会被删除并返回"
+        "结构化失败。窗台高通过 DoorSill 字段写入。"
     ),
     "elevation": (
         "TMElev 已验证双点序列可生成 TCH_ELEVATION; "
@@ -1400,6 +1400,111 @@ def parse_opening_status(payload: object) -> dict[str, str]:
             key, value = part.split("=", 1)
             status[key] = value
     return status
+
+
+def _gen_opening_mode_launch() -> str:
+    """只启动 TOpening 并让门窗参数面板浮起, 不输入插入点。"""
+    return (
+        _load_prelude()
+        + '\n(progn (setvar "CMDECHO" 1)'
+        ' (vl-catch-all-apply (quote vl-cmdf) (list "TOpening"))'
+        ' (strcat "active=" (itoa (getvar "CMDACTIVE"))))'
+    )
+
+
+async def execute_opening(
+    backend: Any,
+    operation: str,
+    data: dict[str, Any],
+) -> "Any":
+    """门/窗真机编排: 启动面板 → 自动切模式 → 空回车退出 → 正式创建。
+
+    面板切换期间 CMDACTIVE=1, 因此只用 Win32 消息, 不走 IPC。随后仍执行
+    opening.lsp 的 group71 硬门禁；UI 自动化只是前置动作, 不是成功依据。
+    无 Win32 HWND 的测试/替代 backend 保留原来的直接执行路径。
+    """
+    from t20_mcp.backends.base import CommandResult
+
+    code = generate_lisp(operation, data)
+    hwnd = getattr(backend, "_hwnd", None)
+    cmd_hwnd = getattr(backend, "_command_hwnd", None)
+    if not hwnd or not cmd_hwnd:
+        return await backend.execute_lisp(code)
+
+    try:
+        import win32process
+
+        from t20_mcp import dialog_automation as da
+
+        _, pid = win32process.GetWindowThreadProcessId(hwnd)
+    except Exception as exc:
+        return CommandResult(
+            ok=False,
+            payload={
+                "code": "OPENING_MODE_AUTOMATION_FAILED",
+                "requested_mode": operation,
+                "automation": "window-discovery-failed",
+                "retry_operation": operation,
+                "retry_data": data,
+            },
+            error=f"[tangent.{operation}] 门窗模式自动化初始化失败: {exc}",
+        )
+
+    exclude = set(da.find_acad_popups(pid))
+    launch = await backend.execute_lisp(_gen_opening_mode_launch())
+    if not launch.ok:
+        return CommandResult(
+            ok=False,
+            payload={
+                "code": "OPENING_MODE_AUTOMATION_FAILED",
+                "requested_mode": operation,
+                "automation": "launch-failed",
+                "retry_operation": operation,
+                "retry_data": data,
+            },
+            error=f"[tangent.{operation}] 启动 TOpening 面板失败: {launch.error}",
+        )
+    if "active=1" not in str(launch.payload or ""):
+        return CommandResult(
+            ok=False,
+            payload={
+                "code": "OPENING_MODE_AUTOMATION_FAILED",
+                "requested_mode": operation,
+                "automation": "launch-not-active",
+                "retry_operation": operation,
+                "retry_data": data,
+            },
+            error=(
+                f"[tangent.{operation}] TOpening 未进入活动状态: "
+                f"{launch.payload!r}"
+            ),
+        )
+
+    # CMDACTIVE=1 窗口期: 禁止 IPC, 直到 drive_opening_mode 空回车退出。
+    drive = await da.drive_opening_mode(
+        pid,
+        cmd_hwnd,
+        operation,
+        exclude=exclude,
+    )
+    if drive != "mode-selected":
+        # 失败后不冒险继续下发 IPC；仅在面板确实未退出时标记下次请求先取消。
+        if "panel-still-open" in drive and hasattr(backend, "_needs_cancel"):
+            backend._needs_cancel = True
+        return CommandResult(
+            ok=False,
+            payload={
+                "code": "OPENING_MODE_AUTOMATION_FAILED",
+                "requested_mode": operation,
+                "automation": drive,
+                "retry_operation": operation,
+                "retry_data": data,
+            },
+            error=f"[tangent.{operation}] 门窗模式自动切换失败: {drive}",
+        )
+
+    return await backend.execute_lisp(code)
+
 
 # 所有保留子命令均可命令行驱动 (已剔除 #32770 模态对话框阻塞项)。
 EXECUTE_DISABLED_SUBCOMMANDS: dict[str, str] = {}
@@ -1445,9 +1550,9 @@ def register_tangent_tool(mcp: Any) -> None:
         **execute (默认 False = dry-run)**: 默认只返回渲染后的 LISP 代码而**不**
         下发到 AutoCAD (不产生任何 IPC 文件); 传 execute=True 才经 execute_lisp
         真正执行。door/window/elevation 执行成功也会附 warning 字段。
-        door/window 创建后硬校验 DXF group71 (0=门, 1=窗)。模式不符会删除错误实体，
-        返回 OPENING_MODE_MISMATCH 和 requires_user_action；模型必须请用户切换对应模式，
-        等用户确认后用 retry_operation + retry_data 原样重试。
+        door/window 会先自动驱动「门窗参数」面板切换模式，再创建并硬校验
+        DXF group71 (0=门, 1=窗)。模式不符会删除错误实体，返回
+        OPENING_MODE_MISMATCH 和诊断/重试数据，不会把错误类型当成功。
 
         Operations (data 字段) — 真机验证状态 (T20 V10 / AutoCAD 2024):
           wall       — 单段墙体 [已验证]。{x1, y1, x2, y2, left_width?, right_width?, height?, wall_type?, layer?}
@@ -1553,7 +1658,10 @@ def register_tangent_tool(mcp: Any) -> None:
             result = CommandResult(ok=True, payload=parsed)
             return await add_screenshot_if_available(result, include_screenshot)
 
-        result = await backend.execute_lisp(code)
+        if operation in ("door", "window"):
+            result = await execute_opening(backend, operation, data or {})
+        else:
+            result = await backend.execute_lisp(code)
         if operation in ("door", "window") and result.ok:
             opening_status = parse_opening_status(result.payload)
             status_name = opening_status.get("status")
@@ -1571,8 +1679,9 @@ def register_tangent_tool(mcp: Any) -> None:
                         "actual_mode": actual,
                         "wrong_entity_rolled_back": rolled_back,
                         "requires_user_action": (
-                            f"请把天正门窗面板切换到{target_zh}模式，并明确回复已切换；"
-                            "随后模型必须用 retry_operation 和 retry_data 原样重试。"
+                            f"自动切换到{target_zh}模式后 group71 仍不匹配；请检查"
+                            f"天正门窗面板，必要时手工切换到{target_zh}模式，再用 "
+                            "retry_operation 和 retry_data 原样重试。"
                         ),
                         "retry_operation": operation,
                         "retry_data": data or {},

@@ -9,11 +9,9 @@
            DoorSill, 窗模式 DoorSill 承载窗台高);
         3. 数值与传入参数匹配, entity type 为 TCH_OPENING。
 
-人工前提 (绝不自动化):
-    window 模式需要用户已经把天正"门窗面板"切到窗模式; 否则 TOpening 沿用
-    门模式生成门对象 (DXF group 71=0), 窗台高注入虽写 DoorSill 但语义错位。
-    本脚本对 window 做 preflight: 插入后读 DXF group 71, 若 =0 (门模式) 则
-    输出明确前置条件并返回 SKIP(3), 不计为代码回归。
+Handoff 39 更新:
+    door/window 调用前会自动识别「门窗参数」工具栏并切换插门/插窗模式；
+    插入后仍以 DXF group 71 为最终判据，不依赖控件点击返回值。
 
 本脚本不写新 wrapper, 只做读回探针。失败结论也作为证据写入 handoff。
 
@@ -33,7 +31,7 @@ door 探针对齐 (P1):
     uv run python scripts/itest_35_opening_readback.py door
     uv run python scripts/itest_35_opening_readback.py window
 
-返回码: 0=PASS, 2=FAIL, 3=SKIP(window 非窗模式, 非代码回归)
+返回码: 0=PASS, 2=FAIL
 """
 
 from __future__ import annotations
@@ -48,7 +46,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 
 from _live_lock import live_lock_or_exit  # noqa: E402
 from t20_mcp.backends.file_ipc import FileIPCBackend  # noqa: E402
-from t20_mcp.tools.tangent import generate_lisp  # noqa: E402
+from t20_mcp.tools.tangent import execute_opening, generate_lisp  # noqa: E402
 
 # 退出活动命令 (最多 8 层, 与 itest_11 一致) + 复位四变量; 返回 rst CMDACTIVE=N。
 RESET_ENV = (
@@ -149,7 +147,6 @@ async def run(mode: str) -> int:
     print(f"baseline entity count={base} (cleaned {guard} undo)")
 
     verdict_ok = False
-    skip = False
     try:
         # 1) 准备一道墙 — 参数对齐 itest_12 已真机验证的 good 路径。
         wall_code = generate_lisp("wall", {
@@ -180,8 +177,7 @@ async def run(mode: str) -> int:
             print(f"unknown mode: {mode}")
             return 2
 
-        op_code = generate_lisp(mode, params)
-        op_r = await backend.execute_lisp(op_code)
+        op_r = await execute_opening(backend, mode, params)
         after_op = await count(backend)
         # P1 诊断: 单独读 entlast 类型 + CMDACTIVE, 区分"没插入"与"插入但类型错"。
         last_type = await backend.execute_lisp(LAST_TYPE)
@@ -206,30 +202,18 @@ async def run(mode: str) -> int:
         print(f"  raw readback: {rb_payload}")
 
         if mode == "window":
-            # P2 preflight: 窗模式由天正面板决定, 插入后读 DXF group 71 (1=窗)。
+            # 最终门禁: 自动切换后仍读 DXF group 71 (1=窗)。
             # IPC payload 把 LISP 的 int 也以字符串形式回传, 所以 1 / "1" 都视为窗模式。
             g71 = await backend.execute_lisp(GROUP71)
             g71_val = g71.payload
             print(f"  [preflight] DXF group 71 = {g71_val!r} (1=窗模式, 0=门模式)")
-            if g71_val not in (1, "1"):
-                print("  -> 面板当前在门模式 (group71!=1), window 探针无法验证窗台高。")
-                print("     前置条件: 请人工把天正门窗面板切到窗模式后重跑:")
-                print("       uv run python scripts/itest_35_opening_readback.py window")
-                print("     按约定 window 门模式失败不计为代码回归 (SKIP)。")
-                skip = True
-                verdict_ok = False
-            else:
-                verdict_ok = delta_ok and type_ok
+            verdict_ok = delta_ok and type_ok and g71_val in (1, "1")
         else:
             verdict_ok = delta_ok and type_ok
     finally:
         # P0: 无论 PASS/FAIL/SKIP/异常, 都执行 cleanup — 撤实体 + 复位四环境变量。
         cleanup_ok = await _cleanup(backend, base)
 
-    if skip:
-        print(f"  cleanup clean: {'PASS' if cleanup_ok else 'FAIL'}")
-        print("  overall: SKIP (window 非窗模式, 非代码回归)")
-        return 3
     print(f"  cleanup clean (entity baseline + "
           f"CMDACTIVE=0/CMDDIA=1/FILEDIA=1/OSMODE=0): "
           f"{'PASS' if cleanup_ok else 'FAIL'}")

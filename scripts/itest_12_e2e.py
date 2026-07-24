@@ -18,7 +18,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 
 from _live_lock import live_lock_or_exit  # noqa: E402
 from t20_mcp.backends.file_ipc import FileIPCBackend  # noqa: E402
-from t20_mcp.tools.tangent import generate_lisp  # noqa: E402
+from t20_mcp.tools.tangent import execute_opening, generate_lisp  # noqa: E402
 
 LAST_TYPE = '(if (entlast) (cdr (assoc 0 (entget (entlast)))) "none")'
 
@@ -100,10 +100,9 @@ async def main() -> int:
 
     # --- 3. door (插在墙中段) ---
     before = await count(backend)
-    code = generate_lisp("door", {
+    r = await execute_opening(backend, "door", {
         "ins_x": 3000, "ins_y": 0, "width": 1000, "height": 2000, "sill_distance": 0,
     })
-    r = await backend.execute_lisp(code)
     after = await count(backend)
     t = await backend.execute_lisp(LAST_TYPE)
     rb = await backend.execute_lisp(READBACK.replace("{PROPS}", '"Width" "Height" "DoorSill"'))
@@ -122,8 +121,10 @@ async def main() -> int:
     print(f"[door_extra_props] ok={results['door_extra_props']} readback={extra_rb.payload!r}")
 
     # --- 清理与环境复位 ---
-    for _ in range(3):
+    cleanup_guard = 0
+    while await count(backend) > 0 and cleanup_guard < 8:
         await backend.undo()
+        cleanup_guard += 1
     final_count = await count(backend)
     await backend.execute_lisp(
         '(progn '

@@ -18,7 +18,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 
 from _live_lock import live_lock_or_exit  # noqa: E402
 from t20_mcp.backends.file_ipc import FileIPCBackend  # noqa: E402
-from t20_mcp.tools.tangent import generate_lisp  # noqa: E402
+from t20_mcp.tools.tangent import execute_opening, generate_lisp  # noqa: E402
 
 LAST_TYPE = '(if (entlast) (cdr (assoc 0 (entget (entlast)))) "none")'
 
@@ -141,10 +141,11 @@ async def main() -> int:
         {"x1": 0, "y1": 0, "x2": 3000, "y2": 0,
          "left_width": 120, "right_width": 120, "height": 3000, "wall_type": "砖"},
     ))
-    await backend.execute_lisp(generate_lisp(
+    await execute_opening(
+        backend,
         "door",
         {"ins_x": 1500, "ins_y": 0, "width": 1000, "height": 2000, "sill_distance": 0},
-    ))
+    )
     od_before = await count(backend)
     od_result = await backend.execute_lisp(generate_lisp(
         "opening_dimension",

@@ -1,5 +1,8 @@
 # Handoff 31 - current package status and next-run checklist
 
+> 历史状态：其中 window 人工模式前置条件已被 Handoff 39 的控件级自动化取代；
+> 当前门窗链路以 Handoff 39、README 和 `docs/T20_COMMANDS.md` 为准。
+
 Executor: Codex
 Date: 2026-06-16
 Scope: current uncommitted package audit after Handoffs 28-30.

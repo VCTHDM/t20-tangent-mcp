@@ -1,10 +1,11 @@
 # 执行清单 (TODO_BACKLOG)
 
 > 生成日期: 2026-06-17
-> 最后校准: 2026-07-24 (Handoff 38 / 项目收尾)
+> 最后校准: 2026-07-24 (Handoff 39 / 门窗模式自动化)
 > 依据: Handoff 33 真机证据 + tangent.py::LOW_CONFIDENCE_WARNINGS + docs/T20_COMMANDS.md
-> 当前基线: 33 子命令有历史真机 E2E 证据, pytest 190 passed, EXECUTE_DISABLED_SUBCOMMANDS={}
-> 进度: D1 / D2 / C1 / C2 / B1 / B2 / Handoff 38 均已闭合；B3 / A2 仅按触发条件重开
+> 当前基线: 33 子命令有历史真机 E2E 证据, pytest 198 passed, EXECUTE_DISABLED_SUBCOMMANDS={}
+> 进度: D1 / D2 / C1 / C2 / B1 / B2 / Handoff 38 / Handoff 39 均已闭合；
+> B3 / A2 仅按触发条件重开
 
 ---
 
@@ -95,15 +96,17 @@
 - 方法论: LOGFILEMODE 捕获 vlax-dump-object (中文版段落标记是 ";特性值:");
   其它"取面板记忆值"命令 (balcony/step/ramp/insight/tree...) 未来可同法评估
 
-### B3 - window 占位 + 切面板后替换 工作流 (绕开 §S-4 面板锁死的工程方案)
+### B3 - window 占位 + 延迟替换工作流
 
-- 状态: **DEFERRED / OPTIONAL** — Handoff 38 已解决当前主流程；仅在需要“脱离面板
+- 状态: **DEFERRED / OPTIONAL** — Handoff 39 已解决自动切换主流程；仅在需要“离线
   先布置占位、跨墙体修改后延迟绑定、最后统一替换”时重开
 - 背景:
-  - §S-4 "面板记忆值锁死" 是机制级永久无解 (COM/DXF/PostMessage 均失败, Handoff 33+34 已三方证伪)
-  - Handoff 38 已增加 group71 双向门禁、错误实体回滚和原参数重试；
-    `_opening_retry.py` 在分阶段脚本中只会于首次模式不符时请求切换，后续同类门窗连续执行
-  - 因此 B3 不再是批量插窗的必需项；它只保留“离线占位 + 延迟绑定”的独立工程价值
+  - Handoff 33+34 只证明 COM/DXF 不能直接改 group71；Handoff 39 证明
+    `ToolbarWindow32` 控件级 UI 自动化可以切换插门/插窗，旧 §S-4 结论已撤销
+  - Handoff 38 的 group71 双向门禁与错误实体回滚继续作为最终安全层；
+    `_opening_retry.py` 已改为自动调用核心 `execute_opening`
+  - 因此 B3 不再承担“绕开人工面板”的职责，只保留“离线占位 + 延迟绑定”
+    的独立工程价值
 - 设计 (双子命令工作流):
   1. **`tangent.window_placeholder` (新)** — 不依赖面板状态:
      - 用 COM 在墙上插占位"临时块" (自定义图层 `T20MCP_PLACEHOLDER_WINDOW`)
@@ -119,18 +122,17 @@
        1005 wall_handle         ; 墙的 entity handle (跨命令稳定)
        1000 layer_name          ; 用户指定图层
        ```
-  2. **`tangent.window_replace` (新)** — 必须人工切窗模式后调用:
-     - **preflight**: 屏幕外 (-100000, -100000) 偷偷建临时墙 + TOpening 探针,
-       读 DXF group 71; ≠1 立即报警 "请先切窗模式" + SKIP, 探针整组 undo;
+  2. **`tangent.window_replace` (新)** — 最终替换阶段批量绑定:
+     - **preflight**: 复用 Handoff 39 自动切窗 + group71 最终门禁；
      - **替换循环**: ssget 拣回所有 PLACEHOLDER, 逐个 handent(wall_handle) 找墙
        (容忍墙体 STRETCH/MOVE/COPY 后的位置漂移), 在原位置插真天正窗,
        COM 注入 Width/Height/DoorSill, 校验 group71=1 + type=TCH_OPENING 后 erase 占位;
      - **失败容忍**: 墙已删除 → 跳过 + warn; 单条替换失败 → 单条回滚 + 占位保留, 不污染整批。
 - 工程价值矩阵:
-  | 维度 | 当前 Handoff 38 路径 | B3 占位+替换 |
+  | 维度 | 当前 Handoff 39 路径 | B3 占位+替换 |
   |---|---|---|
-  | 切面板时机 | 首次 mismatch 后切换，同类请求连续执行 | 最终替换阶段切换 1 次 |
-  | 切错代价 | 错误实体自动回滚并返回结构化重试数据 | preflight 报警，保留占位 |
+  | 切面板时机 | 每次请求前自动选择目标模式 | 最终替换阶段统一切换 |
+  | 切错代价 | group71 门禁删除错误实体并结构化失败 | preflight 失败时保留占位 |
   | Agent UX | 按门阶段/窗阶段直接生成真实对象 | 先布置占位，最后统一替换 |
   | 跨墙变换 | 一调即定, 改墙后漂移 | xdata wall_handle 延迟绑定, 跟得上 |
 - 风险:
@@ -139,18 +141,18 @@
   - 替换过程的 "撤销/重做" 一致性 — 整批替换最好包在一对 (command "_undo" "_begin"/"_end") 里, 一键 undo 退回到全部占位状态
   - 现有 `tangent.window` 不删除, 保留兼容路径; 用户可以在 docstring 里看到二选一
 - 闭合判据 (真机):
-  - itest_41_window_placeholder_smoke.py — 单占位插入, xdata 读回校验, 撤销干净
-  - itest_42_window_replace_preflight.py — preflight 探针在门模式正确报警 + cleanup 干净
-  - itest_43_window_replace_e2e.py — 切窗模式后 5 个占位批量替换, 全部 group71=1, 占位全部 erase
-  - itest_44_window_replace_wall_moved.py — 占位插入后用 STRETCH 改墙, 替换仍能命中正确位置
-  - itest_45_window_replace_wall_deleted.py — 墙删除后单条跳过 + warn, 其它占位继续
-  - itest_46_window_replace_undo.py — 批量替换后单次 undo 回到全占位状态
+  - `itest_window_placeholder_smoke.py` — 单占位插入, xdata 读回校验, 撤销干净
+  - `itest_window_replace_preflight.py` — 自动切窗 + group71 preflight + cleanup
+  - `itest_window_replace_e2e.py` — 5 个占位批量替换, 全部 group71=1, 占位全部 erase
+  - `itest_window_replace_wall_moved.py` — 占位插入后用 STRETCH 改墙, 替换仍能命中正确位置
+  - `itest_window_replace_wall_deleted.py` — 墙删除后单条跳过 + warn, 其它占位继续
+  - `itest_window_replace_undo.py` — 批量替换后单次 undo 回到全占位状态
   - 至少 8 个新 LISP/参数校验 pytest case
 - 难度评估: B 级偏上, 估时 2~3 天 (介于 B1 与 A1 之间)
 - 触发条件: 用户明确需要在不切换 T20 面板时先规划大量窗位，或要求墙体
   MOVE/STRETCH 后仍通过 wall_handle 延迟绑定；单纯批量插窗不触发 B3
-- 落地顺序建议: B1 / B2 / Handoff 38 均已完成；只有满足上述触发条件才重开 B3
-- 与 §S-4 关系: 本方案 **不修改 §S-4 判定** (机制级结论保持 STOPPED), B3 是工程绕道, 不是机制突破
+- 落地顺序建议: B1 / B2 / Handoff 38 / Handoff 39 均已完成；只有满足上述触发条件才重开 B3
+- 与旧 §S-4 关系: Handoff 39 已撤销“不可自动化”判定；B3 现在只是独立的延迟绑定功能
 
 ---
 
@@ -208,11 +210,13 @@
 
 TBlkMask1 / WIPEOUT / TGirDer / TWINDROSE / TSlab / TElevator / TDrawParallelStair
 
-### S-4 - 面板记忆值锁死 (参数化无解)
+### S-4 - 已撤销：门窗面板模式并非不可自动化
 
-- door / window 的门/窗模式切换 - DXF group 71 由面板决定, COM 不暴露
-- ~~drawing_name / arrow / elevation 的文本~~ — B2 证伪 (Handoff 35):
-  三命令文本全部 COM 可注入, 已参数化上线; S-4 仅剩门/窗模式切换一项
+- Handoff 33+34 的窄结论仍成立：DXF group71 由面板决定，COM 不暴露直接 setter。
+- Handoff 39 证明控件级 UI 自动化可达：强结构指纹定位 `ToolbarWindow32`，
+  后台切换插门/插窗，空回车退出，再由 group71 最终验真。
+- 因此门窗模式不再属于 S 级；真正的 S 级仍限于上面的强模态、entsel 和
+  directive 硬尾巴命令。
 
 ---
 
@@ -234,13 +238,16 @@ D1  ->  D2                              ✅ DONE (Handoff 34, 2026-06-17)
         A1                               🛑 STOPPED (Handoff 37, 机制通但产物无增益, 不封装)
             |
             v
+        Handoff 39                       ✅ DONE (门窗模式自动切换)
+            |
+            v
         B3 (DEFERRED, 仅占位/延迟绑定场景触发)
             |
             v
         A2 (DEFERRED)                    (WPF 假说已被 C2 证伪, 待真 WPF 模态出现)
 ```
 
-> B3 不在主线必经路径上。Handoff 38 已覆盖常规批量插窗；只有需要占位、
+> B3 不在主线必经路径上。Handoff 39 已覆盖常规门窗自动切换；只有需要占位、
 > 跨墙修改后的延迟绑定和最终统一替换时才重开。
 
 S 级不在路径上, 任何时候出现 "再试一次" 的诱惑请回看 Handoff 33。

@@ -17,7 +17,8 @@
 - 5 个门 (DoorSill=0.0) 应在 DOOR/DOOR_FIRE 图层, 但实际在 WINDOW 图层
 - Handles: 37F, 380, + 另外 3 个 DoorSill=0 的
 - 修复: `b0a23b2` 将 door 强制写入 `DOOR_FIRE`、window 写入 `WINDOW`；
-  Handoff 38 又以 DXF group71 (0=门, 1=窗) 增加权威模式校验与错误实体回滚
+  Handoff 38 又以 DXF group71 (0=门, 1=窗) 增加权威模式校验与错误实体回滚；
+  Handoff 39 已进一步自动切换插门/插窗模式
 
 ### WARN-1: 墙体端点几何不可读 — 已找到读回路径
 - TCH_WALL 不暴露 COM `StartPoint/EndPoint` 属性，但可通过

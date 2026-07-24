@@ -8,6 +8,11 @@
      落地靠向命令行打插入点坐标, 退出靠 ESC。控件按「class + 标签锚点」
      每次运行时重新发现 (hwnd 会话性), 定位规则见
      docs/handoff/36_tgcolumn_control_map.md。
+  3. TOpening 门窗参数面板 (Handoff 39, itest_42 真机验证): 标题精确为
+     「门窗参数」, 底部标准 ToolbarWindow32 的模式按钮可用受控鼠标消息
+     切换。按钮会话性且切换时面板可能重建, 所以每次运行重新发现。
+     TOpening 的默认提示是「<退出>」, 必须用空回车结束; ESC 会继续/重启
+     放置循环, 不能作为该面板的正常退出路径。
 
 安全边界 (PROJECT_RULES.md 铁律):
   * 只对白名单对话框动手: 标题精确匹配 (TEXPLODE「分解对象」), 或结构指纹
@@ -32,6 +37,9 @@ WM_COMMAND = 0x0111
 WM_CHAR = 0x0102
 WM_KEYDOWN = 0x0100
 WM_KEYUP = 0x0101
+WM_LBUTTONDOWN = 0x0201
+WM_LBUTTONUP = 0x0202
+MK_LBUTTON = 0x0001
 VK_ESCAPE = 0x1B
 EN_KILLFOCUS = 0x0200
 CB_GETCOUNT = 0x0146
@@ -43,6 +51,7 @@ CBN_SELCHANGE = 1
 CBN_KILLFOCUS = 4
 CBN_EDITCHANGE = 5
 CBN_SELENDOK = 9
+TB_BUTTONCOUNT = 0x0418
 
 # 唯一获准自动点击的对话框 → 按钮点击序列。新增条目必须经评审。
 TEXPLODE_DIALOG_TITLE = "分解对象"
@@ -289,6 +298,169 @@ def find_acad_popups(pid: int) -> list[int]:
 
     win32gui.EnumWindows(cb, None)
     return out
+
+
+# ---------------------------------------------------------------------------
+# TOpening 门窗参数面板 (Handoff 39; itest_42 真机验证)
+# ---------------------------------------------------------------------------
+
+OPENING_PANEL_TITLE = "门窗参数"
+OPENING_TOOLBAR_ID = 134
+OPENING_TOOLBAR_BUTTON_COUNT = 24
+OPENING_TOOLBAR_SIZE = (636, 27)
+OPENING_TOOLBAR_SIZE_TOLERANCE = (8, 4)
+
+# T20 V10 的标准工具栏布局:
+#   14 x 23px 插入方式 + 2 x 8px separator + 23px 插门 + 23px 插窗。
+# 坐标是 ToolbarWindow32 客户区坐标, 不依赖面板屏幕位置。
+OPENING_MODE_POINTS: dict[str, tuple[int, int]] = {
+    "door": (349, 12),
+    "window": (372, 12),
+}
+
+
+def find_opening_panel(pid: int, exclude: set[int] | None = None) -> int | None:
+    """按标题白名单找 TOpening「门窗参数」面板。"""
+    import win32gui
+
+    for h in find_acad_popups(pid):
+        if exclude and h in exclude:
+            continue
+        try:
+            if win32gui.GetWindowText(h) == OPENING_PANEL_TITLE:
+                return h
+        except Exception:
+            continue
+    return None
+
+
+def locate_opening_toolbar(panel: int) -> int | None:
+    """按强结构指纹定位门窗模式工具栏, 避免误点其它 #32770。
+
+    指纹 = 标题「门窗参数」+ 唯一可见 ToolbarWindow32 +
+    control id 134 + 24 个按钮 + T20 V10 已验证尺寸。
+    """
+    import win32gui
+
+    try:
+        if (
+            win32gui.GetClassName(panel) != "#32770"
+            or win32gui.GetWindowText(panel) != OPENING_PANEL_TITLE
+        ):
+            return None
+    except Exception:
+        return None
+
+    candidates: list[int] = []
+    for h in all_descendants(panel):
+        try:
+            if (
+                win32gui.GetClassName(h) == "ToolbarWindow32"
+                and win32gui.IsWindowVisible(h)
+                and win32gui.GetDlgCtrlID(h) == OPENING_TOOLBAR_ID
+            ):
+                candidates.append(h)
+        except Exception:
+            continue
+    if len(candidates) != 1:
+        return None
+
+    toolbar = candidates[0]
+    try:
+        left, top, right, bottom = win32gui.GetWindowRect(toolbar)
+        button_count = _user32.SendMessageW(toolbar, TB_BUTTONCOUNT, 0, 0)
+    except Exception:
+        return None
+    width = right - left
+    height = bottom - top
+    expected_width, expected_height = OPENING_TOOLBAR_SIZE
+    width_tolerance, height_tolerance = OPENING_TOOLBAR_SIZE_TOLERANCE
+    if (
+        button_count != OPENING_TOOLBAR_BUTTON_COUNT
+        or abs(width - expected_width) > width_tolerance
+        or abs(height - expected_height) > height_tolerance
+    ):
+        return None
+    return toolbar
+
+
+def click_opening_mode(panel: int, mode: str) -> str:
+    """向门窗工具栏的「插门/插窗」按钮发送受控鼠标消息。
+
+    标准 ToolbarWindow32 的按钮不是独立 HWND, 因此 BM_CLICK 不适用。
+    这里只向已通过强结构指纹的工具栏客户区发送 down/up; 不移动真实鼠标。
+    """
+    point = OPENING_MODE_POINTS.get(mode)
+    if point is None:
+        return f"unsupported-mode:{mode}"
+    toolbar = locate_opening_toolbar(panel)
+    if toolbar is None:
+        return "toolbar-not-found"
+
+    x, y = point
+    lparam = (y << 16) | (x & 0xFFFF)
+    down_posted = _user32.PostMessageW(
+        toolbar, WM_LBUTTONDOWN, MK_LBUTTON, lparam
+    )
+    up_posted = _user32.PostMessageW(toolbar, WM_LBUTTONUP, 0, lparam)
+    return "mode-clicked" if down_posted and up_posted else "mode-click-failed"
+
+
+async def drive_opening_mode(
+    pid: int,
+    cmd_hwnd: int,
+    mode: str,
+    *,
+    exclude: set[int] | None = None,
+    timeout: float = 5.0,
+) -> str:
+    """等待 TOpening 面板 → 切门/窗模式 → 空回车退出放置循环。
+
+    前提: 调用方已通过独立 LISP 启动 TOpening, 且 CMDACTIVE=1。此函数
+    返回前不走 IPC。最终模式是否生效仍由 opening.lsp 的 DXF group71
+    门禁判定, 本函数只负责可回滚的 UI 切换。
+    """
+    if not _win32_available():
+        return "win32-unavailable"
+    if mode not in OPENING_MODE_POINTS:
+        return f"unsupported-mode:{mode}"
+
+    loop = asyncio.get_event_loop()
+
+    async def _exit_placing_loop() -> bool:
+        # 默认提示是「<退出>」, 空回车比 ESC 更确定且不会重启 TOpening。
+        for _ in range(2):
+            type_to_command_line(cmd_hwnd, "")
+            deadline_close = loop.time() + 2.0
+            while loop.time() < deadline_close:
+                if find_opening_panel(pid) is None:
+                    return True
+                await asyncio.sleep(0.1)
+        return find_opening_panel(pid) is None
+
+    deadline = loop.time() + timeout
+    panel = None
+    while loop.time() < deadline:
+        panel = find_opening_panel(pid, exclude)
+        if panel:
+            break
+        await asyncio.sleep(0.1)
+    if not panel:
+        # 调用契约保证 TOpening 已 active；面板未出现时仍用默认空回车收尾，
+        # 防止把无界的活动命令留给下一次 dispatcher 请求。
+        type_to_command_line(cmd_hwnd, "")
+        await asyncio.sleep(0.3)
+        return "panel-not-found"
+
+    clicked = click_opening_mode(panel, mode)
+    if clicked != "mode-clicked":
+        closed = await _exit_placing_loop()
+        return clicked if closed else f"{clicked};panel-still-open"
+
+    # 切换到另一模式时面板会重建; 同模式时原 HWND 保持。两种情况都需
+    # 等消息落地后再向命令行发送默认「退出」的空回车。
+    await asyncio.sleep(0.6)
+    return "mode-selected" if await _exit_placing_loop() else "panel-still-open"
 
 
 # ---------------------------------------------------------------------------

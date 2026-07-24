@@ -5,7 +5,7 @@
 > **收尾状态：已完成。** 本文件保留为审计清单；最终结果见 §10。
 >
 > **阅读说明：§0–§9 是收尾前的历史快照，旧分支名和测试数字按当时证据保留；
-> 当前基线以 §10、README 和 Handoff 38 为准。**
+> 当前基线以 §11、README 和 Handoff 39 为准。**
 >
 > 用途：新对话先完整阅读本文件、`README.md`、`TODO_BACKLOG.md` 和最新 handoff，
 > 然后直接按顺序执行收尾。不要使用、安装或重新初始化 VibeTrace。
@@ -223,3 +223,20 @@ uv run python scripts/itest_19_mcp_stdio_smoke.py
 - 两个实体清单 JSON 被裁定为可重建运行产物，已加入 `.gitignore`，不入库。
 - 真机测试图元已统一清理，最终实体数为 0。
 - 用户已授权自主提交、切换主分支并完成必要发布操作；按主题拆提交后快进 `main`。
+
+## 11. 2026-07-24 强模型复核与增量修正
+
+- 增量修正后的离线门禁：`198 passed`；`compileall`、`git diff --check`、
+  MCP stdio 9-tools 冒烟通过。
+- Handoff 38 的“人工切换门窗面板后重试”已被 Handoff 39 的控件级自动化取代。
+- 正式链路会启动 `TOpening`、按强结构指纹识别「门窗参数」工具栏、后台切换
+  插门/插窗，并以空回车退出；创建后的 DXF group71 门禁和错误实体回滚继续保留。
+- 真机窄探针 `scripts/itest_42_opening_panel_mode_auto.py` 已依次验证：
+  - window：`TCH_OPENING / WINDOW / group71=1`；
+  - door：`TCH_OPENING / DOOR_FIRE / group71=0`；
+  - 两轮实体增量均为 `+1`，面板均关闭，最终实体数回到 `0`。
+- 旧 `_opening_retry.py` 保留兼容入口，但已不再请求终端人工输入。
+- 核心 `itest_12_e2e.py` 与批量 `itest_e2e_suite.py` 已接入同一自动入口并通过；
+  后者 `25/25`，两者均清理到实体数 `0`、`CMDACTIVE=0`。
+- B3 占位/替换方案继续 DEFERRED / OPTIONAL，只保留离线占位与墙体变更后延迟绑定
+  的独立价值；A2 仍 DEFERRED；其它 S 级强模态/选择注入命令继续 STOPPED。

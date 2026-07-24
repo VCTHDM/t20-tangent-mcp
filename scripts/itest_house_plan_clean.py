@@ -17,14 +17,17 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 
 from _live_lock import live_lock_or_exit  # noqa: E402
 from t20_mcp.backends.file_ipc import FileIPCBackend, find_autocad_window  # noqa: E402
-from t20_mcp.tools.tangent import generate_lisp  # noqa: E402
+from t20_mcp.tools.tangent import execute_opening, generate_lisp  # noqa: E402
 
 
 async def execute_tangent(backend, operation, data):
     """执行 tangent 命令"""
     print(f"\n--- 执行: {operation} ---")
-    code = generate_lisp(operation, data)
-    result = await backend.execute_lisp(code)
+    if operation in {"door", "window"}:
+        result = await execute_opening(backend, operation, data)
+    else:
+        code = generate_lisp(operation, data)
+        result = await backend.execute_lisp(code)
     print(f"  ok={result.ok}, payload={result.payload!r}")
     if result.error:
         print(f"  error={result.error}")
