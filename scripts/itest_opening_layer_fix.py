@@ -11,6 +11,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 
 from _live_lock import live_lock_or_exit  # noqa: E402
+from _opening_retry import execute_opening_with_retry  # noqa: E402
 from t20_mcp.backends.file_ipc import FileIPCBackend  # noqa: E402
 from t20_mcp.tools.tangent import generate_lisp  # noqa: E402
 
@@ -33,16 +34,20 @@ async def main() -> int:
     ))
 
     # 画一个门
-    r1 = await backend.execute_lisp(generate_lisp(
-        "door", {"ins_x": 2000, "ins_y": 0, "width": 900, "height": 2100},
-    ))
-    print(f"door exec: ok={r1.ok}")
+    r1 = await execute_opening_with_retry(
+        backend,
+        "door",
+        {"ins_x": 2000, "ins_y": 0, "width": 900, "height": 2100},
+    )
+    print(f"door exec: ok={r1.ok} error={r1.error}")
 
     # 画一个窗
-    r2 = await backend.execute_lisp(generate_lisp(
-        "window", {"ins_x": 4000, "ins_y": 0, "width": 1500, "height": 1500, "sill_height": 900},
-    ))
-    print(f"window exec: ok={r2.ok}")
+    r2 = await execute_opening_with_retry(
+        backend,
+        "window",
+        {"ins_x": 4000, "ins_y": 0, "width": 1500, "height": 1500, "sill_height": 900},
+    )
+    print(f"window exec: ok={r2.ok} error={r2.error}")
 
     # 回读两个 TCH_OPENING 的图层和 DoorSill
     check_code = '''

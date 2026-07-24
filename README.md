@@ -29,7 +29,7 @@ uv run python scripts/itest_19_mcp_stdio_smoke.py  # MCP stdio 冒烟 (无需 Au
 
 ## MCP 工具
 
-共 9 个: drawing / entity / layer / block / annotation / pid / variable / screenshot / **tangent**。
+共 9 个: drawing / entity / layer / block / annotation / pid / view / system / **tangent**。
 
 ### tangent 子命令 (33 个)
 
@@ -38,7 +38,7 @@ uv run python scripts/itest_19_mcp_stdio_smoke.py  # MCP stdio 冒烟 (无需 Au
 | `wall` | TgWall | TCH_WALL | x1,y1,x2,y2, left_width?, right_width?, height?, wall_type?, layer? |
 | `door` | TOpening | TCH_OPENING | ins_x,ins_y, width?, height?, sill_distance?, layer? |
 | `window` | TOpening | TCH_OPENING | ins_x,ins_y, width?, height?, sill_height?, layer? |
-| `dimension` | TDimMP | TCH_DIMENSION2 | p1_x,p1_y,p2_x,p2_y, pos_x?, pos_y?, layer? |
+| `dimension` | TDimMP | TCH_DIMENSION2 | p1_x,p1_y,p2_x,p2_y, pos_x?, pos_y?, layer?；逐点吸附，不用于总宽/总高（总尺寸用 `annotation.create_dimension_linear`） |
 | `wall_thickness_dimension` | TDimWall | TCH_DIMENSION2 | p1_x,p1_y,p2_x,p2_y, layer? |
 | `opening_dimension` | TDim3 | TCH_DIMENSION2 | p1_x,p1_y,p2_x,p2_y, layer? |
 | `two_point_dimension` | TDimTP | TCH_DIMENSION2 | p1_x,p1_y,p2_x,p2_y, pos_x?, pos_y?, layer? |
@@ -70,8 +70,9 @@ uv run python scripts/itest_19_mcp_stdio_smoke.py  # MCP stdio 冒烟 (无需 Au
 | `search_room` | TUpdSpace | TCH_SPACE | layer? |
 
 验证状态: 全部 33 个子命令均已 E2E 验证 (T20 V10 / AutoCAD 2024)。
-`door`/`window`/`elevation`/`drawing_name`/`arrow`/`column` 执行时附 warning 提示。
-`window` 调用前需人工切天正门窗面板到窗模式。
+`dimension`/`door`/`window`/`elevation`/`drawing_name`/`arrow`/`column` 执行时附 warning 提示。
+`door`/`window` 创建后校验 DXF group71 (0=门, 1=窗)。模式不符时错误实体自动删除，
+MCP 返回 `OPENING_MODE_MISMATCH`，模型必须请用户切换门窗面板后原参数重试。
 详细记录见 [`docs/T20_COMMANDS.md`](docs/T20_COMMANDS.md)。
 
 ## 项目结构
@@ -88,7 +89,7 @@ docs/                                # 命令编目 + handoff 审计记录
 ## Handoff 索引
 
 工程决策审计记录, 按顺序:
-`docs/handoff/01..37_*.md`
+`docs/handoff/01..38_*.md`
 
 关键节点:
 - 03 — 架构评审 (P0-P2)
@@ -107,11 +108,12 @@ docs/                                # 命令编目 + handoff 审计记录
 - 35 — B2 闭合: drawing_name/arrow/elevation 文本 COM 注入证实可行 (NameText/ScaleText, Text/Text2, Text 真机写入+读回精确匹配), 三子命令文本参数上线; S-4 收窄为仅门/窗模式切换
 - 36 — B1 闭合: TGColumn 面板 UI 自动化突破 (项目首例), `column` 子命令上线; WM_SETTEXT+通知补发 填参 + 命令行 WM_CHAR 打插入点, 五参数 COM 读回精确匹配; "面板命令不可脚本驱动"结论修正为"点序列不可达, 控件级可达"
 - 37 — A1 裁定: TRectAxis Gate B 机制打通 (WM_COMMAND IDOK 关框 + 打点, COUNT*SPACING 语法) 但**不封装** — 产物纯 LINE@DOTE 无 xdata/TCH_AXIS/轴号, 与 axis_lines 同类零增益; 沉淀"封装前先验产物实体类型"方法论 (机制可行 ≠ 值得封装)
+- 38 — 门窗两阶段模式门禁: 创建后校验 DXF group71; 模式错则删除错误实体并返回结构化 `OPENING_MODE_MISMATCH`，要求模型请用户切换后原参数重试
 
 ## 测试
 
 ```bash
-uv run pytest -q                              # 离线 (183 测试, <1s)
+uv run pytest -q                              # 离线测试 (通常 <2s)
 uv run python scripts/itest_01_bringup.py     # 真机引导 (需 AutoCAD)
 uv run python scripts/itest_12_e2e.py         # 真机核心 E2E
 uv run python scripts/itest_e2e_suite.py      # 真机批量 E2E (26 case)

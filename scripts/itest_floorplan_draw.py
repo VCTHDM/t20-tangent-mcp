@@ -16,15 +16,21 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 
 from _live_lock import live_lock_or_exit  # noqa: E402
+from _opening_retry import execute_opening_with_retry  # noqa: E402
 from t20_mcp.backends.file_ipc import FileIPCBackend  # noqa: E402
 from t20_mcp.tools.tangent import generate_lisp  # noqa: E402
 
 
 async def execute_tangent(backend, operation, data):
-    code = generate_lisp(operation, data)
-    result = await backend.execute_lisp(code)
+    if operation in {"door", "window"}:
+        result = await execute_opening_with_retry(backend, operation, data)
+    else:
+        code = generate_lisp(operation, data)
+        result = await backend.execute_lisp(code)
     status = "OK" if result.ok else f"FAIL({result.error})"
     print(f"  {operation:30s} {status}")
+    if not result.ok:
+        raise RuntimeError(f"{operation} failed: {result.error}")
     return result
 
 
@@ -51,6 +57,7 @@ DUMP_LISP = """
         (setq t20mcp:ip (vl-catch-all-apply 'vlax-get-property (list t20mcp:o "InsertionPoint")))
         (setq t20mcp:wd (vl-catch-all-apply 'vlax-get-property (list t20mcp:o "Width")))
         (setq t20mcp:ht (vl-catch-all-apply 'vlax-get-property (list t20mcp:o "Height")))
+        (setq t20mcp:ds (vl-catch-all-apply 'vlax-get-property (list t20mcp:o "DoorSill")))
         (setq t20mcp:lw (vl-catch-all-apply 'vlax-get-property (list t20mcp:o "LeftWidth")))
         (setq t20mcp:rw (vl-catch-all-apply 'vlax-get-property (list t20mcp:o "RightWidth")))
         (if (not (vl-catch-all-error-p t20mcp:sp))
@@ -63,12 +70,16 @@ DUMP_LISP = """
           (setq t20mcp:geo (strcat t20mcp:geo "W=" (vl-princ-to-string t20mcp:wd) " ")))
         (if (not (vl-catch-all-error-p t20mcp:ht))
           (setq t20mcp:geo (strcat t20mcp:geo "H=" (vl-princ-to-string t20mcp:ht) " ")))
+        (if (not (vl-catch-all-error-p t20mcp:ds))
+          (setq t20mcp:geo (strcat t20mcp:geo "DS=" (vl-princ-to-string t20mcp:ds) " ")))
         (if (not (vl-catch-all-error-p t20mcp:lw))
           (setq t20mcp:geo (strcat t20mcp:geo "LW=" (vl-princ-to-string t20mcp:lw) " ")))
         (if (not (vl-catch-all-error-p t20mcp:rw))
           (setq t20mcp:geo (strcat t20mcp:geo "RW=" (vl-princ-to-string t20mcp:rw) " ")))))
+    ;; Keep the payload on one physical line.  The dispatcher JSON escaper
+    ;; handles quotes/backslashes but not control characters such as newline.
     (setq t20mcp:out (strcat t20mcp:out t20mcp:hd "|" t20mcp:ty "|" t20mcp:ly "|"
-                     t20mcp:geo "\\n"))
+                     t20mcp:geo "@@"))
     (setq t20mcp:i (1+ t20mcp:i)))
   t20mcp:out)
 """
@@ -108,25 +119,34 @@ async def main() -> int:
     await execute_tangent(backend, "wall", {"x1":2400,"y1":7000,"x2":2400,"y2":10000,"left_width":HALF_WALL,"right_width":HALF_WALL,"height":3000})
 
     print("\n【门】")
-    await execute_tangent(backend, "door", {"ins_x":6000,"ins_y":0,"width":1000,"height":2100})
+    await execute_tangent(backend, "door", {"ins_x":4500,"ins_y":0,"width":1000,"height":2100})
     await execute_tangent(backend, "door", {"ins_x":9600,"ins_y":4500,"width":900,"height":2100})
-    await execute_tangent(backend, "door", {"ins_x":2400,"ins_y":4500,"width":900,"height":2100})
-    await execute_tangent(backend, "door", {"ins_x":10800,"ins_y":7500,"width":900,"height":2100})
-    await execute_tangent(backend, "door", {"ins_x":2400,"ins_y":7000,"width":800,"height":2100})
+    await execute_tangent(backend, "door", {"ins_x":6000,"ins_y":4500,"width":900,"height":2100})
+    await execute_tangent(backend, "door", {"ins_x":9000,"ins_y":7500,"width":900,"height":2100})
+    await execute_tangent(backend, "door", {"ins_x":3600,"ins_y":7000,"width":800,"height":2100})
 
     print("\n【窗户】")
-    await execute_tangent(backend, "window", {"ins_x":6000,"ins_y":0,"width":2400,"height":1800,"sill_height":300})
+    await execute_tangent(backend, "window", {"ins_x":6600,"ins_y":0,"width":2400,"height":1800,"sill_height":300})
     await execute_tangent(backend, "window", {"ins_x":10200,"ins_y":0,"width":1800,"height":1500,"sill_height":900})
     await execute_tangent(backend, "window", {"ins_x":1800,"ins_y":0,"width":1800,"height":1500,"sill_height":900})
     await execute_tangent(backend, "window", {"ins_x":8400,"ins_y":10000,"width":1500,"height":1500,"sill_height":900})
     await execute_tangent(backend, "window", {"ins_x":1200,"ins_y":10000,"width":1200,"height":1200,"sill_height":1200})
 
-    print("\n【尺寸标注】")
-    await execute_tangent(backend, "dimension", {"p1_x":0,"p1_y":0,"p2_x":12000,"p2_y":0,"pos_x":6000,"pos_y":-1500})
-    await execute_tangent(backend, "dimension", {"p1_x":0,"p1_y":0,"p2_x":0,"p2_y":10000,"pos_x":-1500,"pos_y":5000})
+    print("\n【总尺寸标注】")
+    # TDIMMP 是天正“逐点标注”，会在带门窗的整墙上重新吸附洞口边界，
+    # 不适合表达给定端点的建筑总宽/总高。总尺寸走 MCP 的 DIMLINEAR。
+    await backend.execute_lisp('(setvar "CLAYER" "PUB_DIM")')
+    horizontal_dim = await backend.create_dimension_linear(0, 0, 12000, 0, 6000, -1500)
+    vertical_dim = await backend.create_dimension_linear(0, 0, 0, 10000, -1500, 5000)
+    await backend.execute_lisp('(setvar "CLAYER" "0")')
+    print(f"  linear_dimension_horizontal    {'OK' if horizontal_dim.ok else 'FAIL'}")
+    print(f"  linear_dimension_vertical      {'OK' if vertical_dim.ok else 'FAIL'}")
+    if not horizontal_dim.ok or not vertical_dim.ok:
+        print(f"FAIL: linear dimensions: {horizontal_dim.error or vertical_dim.error}")
+        return 1
 
     print("\n【墙厚标注】")
-    for p1x, p1y, p2x, p2y in [(6000,-200,6000,200),(6000,9800,6000,10200),(-200,5000,200,5000),(11800,5000,12200,5000)]:
+    for p1x, p1y, p2x, p2y in [(3300,-200,3300,200),(6000,9800,6000,10200),(-200,5000,200,5000),(11800,5000,12200,5000)]:
         await execute_tangent(backend, "wall_thickness_dimension", {"p1_x":p1x,"p1_y":p1y,"p2_x":p2x,"p2_y":p2y})
 
     print("\n【符号】")
@@ -144,11 +164,14 @@ async def main() -> int:
     # Dump all entities
     print("=== Dump 全实体 ===")
     dump_r = await backend.execute_lisp(DUMP_LISP)
+    if not dump_r.ok:
+        print(f"FAIL: entity dump: {dump_r.error}")
+        return 1
     dump_text = str(dump_r.payload) if dump_r.payload else ""
 
     # Parse and save
     entities = []
-    for line in dump_text.split("\\n"):
+    for line in dump_text.split("@@"):
         line = line.strip()
         if not line:
             continue
@@ -179,12 +202,26 @@ async def main() -> int:
     for l, n in sorted(by_layer.items()):
         print(f"  {l:30s} {n}")
 
+    checks = {
+        "wall_count>=11": by_type.get("TCH_WALL", 0) >= 11,
+        "opening_count=10": by_type.get("TCH_OPENING", 0) == 10,
+        "door_layer_count=5": by_layer.get("DOOR_FIRE", 0) == 5,
+        "window_layer_count=5": by_layer.get("WINDOW", 0) == 5,
+        "linear_dimension_count=2": by_type.get("DIMENSION", 0) == 2,
+        "wall_dimension_count=4": by_type.get("TCH_DIMENSION2", 0) == 4,
+        "north_arrow_count=1": by_type.get("TCH_NORTHTHUMB", 0) == 1,
+        "drawing_name_count=1": by_type.get("TCH_DRAWINGNAME", 0) == 1,
+    }
+    print("\n=== 验收 ===")
+    for name, passed in checks.items():
+        print(f"  {name:30s} {'PASS' if passed else 'FAIL'}")
+
     # Print all entities for log
     print("\n=== 全实体明细 ===")
     for e in entities:
         print(f"  {e['handle']:6s} {e['type']:20s} {e['layer']:15s} {e['geometry']}")
 
-    return 0
+    return 0 if all(checks.values()) else 1
 
 
 if __name__ == "__main__":

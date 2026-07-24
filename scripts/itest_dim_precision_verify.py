@@ -5,7 +5,7 @@ TDIMMP 标注浮点精度误差导致标注歪斜。本脚本在真机上自动�
   1. dimension / two_point_dimension / wall_thickness_dimension 仍正常生成 TCH_DIM*
   2. dimension 标注值正确 (≈ 跨距), 几何不歪斜 (DXF 回读)
   3. 墙端点对齐: 相邻墙共享端点经 t20mcp:pt 2 位小数后仍重合
-  4. t20mcp:pt 输出格式确认 (2 位小数)
+  4. t20mcp:pt 对非整数坐标按 2 位小数舍入 (DIMZIN 可省略整数尾零)
 全部用 COM/DXF 自动回读, 不靠肉眼看; 每场景后 UNDO cleanup.
 """
 
@@ -97,10 +97,16 @@ async def main() -> int:
     fmt_code = '''
 (progn
   (defun t20mcp:pt (x y) (strcat (rtos x 2 2) "," (rtos y 2 2)))
-  (strcat "pt_test=" (t20mcp:pt 6000 -1500) "|" (t20mcp:pt 0 0)))
+  (strcat "pt_test=" (t20mcp:pt 6000.123 -1500.126)
+          "|" (t20mcp:pt 0.004 0.005)))
 '''
     fmt_r = await backend.execute_lisp(fmt_code)
-    fmt_ok = fmt_r.ok and "6000.00,-1500.00" in str(fmt_r.payload) and "0.00,0.00" in str(fmt_r.payload)
+    fmt_payload = str(fmt_r.payload)
+    fmt_ok = (
+        fmt_r.ok
+        and "6000.12,-1500.13" in fmt_payload
+        and "0,0.01" in fmt_payload
+    )
     results["pt_format"] = fmt_ok
     notes["pt_format"] = str(fmt_r.payload)
     print(f"[pt_format] ok={fmt_ok} payload={fmt_r.payload!r}")
@@ -132,14 +138,17 @@ async def main() -> int:
     # ==================================================================
     # 场景 2: two_point_dimension (垂直标注)
     # ==================================================================
-    await backend.execute_lisp(generate_lisp(
-        "wall", {"x1": 0, "y1": 0, "x2": 0, "y2": 10000,
-                 "left_width": 120, "right_width": 120, "height": 3000, "wall_type": "砖"},
-    ))
+    # TDIMTP 的穿越线必须穿过多个独立对象；单墙会报“对象数目太少”。
+    for y in (0, 2000, 4000):
+        await backend.execute_lisp(generate_lisp(
+            "wall", {"x1": 0, "y1": y, "x2": 3000, "y2": y,
+                     "left_width": 120, "right_width": 120,
+                     "height": 3000, "wall_type": "砖"},
+        ))
     before = await count(backend)
     r = await backend.execute_lisp(generate_lisp("two_point_dimension", {
-        "p1_x": 0, "p1_y": 0, "p2_x": 0, "p2_y": 10000,
-        "pos_x": -1500, "pos_y": 5000,
+        "p1_x": 1500, "p1_y": -500, "p2_x": 1500, "p2_y": 4500,
+        "pos_x": 2500, "pos_y": 2000,
     }))
     after = await count(backend)
     t = await backend.execute_lisp(LAST_TYPE)
@@ -184,7 +193,7 @@ async def main() -> int:
                  "left_width": 120, "right_width": 120, "height": 3000, "wall_type": "砖"},
     ))
     after = await count(backend)
-    # 回读两面墙的端点: 用 ssget 取最后两个 TCH_WALL, COM 读 StartPoint/EndPoint
+    # TCH_WALL 不暴露 StartPoint/EndPoint 属性，必须走 Curve 协议。
     wall_rb_code = '''
 (progn
   (setq t20mcp:ss (ssget "X" '((0 . "TCH_WALL"))))
@@ -194,8 +203,8 @@ async def main() -> int:
   (while (>= t20mcp:i 0)
     (setq t20mcp:e (ssname t20mcp:ss t20mcp:i))
     (setq t20mcp:o (vlax-ename->vla-object t20mcp:e))
-    (setq t20mcp:sp (vl-catch-all-apply 'vlax-get-property (list t20mcp:o "StartPoint")))
-    (setq t20mcp:ep (vl-catch-all-apply 'vlax-get-property (list t20mcp:o "EndPoint")))
+    (setq t20mcp:sp (vl-catch-all-apply 'vlax-curve-getStartPoint (list t20mcp:o)))
+    (setq t20mcp:ep (vl-catch-all-apply 'vlax-curve-getEndPoint (list t20mcp:o)))
     (setq t20mcp:out (strcat t20mcp:out "W" (itoa t20mcp:i)
                      " SP=" (if (vl-catch-all-error-p t20mcp:sp) "<no>" (vl-princ-to-string t20mcp:sp))
                      " EP=" (if (vl-catch-all-error-p t20mcp:ep) "<no>" (vl-princ-to-string t20mcp:ep))
@@ -205,11 +214,11 @@ async def main() -> int:
 '''
     wall_rb = await backend.execute_lisp(wall_rb_code)
     rb_str = str(wall_rb.payload)
-    # 墙1终点 (6000,0) 应 ≈ 墙2起点 (6000,0); 检查 "6000" 出现在两个端点中
+    # 墙1终点与墙2起点都应为 (6000,0,0)。
     wall_align_ok = (
         after == before + 2
-        and "StartPoint" not in rb_str  # 属性可读 (非 <no>)
-        and "6000" in rb_str
+        and "<no>" not in rb_str
+        and rb_str.count("(6000.0 0.0 0.0)") >= 2
     )
     results["wall_endpoint_align"] = wall_align_ok
     notes["wall_endpoint_align"] = rb_str
