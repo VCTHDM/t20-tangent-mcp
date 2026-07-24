@@ -139,7 +139,7 @@ column 曾同列, Handoff 36 经面板 UI 自动化复活为 `column` 子命令)
 | 绘制轴网 TRectAxis | 不封装 (Handoff 37, 价值裁定) | Gate B 机制已打通 (WM_COMMAND IDOK 关框 + 命令行打点, COUNT*SPACING 语法), 但产物为纯 LINE@DOTE 无 xdata/无 TCH_AXIS/无轴号, 与 axis_lines 同类零增益 → 不封装 rect_axis; 需 DOTE 轴网用 `axis_lines` + `layer="DOTE"` |
 | 导出天正3 TSaveAs | 已移除 | WPF 框无视 FILEDIA=0 |
 | 门窗模式切换 | 两阶段门禁 (已闭合) | Handoff 33 + 34 证实 TCH_OPENING 不暴露独立 SillHeight，门/窗共用 DoorSill，模式由面板 + DXF group71 决定；Handoff 38 增加双向模式校验和错误实体回滚。面板切换仍是人工动作，但调用无需预猜模式：不符时返回结构化 `OPENING_MODE_MISMATCH`，切换后按 `retry_data` 原参数重试 |
-| 轴网对话框自动化 | 待评估 | TRectAxis控件已侦察, 性价比低, 暂用 axis_lines 替代 |
+| 轴网对话框自动化 | 不推进 (Handoff 37) | TRectAxis Gate B 虽已打通，但产物只是普通 LINE@DOTE，与 `axis_lines` 同类且更慢更脆；除非未来发现可生成 TCH_AXIS/轴号的配置，否则维持 WON'T-SHIP |
 | TPartSaveAs | Handoff 33 BLOCKED | selection-first 后弹「图形导出」`#32770`, 即便 FILEDIA=0 也无法绕开 (itest_33) |
 | TSingleAxisDim | Handoff 33 STOPPED | 提示 `点取待标注的轴线或[手工绘制(D)]<退出>:` 是 entsel 风格, 命令行坐标输入会被命令吞掉后报「未知命令」, 不接受坐标注入; selection-injection 族, 不包装 (itest_32 LOGFILEMODE 抓取) |
 

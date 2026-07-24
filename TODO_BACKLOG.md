@@ -1,9 +1,10 @@
 # 执行清单 (TODO_BACKLOG)
 
 > 生成日期: 2026-06-17
+> 最后校准: 2026-07-24 (Handoff 38 / 项目收尾)
 > 依据: Handoff 33 真机证据 + tangent.py::LOW_CONFIDENCE_WARNINGS + docs/T20_COMMANDS.md
-> 当前基线: 32 子命令全部 E2E PASS, pytest 159 passed, EXECUTE_DISABLED_SUBCOMMANDS={}
-> 进度: D1 / D2 / C1 / C2 已闭合 (Handoff 34, 2026-06-17)
+> 当前基线: 33 子命令有历史真机 E2E 证据, pytest 190 passed, EXECUTE_DISABLED_SUBCOMMANDS={}
+> 进度: D1 / D2 / C1 / C2 / B1 / B2 / Handoff 38 均已闭合；B3 / A2 仅按触发条件重开
 
 ---
 
@@ -17,7 +18,7 @@
 | A | 困难, 机制不友好但理论可行 | >= 3 天 |
 | S | 机制级不可自动化, 永久 STOPPED, 不要再投入工时 | - |
 
-状态字段: OPEN 待做 / BLOCKED 等外部条件 / STOPPED 不再尝试
+状态字段: OPEN 待做 / DEFERRED 无当前触发场景 / BLOCKED 等外部条件 / STOPPED 不再尝试
 
 ---
 
@@ -96,12 +97,13 @@
 
 ### B3 - window 占位 + 切面板后替换 工作流 (绕开 §S-4 面板锁死的工程方案)
 
-- 状态: OPEN — 设计草稿 (用户提出于 2026-06-17 会话, 经 ZCode 评估可行)
+- 状态: **DEFERRED / OPTIONAL** — Handoff 38 已解决当前主流程；仅在需要“脱离面板
+  先布置占位、跨墙体修改后延迟绑定、最后统一替换”时重开
 - 背景:
   - §S-4 "面板记忆值锁死" 是机制级永久无解 (COM/DXF/PostMessage 均失败, Handoff 33+34 已三方证伪)
-  - 但本方案不"破解"机制, 而是把"切面板"这一人工动作从 N 次 (每次 window 调用前)
-    降到整个会话 1 次, 让 LLM agent 可以 fire-and-forget 批量画窗占位, 用户随后一键替换
-  - 工程价值: 50 个 window 的会话工效提升约 50x, 是 agent 自动化场景刚需
+  - Handoff 38 已增加 group71 双向门禁、错误实体回滚和原参数重试；
+    `_opening_retry.py` 在分阶段脚本中只会于首次模式不符时请求切换，后续同类门窗连续执行
+  - 因此 B3 不再是批量插窗的必需项；它只保留“离线占位 + 延迟绑定”的独立工程价值
 - 设计 (双子命令工作流):
   1. **`tangent.window_placeholder` (新)** — 不依赖面板状态:
      - 用 COM 在墙上插占位"临时块" (自定义图层 `T20MCP_PLACEHOLDER_WINDOW`)
@@ -125,11 +127,11 @@
        COM 注入 Width/Height/DoorSill, 校验 group71=1 + type=TCH_OPENING 后 erase 占位;
      - **失败容忍**: 墙已删除 → 跳过 + warn; 单条替换失败 → 单条回滚 + 占位保留, 不污染整批。
 - 工程价值矩阵:
-  | 维度 | 现状 (直接 tangent.window) | B3 占位+替换 |
+  | 维度 | 当前 Handoff 38 路径 | B3 占位+替换 |
   |---|---|---|
-  | 切面板时机 | 每次调用前 | 整会话 1 次 |
-  | 切错代价 | 沉默生成门 (现 SKIP 兜底) | preflight 报警, 显性 |
-  | Agent UX | 每个窗都要停下来求人 | 批量画占位, 最后一键替换 |
+  | 切面板时机 | 首次 mismatch 后切换，同类请求连续执行 | 最终替换阶段切换 1 次 |
+  | 切错代价 | 错误实体自动回滚并返回结构化重试数据 | preflight 报警，保留占位 |
+  | Agent UX | 按门阶段/窗阶段直接生成真实对象 | 先布置占位，最后统一替换 |
   | 跨墙变换 | 一调即定, 改墙后漂移 | xdata wall_handle 延迟绑定, 跟得上 |
 - 风险:
   - preflight 探针实体如果 cleanup 不彻底, 会污染图纸 — 必须严格 try/finally + entity 计数对账
@@ -145,9 +147,9 @@
   - itest_46_window_replace_undo.py — 批量替换后单次 undo 回到全占位状态
   - 至少 8 个新 LISP/参数校验 pytest case
 - 难度评估: B 级偏上, 估时 2~3 天 (介于 B1 与 A1 之间)
-- 触发条件: 当用户开始让 agent 频繁调用 window (例如布置户型批量窗) 时优先级上升;
-  当前如果只是手动单次, 现有"切一次面板就别关"路径已够用, 不需要 B3
-- 落地顺序建议: B2 (低风险 COM 评估) -> B1 (TGColumn Gate B 范式) -> B3 (复用 B1 的 xdata + 块工具链)
+- 触发条件: 用户明确需要在不切换 T20 面板时先规划大量窗位，或要求墙体
+  MOVE/STRETCH 后仍通过 wall_handle 延迟绑定；单纯批量插窗不触发 B3
+- 落地顺序建议: B1 / B2 / Handoff 38 均已完成；只有满足上述触发条件才重开 B3
 - 与 §S-4 关系: 本方案 **不修改 §S-4 判定** (机制级结论保持 STOPPED), B3 是工程绕道, 不是机制突破
 
 ---
@@ -174,7 +176,7 @@
 
 ### A2 - WPF #32770 寄宿场景的通用守卫扩展
 
-- 状态: OPEN (依赖 C2 / A1 触发)
+- 状态: **DEFERRED** — C2 已证伪当前 TSaveAs 的 WPF 假说，尚无真实 WPF 模态触发场景
 - 背景: 当前 file_ipc.py 弹框守卫针对外层 #32770; Handoff 09 的 "主窗口 IsWindowEnabled" 信号是单点修复
 - 行动: 把 IsWindowEnabled 信号上升为统一的恢复路径分支, 覆盖 WPF 内嵌寄宿
 - 闭合判据: itest_19 stdio smoke + itest_e2e_suite 全绿, 新增 WPF 守卫专项 itest 通过
@@ -232,14 +234,14 @@ D1  ->  D2                              ✅ DONE (Handoff 34, 2026-06-17)
         A1                               🛑 STOPPED (Handoff 37, 机制通但产物无增益, 不封装)
             |
             v
-        B3 (可选, agent 批量化场景触发)  (window 占位+替换 工作流) <-- 当前候选
+        B3 (DEFERRED, 仅占位/延迟绑定场景触发)
             |
             v
-        A2                               (WPF 假说已被 C2 证伪, 优先级下调, 待真 WPF 模态出现)
+        A2 (DEFERRED)                    (WPF 假说已被 C2 证伪, 待真 WPF 模态出现)
 ```
 
-> B3 不在主线必经路径上, 仅当用户开始用 agent 批量化插窗 (如户型一次 50+ 扇)
-> 时才触发推进; 个人手工流可继续走"切一次面板就别关"。
+> B3 不在主线必经路径上。Handoff 38 已覆盖常规批量插窗；只有需要占位、
+> 跨墙修改后的延迟绑定和最终统一替换时才重开。
 
 S 级不在路径上, 任何时候出现 "再试一次" 的诱惑请回看 Handoff 33。
 
@@ -248,7 +250,7 @@ S 级不在路径上, 任何时候出现 "再试一次" 的诱惑请回看 Hando
 ## 每次改动前后必跑 (铁律)
 
 ```bash
-uv run pytest -q                                   # 离线 150 case
+uv run pytest -q                                   # 离线测试
 python -m compileall -q src scripts tests          # 编译检查
 git diff --check                                   # 行尾/空白
 uv run python scripts/itest_19_mcp_stdio_smoke.py  # 9 tools 注册
