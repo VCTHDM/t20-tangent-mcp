@@ -43,7 +43,7 @@
 | 中文命令名 | 命令名 | 驱动方式（真机验证） | 生成实体 | 置信度 |
 |---|---|---|---|---|
 | 绘制墙体 | `TgWall` | 起点→终点→回车（面板记忆值）；左/右宽、高、材料经 COM 注入 `LeftWidth/RightWidth/Height/Style` | `TCH_WALL` | **高** (E2E) |
-| 逐点标注 | `TDimMP` | 尺寸线位置点→点1→点2→回车（顺序错则 0 实体假成功） | `TCH_DIMENSION2` | **高** (E2E) |
+| 逐点标注 | `TDimMP` | 尺寸线位置点→点1→点2→回车（顺序错则 0 实体假成功）；会按墙体/门窗节点重新吸附，不适合建筑总宽/总高，总尺寸应调用 `annotation.create_dimension_linear` | `TCH_DIMENSION2` | **高** (E2E，语义受限) |
 | 墙厚标注 | `TDimWall` | 直线第一点→直线第二点；两点连线穿过墙体 | `TCH_DIMENSION2` | **高** (E2E) |
 | 门窗标注 | `TDim3` | 线选起点→线选终点→回车；线选段穿过墙体/门窗 | `TCH_DIMENSION2` | **高** (E2E) |
 | 两点标注 | `TDimTP` | 穿越线起点→穿越线终点→标注位置→回车；三墙场景 E2E 生成尺寸，穿过对象不足会报"对象数目太少" | `TCH_DIMENSION2` | **高** (E2E) |
@@ -70,7 +70,7 @@
 | 双跑楼梯 | `TRStair` | 插入点→回车退出循环；梯段宽/踏步数/楼梯高/井宽走面板记忆值 | `TCH_RECTSTAIR` | **高** (E2E) |
 | 多跑楼梯 | `TMultiStair` | 起点→下一点→回车（在"起点<退出>"处空回车收尾）；跑数/梯段宽/楼梯高走面板记忆值 | `TCH_MULTISTAIR` | **高** (E2E) |
 | 轮椅直径 | `TWheelchairDaim` | 中心点→半径/方向点→回车；edge 缺省为中心正右 1500mm；官方命令拼写为 `Daim` | `TCH_RADIUSDIM` | **高** (E2E) |
-| 门窗 | `TOpening` | 墙上插入点→回车（非模态面板不阻塞）；`Width/Height/DoorSill` 可 COM 注入；`window` 调用前需人工把门窗面板切到窗模式 | `TCH_OPENING` | **高**：door/window 均已真机闭合 (door: Handoff 33 / window: Handoff 34 sweep 三参数 DS=600/1200/300 精确匹配, group71=1)；插入类型随面板当前模式 (默认门), 切换前提仍是不可消除的人工动作 |
+| 门窗 | `TOpening` | 墙上插入点→回车（非模态面板不阻塞）；`Width/Height/DoorSill` 可 COM 注入；创建后硬校验 group71 (0=门, 1=窗)，模式错则删除错误实体并返回 `OPENING_MODE_MISMATCH`，模型请用户切换后原参数重试 | `TCH_OPENING` | **高**：door/window 参数已真机闭合；面板切换仍是人工动作，但 Handoff 38 模式门禁消除了类型假成功 |
 | 普通线轴网 | 原生 `LINE` | `axis_lines` 替代路径：按开间/进深生成普通线网格，可旋转；不生成天正智能轴网 | `LINE` | **中** (替代路径) |
 | 几何读回 | 原生 `EXPLODE` | `explode_read`：COPY 副本到暂存区→分解副本→序列化产物→UNDO 回滚，非破坏。已知 T20 缺陷：墙体产物起点侧顶点归零 | `LINE` 等 | **高** (E2E) |
 | 搜索房间 | `TUpdSpace` | `search_room`：全图选择 `TCH_WALL` → 选择集 → 回车；闭合墙体围合区域生成房间对象 | `TCH_SPACE` | **高** (E2E) |
@@ -138,7 +138,7 @@ column 曾同列, Handoff 36 经面板 UI 自动化复活为 `column` 子命令)
 | 标准柱 TGColumn | **已封装为 `column`** (Handoff 36) | 面板 UI 自动化突破: WM_SETTEXT+通知补发填参 (柱高/转角/截面/材料) + 命令行 WM_CHAR 打插入点 + ESC 退出; 五参数 COM 读回精确匹配 (Height/Rotation/Width/Deep/Style); 历史"点序列不可达"结论仍成立, 本路线绕开点序列 |
 | 绘制轴网 TRectAxis | 不封装 (Handoff 37, 价值裁定) | Gate B 机制已打通 (WM_COMMAND IDOK 关框 + 命令行打点, COUNT*SPACING 语法), 但产物为纯 LINE@DOTE 无 xdata/无 TCH_AXIS/无轴号, 与 axis_lines 同类零增益 → 不封装 rect_axis; 需 DOTE 轴网用 `axis_lines` + `layer="DOTE"` |
 | 导出天正3 TSaveAs | 已移除 | WPF 框无视 FILEDIA=0 |
-| 窗模式切换 | 窗台高走 DoorSill (已闭合) | Handoff 33 + Handoff 34 真机证实: TCH_OPENING 不暴露独立 SillHeight 属性, 门/窗共用 DoorSill, 模式由面板 + DXF group 71 决定; window 子命令已 sweep 三参数 (DS=600/1200/300) 精确匹配, group71=1。COM 方法切换路线已排除 (itest_29); window 调用前需人工切面板 (该人工前提不可消除) |
+| 门窗模式切换 | 两阶段门禁 (已闭合) | Handoff 33 + 34 证实 TCH_OPENING 不暴露独立 SillHeight，门/窗共用 DoorSill，模式由面板 + DXF group71 决定；Handoff 38 增加双向模式校验和错误实体回滚。面板切换仍是人工动作，但调用无需预猜模式：不符时返回结构化 `OPENING_MODE_MISMATCH`，切换后按 `retry_data` 原参数重试 |
 | 轴网对话框自动化 | 待评估 | TRectAxis控件已侦察, 性价比低, 暂用 axis_lines 替代 |
 | TPartSaveAs | Handoff 33 BLOCKED | selection-first 后弹「图形导出」`#32770`, 即便 FILEDIA=0 也无法绕开 (itest_33) |
 | TSingleAxisDim | Handoff 33 STOPPED | 提示 `点取待标注的轴线或[手工绘制(D)]<退出>:` 是 entsel 风格, 命令行坐标输入会被命令吞掉后报「未知命令」, 不接受坐标注入; selection-injection 族, 不包装 (itest_32 LOGFILEMODE 抓取) |

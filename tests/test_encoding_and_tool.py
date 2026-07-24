@@ -134,6 +134,37 @@ class _FakeBackend:
         return CommandResult(ok=True, payload={"echo": "ok"})
 
 
+class _OpeningStatusBackend(_FakeBackend):
+    def __init__(self, payload: str) -> None:
+        super().__init__()
+        self.payload = payload
+
+    async def execute_lisp(self, code: str) -> CommandResult:
+        self.calls.append(code)
+        return CommandResult(ok=True, payload=self.payload)
+
+
+def test_command_result_preserves_structured_error_payload() -> None:
+    result = CommandResult(
+        ok=False,
+        error="mode mismatch",
+        payload={"code": "OPENING_MODE_MISMATCH"},
+    )
+    assert result.to_dict() == {
+        "ok": False,
+        "error": "mode mismatch",
+        "payload": {"code": "OPENING_MODE_MISMATCH"},
+    }
+
+
+def test_package_version_comes_from_project_metadata() -> None:
+    from importlib.metadata import version
+
+    from t20_mcp import __version__
+
+    assert __version__ == version("t20-mcp")
+
+
 class TestParamsCmdFileEncoding:
     def test_chinese_params_written_as_gbk_not_unicode_escape(self, tmp_path, monkeypatch) -> None:
         # P2-1: 命令文件以 GBK + ensure_ascii=False 写出, 中文不变 \uXXXX。
@@ -226,6 +257,62 @@ class TestTangentDryRun:
         assert "warning" in payload
         assert "人工" in payload["warning"]
         assert "窗模式" in payload["warning"]
+
+    @pytest.mark.parametrize(
+        ("operation", "actual", "target_zh", "data"),
+        [
+            ("window", "0", "窗", {"ins_x": 1500, "ins_y": 0, "width": 1200, "sill_height": 900}),
+            ("door", "1", "门", {"ins_x": 1500, "ins_y": 0, "width": 900, "sill_distance": 0}),
+        ],
+    )
+    def test_opening_mode_mismatch_requests_user_switch_and_retry(
+        self, monkeypatch, operation, actual, target_zh, data,
+    ) -> None:
+        expected = "1" if operation == "window" else "0"
+        backend = _OpeningStatusBackend(
+            "T20MCP-OPENING-MODE-MISMATCH|"
+            f"requested={operation}|expected={expected}|actual={actual}|rollback=ok"
+        )
+        fn = _register_with_fake_backend(monkeypatch, backend)
+        out = asyncio.run(fn(operation=operation, data=data, execute=True))
+        payload = json.loads(out)
+        assert payload["ok"] is False
+        assert payload["payload"]["code"] == "OPENING_MODE_MISMATCH"
+        assert payload["payload"]["requested_mode"] == operation
+        assert payload["payload"]["actual_mode"] == ("door" if actual == "0" else "window")
+        assert payload["payload"]["wrong_entity_rolled_back"] is True
+        assert payload["payload"]["retry_operation"] == operation
+        assert payload["payload"]["retry_data"] == data
+        assert f"切换到{target_zh}模式" in payload["payload"]["requires_user_action"]
+
+    def test_opening_mode_mismatch_surfaces_failed_rollback(self, monkeypatch) -> None:
+        backend = _OpeningStatusBackend(
+            "T20MCP-OPENING-MODE-MISMATCH|requested=door|"
+            "expected=0|actual=1|rollback=failed"
+        )
+        fn = _register_with_fake_backend(monkeypatch, backend)
+        out = asyncio.run(
+            fn(operation="door", data={"ins_x": 1500, "ins_y": 0}, execute=True)
+        )
+        payload = json.loads(out)
+        assert payload["ok"] is False
+        assert payload["payload"]["wrong_entity_rolled_back"] is False
+        assert "rollback=failed" in payload["error"]
+
+    def test_opening_no_entity_is_structured_failure(self, monkeypatch) -> None:
+        backend = _OpeningStatusBackend(
+            "T20MCP-OPENING-NO-ENTITY|requested=window"
+        )
+        fn = _register_with_fake_backend(monkeypatch, backend)
+        data = {"ins_x": 1500, "ins_y": 0}
+        out = asyncio.run(fn(operation="window", data=data, execute=True))
+        payload = json.loads(out)
+        assert payload["ok"] is False
+        assert payload["payload"] == {
+            "code": "OPENING_NOT_CREATED",
+            "retry_operation": "window",
+            "retry_data": data,
+        }
 
     def test_drawing_name_dry_run_has_panel_memory_warning(self, monkeypatch) -> None:
         fn = _register_with_fake_backend(monkeypatch, RuntimeError("unused"))

@@ -230,6 +230,14 @@ class TestParamInjection:
         assert "t20mcp:pt 1500 -500" in code
         assert "t20mcp:pt 1500 500" in code
 
+    def test_opening_templates_enforce_panel_mode_group71(self) -> None:
+        door = generate_lisp("door", {"ins_x": 1500, "ins_y": 0})
+        window = generate_lisp("window", {"ins_x": 3000, "ins_y": 0})
+        assert "(= t20mcp:actual-mode 0)" in door
+        assert "(= t20mcp:actual-mode 1)" in window
+        assert "T20MCP-OPENING-MODE-MISMATCH" in door
+        assert "vla-delete" in door
+
     def test_opening_dimension_uses_tdim3_line_select(self) -> None:
         code = generate_lisp("opening_dimension", {
             "p1_x": -200, "p1_y": 600, "p2_x": 3200, "p2_y": 600,

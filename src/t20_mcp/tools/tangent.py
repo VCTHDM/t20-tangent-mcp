@@ -389,8 +389,8 @@ def _gen_opening(data: dict[str, Any], mode: str = "door") -> str:
     mode="door": 注入 DoorSill (距墙垛距离), 默认宽900高2100。DXF group 71 = 0。
     mode="window": 写 DoorSill 字段承载窗台高 (Handoff 33 真机证实 TCH_OPENING 不暴露
       独立 SillHeight 属性, 门/窗共用 DoorSill, 模式由面板 + DXF group 71=0/1 决定),
-      默认宽1500高1500台高900。
-      调用前需人工切天正门窗面板到窗模式, 否则 TOpening 仍沿用门模式生成门对象。
+      默认宽1500高1500台高900。创建后校验 group71；面板模式不符时删除错误实体，
+      返回结构化重试信息，不允许把错误类型伪装成目标类型。
     """
     ins_x = _require_coord(data.get("ins_x"), "ins_x")
     ins_y = _require_coord(data.get("ins_y"), "ins_y")
@@ -437,6 +437,7 @@ def _gen_opening(data: dict[str, Any], mode: str = "door") -> str:
         {
             "SET_LAYER": _set_layer_cmd(data.get("layer")),
             "MODE": mode,
+            "EXPECTED_GROUP71": "0" if mode == "door" else "1",
             "INS_X": _num(ins_x),
             "INS_Y": _num(ins_y),
             "COM_INJECT": com,
@@ -1343,16 +1344,20 @@ SUBCOMMANDS: tuple[str, ...] = tuple(_GENERATORS)
 # 真机部分验证的子命令 (2026-06-12, T20 V10 / AutoCAD 2024):
 # execute=True 下发时附 warning。
 LOW_CONFIDENCE_WARNINGS: dict[str, str] = {
+    "dimension": (
+        "dimension 调用天正 TDIMMP 逐点标注，会按墙体、门窗和洞口节点重新吸附，"
+        "不保证结果等于 p1/p2 的直线距离；不要用于建筑总宽/总高。需要严格按两个"
+        "坐标标注时，请调用 annotation.create_dimension_linear。"
+    ),
     "door": (
-        "door 在面板默认门模式下经真机 COM 读回验证 (Width/Height/DoorSill 均匹配, "
-        "Handoff 33); 仍依赖天正面板当前模式 — 若面板被人工切到窗模式, 同一 ins 点会"
-        "落到窗对象。如需保证生成门, 请先确保面板在门模式 (默认状态)。"
+        "door 依赖天正门窗面板当前为门模式。MCP 会在创建后校验 DXF group71=0; "
+        "若面板是窗模式，错误实体会被删除，并返回 OPENING_MODE_MISMATCH，要求用户"
+        "切到门模式后以相同参数重试。"
     ),
     "window": (
-        "window 需要先人工把天正门窗面板切到窗模式再调用; SillHeight 参数经 "
-        "Handoff 33 + Handoff 34 sweep 三参数 (DS=600/1200/300) 已真机精确匹配验证 "
-        "(窗模式下 TCH_OPENING 通过 DoorSill 属性写入窗台高);"
-        " 若面板在门模式下调用, 产生的 TOpening 将是门对象 (DXF group71=0)。"
+        "window 依赖人工把天正门窗面板切到窗模式。MCP 会在创建后校验 DXF group71=1; "
+        "若面板是门模式，错误实体会被删除，并返回 OPENING_MODE_MISMATCH，要求用户"
+        "切到窗模式后以相同参数重试。窗台高通过 DoorSill 字段写入。"
     ),
     "elevation": (
         "TMElev 已验证双点序列可生成 TCH_ELEVATION; "
@@ -1381,6 +1386,20 @@ LOW_CONFIDENCE_WARNINGS: dict[str, str] = {
 }
 
 LOW_CONFIDENCE_SUBCOMMANDS: frozenset[str] = frozenset(LOW_CONFIDENCE_WARNINGS)
+
+
+def parse_opening_status(payload: object) -> dict[str, str]:
+    """解析 opening.lsp 返回的单行状态协议。"""
+    text = str(payload or "").strip().strip('"')
+    if not text.startswith("T20MCP-OPENING-"):
+        return {}
+    parts = text.split("|")
+    status = {"status": parts[0].removeprefix("T20MCP-OPENING-")}
+    for part in parts[1:]:
+        if "=" in part:
+            key, value = part.split("=", 1)
+            status[key] = value
+    return status
 
 # 所有保留子命令均可命令行驱动 (已剔除 #32770 模态对话框阻塞项)。
 EXECUTE_DISABLED_SUBCOMMANDS: dict[str, str] = {}
@@ -1426,11 +1445,14 @@ def register_tangent_tool(mcp: Any) -> None:
         **execute (默认 False = dry-run)**: 默认只返回渲染后的 LISP 代码而**不**
         下发到 AutoCAD (不产生任何 IPC 文件); 传 execute=True 才经 execute_lisp
         真正执行。door/window/elevation 执行成功也会附 warning 字段。
-        window 调用前需用户先在天正门窗面板人工切到窗模式; 否则 TOpening 会沿用当前模式。
+        door/window 创建后硬校验 DXF group71 (0=门, 1=窗)。模式不符会删除错误实体，
+        返回 OPENING_MODE_MISMATCH 和 requires_user_action；模型必须请用户切换对应模式，
+        等用户确认后用 retry_operation + retry_data 原样重试。
 
         Operations (data 字段) — 真机验证状态 (T20 V10 / AutoCAD 2024):
           wall       — 单段墙体 [已验证]。{x1, y1, x2, y2, left_width?, right_width?, height?, wall_type?, layer?}
-          dimension  — 逐点标注 [已验证]。{p1_x, p1_y, p2_x, p2_y, pos_x?, pos_y?, layer?}
+          dimension  — 天正逐点吸附标注 [已验证; 不适合总宽/总高, 见 warning]。
+                       {p1_x, p1_y, p2_x, p2_y, pos_x?, pos_y?, layer?}
           wall_thickness_dimension — 墙厚标注 [已验证]。{p1_x, p1_y, p2_x, p2_y, layer?}
           opening_dimension — 门窗标注 [已验证]。{p1_x, p1_y, p2_x, p2_y, layer?}
           two_point_dimension — 两点标注 [已验证]。{p1_x, p1_y, p2_x, p2_y, pos_x?, pos_y?, layer?}
@@ -1458,8 +1480,8 @@ def register_tangent_tool(mcp: Any) -> None:
           double_stair — 双跑楼梯 [已验证; 梯段宽/楼梯高取面板记忆值]。{x, y, layer?}
           multi_stair — 多跑楼梯 [已验证; 跑数/梯段宽取面板记忆值]。{x1, y1, x2, y2, layer?}
           wheelchair_diameter — 轮椅直径 [已验证; edge 缺省为中心正右 1500mm]。{center_x, center_y, edge_x?, edge_y?, layer?}
-          door       — 普通门   [部分验证]。{ins_x, ins_y, width?, height?, sill_distance?, layer?}
-          window     — 普通窗   [部分验证; 调用前需人工切窗模式]。{ins_x, ins_y, width?, height?, sill_height?, layer?}
+          door       — 普通门   [已验证; group71 模式门禁]。{ins_x, ins_y, width?, height?, sill_distance?, layer?}
+          window     — 普通窗   [已验证; group71 模式门禁]。{ins_x, ins_y, width?, height?, sill_height?, layer?}
           axis_lines — 普通线轴网 [可执行 LINE 替代]。{base_x?, base_y?, hspacings:[..], vspacings:[..], angle?, layer?}
           explode_read — 实体几何读回 [已验证]。{handle, offset_x?, offset_y?, max_entities?}
                        副本分解管线 (原生 EXPLODE, 不弹框), 不修改原实体。
@@ -1532,6 +1554,45 @@ def register_tangent_tool(mcp: Any) -> None:
             return await add_screenshot_if_available(result, include_screenshot)
 
         result = await backend.execute_lisp(code)
+        if operation in ("door", "window") and result.ok:
+            opening_status = parse_opening_status(result.payload)
+            status_name = opening_status.get("status")
+            if status_name == "MODE-MISMATCH":
+                requested = opening_status.get("requested", operation)
+                actual_code = opening_status.get("actual", "unknown")
+                actual = {"0": "door", "1": "window"}.get(actual_code, "unknown")
+                target_zh = "门" if requested == "door" else "窗"
+                rolled_back = opening_status.get("rollback") == "ok"
+                result = CommandResult(
+                    ok=False,
+                    payload={
+                        "code": "OPENING_MODE_MISMATCH",
+                        "requested_mode": requested,
+                        "actual_mode": actual,
+                        "wrong_entity_rolled_back": rolled_back,
+                        "requires_user_action": (
+                            f"请把天正门窗面板切换到{target_zh}模式，并明确回复已切换；"
+                            "随后模型必须用 retry_operation 和 retry_data 原样重试。"
+                        ),
+                        "retry_operation": operation,
+                        "retry_data": data or {},
+                    },
+                    error=(
+                        f"[tangent.{operation}] OPENING_MODE_MISMATCH: "
+                        f"requested={requested}, actual={actual}; "
+                        f"wrong entity rollback={'ok' if rolled_back else 'failed'}"
+                    ),
+                )
+            elif status_name == "NO-ENTITY":
+                result = CommandResult(
+                    ok=False,
+                    payload={
+                        "code": "OPENING_NOT_CREATED",
+                        "retry_operation": operation,
+                        "retry_data": data or {},
+                    },
+                    error=f"[tangent.{operation}] 插入点未生成 TCH_OPENING，请确认点位在有效墙段上",
+                )
         # 低置信子命令: 在成功 payload 上附 warning (失败结果保持原 error 不动)。
         if low_conf and result.ok:
             base = result.payload
