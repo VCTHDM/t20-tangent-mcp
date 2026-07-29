@@ -94,19 +94,15 @@ async def main() -> int:
     # ==================================================================
     # 场景 0: t20mcp:pt 输出格式确认
     # ==================================================================
-    fmt_code = '''
+    fmt_code = """
 (progn
   (defun t20mcp:pt (x y) (strcat (rtos x 2 2) "," (rtos y 2 2)))
   (strcat "pt_test=" (t20mcp:pt 6000.123 -1500.126)
           "|" (t20mcp:pt 0.004 0.005)))
-'''
+"""
     fmt_r = await backend.execute_lisp(fmt_code)
     fmt_payload = str(fmt_r.payload)
-    fmt_ok = (
-        fmt_r.ok
-        and "6000.12,-1500.13" in fmt_payload
-        and "0,0.01" in fmt_payload
-    )
+    fmt_ok = fmt_r.ok and "6000.12,-1500.13" in fmt_payload and "0,0.01" in fmt_payload
     results["pt_format"] = fmt_ok
     notes["pt_format"] = str(fmt_r.payload)
     print(f"[pt_format] ok={fmt_ok} payload={fmt_r.payload!r}")
@@ -116,15 +112,35 @@ async def main() -> int:
     # ==================================================================
     before = await count(backend)
     # 先画一面墙给标注附着力 (dimension 需要 wall 基线)
-    await backend.execute_lisp(generate_lisp(
-        "wall", {"x1": 0, "y1": 0, "x2": 12000, "y2": 0,
-                 "left_width": 120, "right_width": 120, "height": 3000, "wall_type": "砖"},
-    ))
+    await backend.execute_lisp(
+        generate_lisp(
+            "wall",
+            {
+                "x1": 0,
+                "y1": 0,
+                "x2": 12000,
+                "y2": 0,
+                "left_width": 120,
+                "right_width": 120,
+                "height": 3000,
+                "wall_type": "砖",
+            },
+        )
+    )
     before = await count(backend)
-    r = await backend.execute_lisp(generate_lisp("dimension", {
-        "p1_x": 0, "p1_y": 0, "p2_x": 12000, "p2_y": 0,
-        "pos_x": 6000, "pos_y": -1500,
-    }))
+    r = await backend.execute_lisp(
+        generate_lisp(
+            "dimension",
+            {
+                "p1_x": 0,
+                "p1_y": 0,
+                "p2_x": 12000,
+                "p2_y": 0,
+                "pos_x": 6000,
+                "pos_y": -1500,
+            },
+        )
+    )
     after = await count(backend)
     t = await backend.execute_lisp(LAST_TYPE)
     dump = await backend.execute_lisp(ENTGET_DUMP)
@@ -140,16 +156,35 @@ async def main() -> int:
     # ==================================================================
     # TDIMTP 的穿越线必须穿过多个独立对象；单墙会报“对象数目太少”。
     for y in (0, 2000, 4000):
-        await backend.execute_lisp(generate_lisp(
-            "wall", {"x1": 0, "y1": y, "x2": 3000, "y2": y,
-                     "left_width": 120, "right_width": 120,
-                     "height": 3000, "wall_type": "砖"},
-        ))
+        await backend.execute_lisp(
+            generate_lisp(
+                "wall",
+                {
+                    "x1": 0,
+                    "y1": y,
+                    "x2": 3000,
+                    "y2": y,
+                    "left_width": 120,
+                    "right_width": 120,
+                    "height": 3000,
+                    "wall_type": "砖",
+                },
+            )
+        )
     before = await count(backend)
-    r = await backend.execute_lisp(generate_lisp("two_point_dimension", {
-        "p1_x": 1500, "p1_y": -500, "p2_x": 1500, "p2_y": 4500,
-        "pos_x": 2500, "pos_y": 2000,
-    }))
+    r = await backend.execute_lisp(
+        generate_lisp(
+            "two_point_dimension",
+            {
+                "p1_x": 1500,
+                "p1_y": -500,
+                "p2_x": 1500,
+                "p2_y": 4500,
+                "pos_x": 2500,
+                "pos_y": 2000,
+            },
+        )
+    )
     after = await count(backend)
     t = await backend.execute_lisp(LAST_TYPE)
     dump = await backend.execute_lisp(ENTGET_DUMP)
@@ -163,38 +198,81 @@ async def main() -> int:
     # ==================================================================
     # 场景 3: wall_thickness_dimension
     # ==================================================================
-    await backend.execute_lisp(generate_lisp(
-        "wall", {"x1": 0, "y1": 0, "x2": 6000, "y2": 0,
-                 "left_width": 120, "right_width": 120, "height": 3000, "wall_type": "砖"},
-    ))
+    await backend.execute_lisp(
+        generate_lisp(
+            "wall",
+            {
+                "x1": 0,
+                "y1": 0,
+                "x2": 6000,
+                "y2": 0,
+                "left_width": 120,
+                "right_width": 120,
+                "height": 3000,
+                "wall_type": "砖",
+            },
+        )
+    )
     before = await count(backend)
-    r = await backend.execute_lisp(generate_lisp("wall_thickness_dimension", {
-        "p1_x": 3000, "p1_y": -200, "p2_x": 3000, "p2_y": 200,
-    }))
+    r = await backend.execute_lisp(
+        generate_lisp(
+            "wall_thickness_dimension",
+            {
+                "p1_x": 3000,
+                "p1_y": -200,
+                "p2_x": 3000,
+                "p2_y": 200,
+            },
+        )
+    )
     after = await count(backend)
     t = await backend.execute_lisp(LAST_TYPE)
     wtd_ok = r.ok and after == before + 1 and str(t.payload).startswith("TCH_DIM")
     results["wall_thickness_dimension"] = wtd_ok
     notes["wall_thickness_dimension"] = f"type={t.payload!r}"
-    print(f"[wall_thickness_dimension] ok={wtd_ok} exec={r.ok} {before}->{after} type={t.payload!r}")
+    print(
+        f"[wall_thickness_dimension] ok={wtd_ok} exec={r.ok} {before}->{after} type={t.payload!r}"
+    )
     await cleanup_to(backend, base)
 
     # ==================================================================
     # 场景 4: 墙端点对齐 — 两面相连墙, COM 回读端点验证重合
     # ==================================================================
     before = await count(backend)
-    await backend.execute_lisp(generate_lisp(
-        "wall", {"x1": 0, "y1": 0, "x2": 6000, "y2": 0,
-                 "left_width": 120, "right_width": 120, "height": 3000, "wall_type": "砖"},
-    ))
+    await backend.execute_lisp(
+        generate_lisp(
+            "wall",
+            {
+                "x1": 0,
+                "y1": 0,
+                "x2": 6000,
+                "y2": 0,
+                "left_width": 120,
+                "right_width": 120,
+                "height": 3000,
+                "wall_type": "砖",
+            },
+        )
+    )
     # 第二面墙起点 = 第一面墙终点 (6000,0)
-    await backend.execute_lisp(generate_lisp(
-        "wall", {"x1": 6000, "y1": 0, "x2": 6000, "y2": 6000,
-                 "left_width": 120, "right_width": 120, "height": 3000, "wall_type": "砖"},
-    ))
+    await backend.execute_lisp(
+        generate_lisp(
+            "wall",
+            {
+                "x1": 6000,
+                "y1": 0,
+                "x2": 6000,
+                "y2": 6000,
+                "left_width": 120,
+                "right_width": 120,
+                "height": 3000,
+                "wall_type": "砖",
+            },
+        )
+    )
     after = await count(backend)
     # TCH_WALL 不暴露 StartPoint/EndPoint 属性，必须走 Curve 协议。
-    wall_rb_code = '''
+    wall_rb_code = """
 (progn
   (setq t20mcp:ss (ssget "X" '((0 . "TCH_WALL"))))
   (setq t20mcp:n (sslength t20mcp:ss))
@@ -211,14 +289,12 @@ async def main() -> int:
                      " | "))
     (setq t20mcp:i (1- t20mcp:i)))
   t20mcp:out)
-'''
+"""
     wall_rb = await backend.execute_lisp(wall_rb_code)
     rb_str = str(wall_rb.payload)
     # 墙1终点与墙2起点都应为 (6000,0,0)。
     wall_align_ok = (
-        after == before + 2
-        and "<no>" not in rb_str
-        and rb_str.count("(6000.0 0.0 0.0)") >= 2
+        after == before + 2 and "<no>" not in rb_str and rb_str.count("(6000.0 0.0 0.0)") >= 2
     )
     results["wall_endpoint_align"] = wall_align_ok
     notes["wall_endpoint_align"] = rb_str
@@ -229,22 +305,45 @@ async def main() -> int:
     # ==================================================================
     # 场景 5: dimension 标注值 — COM 读 Measurement (如可读)
     # ==================================================================
-    await backend.execute_lisp(generate_lisp(
-        "wall", {"x1": 0, "y1": 0, "x2": 12000, "y2": 0,
-                 "left_width": 120, "right_width": 120, "height": 3000, "wall_type": "砖"},
-    ))
+    await backend.execute_lisp(
+        generate_lisp(
+            "wall",
+            {
+                "x1": 0,
+                "y1": 0,
+                "x2": 12000,
+                "y2": 0,
+                "left_width": 120,
+                "right_width": 120,
+                "height": 3000,
+                "wall_type": "砖",
+            },
+        )
+    )
     before = await count(backend)
-    await backend.execute_lisp(generate_lisp("dimension", {
-        "p1_x": 0, "p1_y": 0, "p2_x": 12000, "p2_y": 0,
-        "pos_x": 6000, "pos_y": -1500,
-    }))
+    await backend.execute_lisp(
+        generate_lisp(
+            "dimension",
+            {
+                "p1_x": 0,
+                "p1_y": 0,
+                "p2_x": 12000,
+                "p2_y": 0,
+                "pos_x": 6000,
+                "pos_y": -1500,
+            },
+        )
+    )
     after = await count(backend)
     # 尝试读 Measurement / Text 属性 (天正实体可能不暴露)
     meas_rb = await backend.execute_lisp(
-        READBACK.replace("{PROPS}", '"Measurement" "Text" "TextOverride"'))
+        READBACK.replace("{PROPS}", '"Measurement" "Text" "TextOverride"')
+    )
     results["dimension_measurement"] = after == before + 1
     notes["dimension_measurement"] = str(meas_rb.payload)
-    print(f"[dimension_measurement] ok={results['dimension_measurement']} readback={meas_rb.payload!r}")
+    print(
+        f"[dimension_measurement] ok={results['dimension_measurement']} readback={meas_rb.payload!r}"
+    )
     await cleanup_to(backend, base)
 
     # ==================================================================

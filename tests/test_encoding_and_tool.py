@@ -16,8 +16,7 @@ import pytest
 
 from t20_mcp.backends.base import CommandResult
 from t20_mcp.backends.file_ipc import FileIPCBackend, _decode_result_bytes
-from t20_mcp.tools.tangent import generate_lisp
-
+from t20_mcp.tools.tangent import execute_opening, generate_lisp
 
 # ---------------------------------------------------------------------------
 # P0-1 结果文件解码链 utf-8 -> cp936 -> ... -> cp1252
@@ -58,25 +57,81 @@ class TestDecodeResultBytes:
 class TestExecuteLispGbk:
     def test_wall_with_chinese_roundtrips_as_gbk(self, tmp_path) -> None:
         # 渲染含 "砖墙" 的 wall 模板, 经 execute_lisp 写盘后以 GBK 读回逐字一致。
-        code = generate_lisp("wall", {
-            "x1": 0, "y1": 0, "x2": 6000, "y2": 0, "wall_type": "砖墙",
-        })
+        code = generate_lisp(
+            "wall",
+            {
+                "x1": 0,
+                "y1": 0,
+                "x2": 6000,
+                "y2": 0,
+                "wall_type": "砖墙",
+            },
+        )
         backend = FileIPCBackend()
         backend._ipc_dir = tmp_path
 
         captured: dict[str, str] = {}
 
         async def fake_dispatch(command, params):
-            captured.update(params)
+            assert command == "execute-lisp"
+            name = params["code_file"].rsplit("/", 1)[-1]
+            written = tmp_path / name
+            assert written.exists()
+            captured["name"] = name
+            captured["roundtrip"] = written.read_bytes().decode("gbk")
             return CommandResult(ok=True, payload={})
 
         backend._dispatch = fake_dispatch  # type: ignore[assignment]
         result = asyncio.run(backend.execute_lisp(code))
         assert result.ok
-        written = tmp_path / captured["code_file"].split("/")[-1]
-        roundtrip = written.read_bytes().decode("gbk")
-        assert "砖墙" in roundtrip
-        assert roundtrip == code
+        assert "砖墙" in captured["roundtrip"]
+        assert captured["roundtrip"] == code
+        assert not (tmp_path / captured["name"]).exists()
+        assert list(tmp_path.glob("*.lsp")) == []
+
+    def test_temporary_lisp_is_cleaned_when_dispatch_raises(self, tmp_path) -> None:
+        backend = FileIPCBackend()
+        backend._ipc_dir = tmp_path
+
+        async def failing_dispatch(_command, _params):
+            assert list(tmp_path.glob("*.lsp"))
+            raise RuntimeError("dispatch failed")
+
+        backend._dispatch = failing_dispatch  # type: ignore[assignment]
+        with pytest.raises(RuntimeError, match="dispatch failed"):
+            asyncio.run(backend.execute_lisp("(princ)"))
+        assert list(tmp_path.glob("*.lsp")) == []
+
+    def test_temporary_lisp_is_preserved_after_ambiguous_timeout(self, tmp_path) -> None:
+        backend = FileIPCBackend()
+        backend._ipc_dir = tmp_path
+
+        async def timed_out_dispatch(_command, _params):
+            return CommandResult(
+                ok=False,
+                payload={"code": "IPC_TIMEOUT", "request_id": "test"},
+                error="Timeout waiting for result (request_id=test)",
+            )
+
+        backend._dispatch = timed_out_dispatch  # type: ignore[assignment]
+        result = asyncio.run(backend.execute_lisp("(princ)"))
+
+        assert result.ok is False
+        assert "Timeout waiting" in (result.error or "")
+        assert len(list(tmp_path.glob("t20_mcp_lisp_*.lsp"))) == 1
+
+    def test_temporary_lisp_is_preserved_when_dispatch_is_cancelled(self, tmp_path) -> None:
+        backend = FileIPCBackend()
+        backend._ipc_dir = tmp_path
+
+        async def cancelled_dispatch(_command, _params):
+            raise asyncio.CancelledError
+
+        backend._dispatch = cancelled_dispatch  # type: ignore[assignment]
+        with pytest.raises(asyncio.CancelledError):
+            asyncio.run(backend.execute_lisp("(princ)"))
+
+        assert len(list(tmp_path.glob("t20_mcp_lisp_*.lsp"))) == 1
 
     def test_emoji_rejected_with_gbk_hint(self, tmp_path) -> None:
         backend = FileIPCBackend()
@@ -87,6 +142,12 @@ class TestExecuteLispGbk:
         assert "🔥" in (result.error or "")
         # 不应写出任何 .lsp 文件
         assert list(tmp_path.glob("*.lsp")) == []
+
+    def test_stale_cleanup_threshold_exceeds_request_timeout_buffer(self) -> None:
+        import t20_mcp.backends.file_ipc as file_ipc
+        from t20_mcp.config import IPC_TIMEOUT_MAX
+
+        assert file_ipc.STALE_THRESHOLD >= IPC_TIMEOUT_MAX + 30.0
 
 
 # ---------------------------------------------------------------------------
@@ -104,6 +165,7 @@ class _FakeMCP:
         def deco(fn):
             self.fn = fn
             return fn
+
         return deco
 
 
@@ -203,8 +265,24 @@ class TestParamsCmdFileEncoding:
         asyncio.run(backend._dispatch("layer-create", {"name": "墙体图层"}))
 
         raw = captured["raw"]
-        assert b"\\u" not in raw          # 不是 \uXXXX 转义
+        assert b"\\u" not in raw  # 不是 \uXXXX 转义
         assert "墙体图层" in raw.decode("gbk")
+
+    def test_non_gbk_param_is_rejected_instead_of_replaced(self, tmp_path) -> None:
+        backend = FileIPCBackend()
+        backend._hwnd = 1
+        backend._ipc_dir = tmp_path
+        backend._autocad_modal_dialog_present = lambda: False  # type: ignore[assignment]
+        sent: list[bool] = []
+        backend._type_dispatch_trigger = lambda send_cancel=False: sent.append(send_cancel)  # type: ignore[assignment]
+
+        result = asyncio.run(backend._dispatch("create-mtext", {"text": "not representable 🔥"}))
+
+        assert result.ok is False
+        assert "GBK" in (result.error or "")
+        assert "🔥" in (result.error or "")
+        assert sent == []
+        assert list(tmp_path.iterdir()) == []
 
 
 class TestModalDialogGuard:
@@ -236,8 +314,8 @@ class TestModalDialogGuard:
         assert r1.ok is False
         r2 = asyncio.run(backend._dispatch("ping", {}))  # 超时后首次重发
         assert r2.ok is False
-        assert cancels[0] is False   # 首次不注入 ESC
-        assert cancels[1] is True    # 超时后重发注入 ESC
+        assert cancels[0] is False  # 首次不注入 ESC
+        assert cancels[1] is True  # 超时后重发注入 ESC
 
 
 class TestTangentDryRun:
@@ -253,18 +331,178 @@ class TestTangentDryRun:
     def test_execute_true_runs_backend(self, monkeypatch) -> None:
         backend = _FakeBackend()
         fn = _register_with_fake_backend(monkeypatch, backend)
-        out = asyncio.run(fn(operation="wall", data={"x1": 0, "y1": 0, "x2": 6000, "y2": 0}, execute=True))
+        out = asyncio.run(
+            fn(operation="wall", data={"x1": 0, "y1": 0, "x2": 6000, "y2": 0}, execute=True)
+        )
         payload = json.loads(out)
         assert payload["ok"] is True
         assert len(backend.calls) == 1  # 真正下发了一次
 
+    def test_execute_opening_normalizes_mode_mismatch_without_registration(self) -> None:
+        data = {"ins_x": 1500, "ins_y": 0, "width": 1200, "sill_height": 900}
+        backend = _OpeningStatusBackend(
+            "T20MCP-OPENING-MODE-MISMATCH|requested=window|expected=1|actual=0|rollback=ok"
+        )
+
+        result = asyncio.run(execute_opening(backend, "window", data))
+
+        assert result.ok is False
+        assert result.payload["code"] == "OPENING_MODE_MISMATCH"
+        assert result.payload["requested_mode"] == "window"
+        assert result.payload["actual_mode"] == "door"
+        assert result.payload["wrong_entity_rolled_back"] is True
+        assert result.payload["retry_operation"] == "window"
+        assert result.payload["retry_data"] == data
+        assert "OPENING_MODE_MISMATCH" in (result.error or "")
+        assert len(backend.calls) == 1
+
+    @pytest.mark.parametrize(
+        ("raw_payload", "expected_code"),
+        [
+            ("rc=nil clean=T n=0 data=", "EXPLODE_FAILED"),
+            ("rc=T clean=nil n=0 data=", "EXPLODE_ROLLBACK_INCOMPLETE"),
+            ("rc=T clean=T n=0 data=", "EXPLODE_FAILED"),
+        ],
+    )
+    def test_explode_read_registration_rejects_failed_or_unclean_result(
+        self,
+        monkeypatch,
+        raw_payload: str,
+        expected_code: str,
+    ) -> None:
+        backend = _OpeningStatusBackend(raw_payload)
+        fn = _register_with_fake_backend(monkeypatch, backend)
+
+        out = asyncio.run(
+            fn(
+                operation="explode_read",
+                data={"handle": "1A3F"},
+                execute=True,
+            )
+        )
+        payload = json.loads(out)
+
+        assert payload["ok"] is False
+        assert payload["payload"]["code"] == expected_code
+        assert expected_code in payload["error"]
+        assert len(backend.calls) == 1
+
+    @pytest.mark.parametrize(
+        "raw_payload",
+        [
+            "garbage",
+            "rc=T clean=T n=oops data=",
+            "rc=T clean=T n=1 data=",
+        ],
+    )
+    def test_explode_read_registration_rejects_invalid_protocol(
+        self,
+        monkeypatch,
+        raw_payload: str,
+    ) -> None:
+        backend = _OpeningStatusBackend(raw_payload)
+        fn = _register_with_fake_backend(monkeypatch, backend)
+
+        payload = json.loads(
+            asyncio.run(
+                fn(
+                    operation="explode_read",
+                    data={"handle": "1A3F"},
+                    execute=True,
+                )
+            )
+        )
+
+        assert payload["ok"] is False
+        assert payload["payload"]["code"] == "EXPLODE_STATUS_INVALID"
+        assert payload["payload"]["protocol_valid"] is False
+        assert "EXPLODE_STATUS_INVALID" in payload["error"]
+
     def test_low_confidence_execute_has_warning(self, monkeypatch) -> None:
-        backend = _FakeBackend()
+        backend = _OpeningStatusBackend("T20MCP-OPENING-OK|requested=door|actual=0")
         fn = _register_with_fake_backend(monkeypatch, backend)
         out = asyncio.run(fn(operation="door", data={"ins_x": 1500, "ins_y": 0}, execute=True))
         payload = json.loads(out)
         assert payload["ok"] is True
         assert "warning" in payload["payload"]
+
+    def test_opening_unexpected_success_payload_fails_closed(self, monkeypatch) -> None:
+        backend = _OpeningStatusBackend("unexpected-success")
+        fn = _register_with_fake_backend(monkeypatch, backend)
+        data = {"ins_x": 1500, "ins_y": 0}
+
+        out = asyncio.run(fn(operation="door", data=data, execute=True))
+        payload = json.loads(out)
+
+        assert payload["ok"] is False
+        assert payload["payload"]["code"] == "OPENING_STATUS_INVALID"
+        assert payload["payload"]["raw_payload"] == "unexpected-success"
+        assert payload["payload"]["retry_data"] == data
+
+    @pytest.mark.parametrize(
+        "raw_payload",
+        [
+            "T20MCP-OPENING-OK|requested=window|actual=0",
+            "T20MCP-OPENING-OK|requested=door|actual=1",
+        ],
+    )
+    def test_opening_ok_status_must_match_requested_mode(
+        self,
+        monkeypatch,
+        raw_payload: str,
+    ) -> None:
+        operation = "window" if "requested=window" in raw_payload else "door"
+        backend = _OpeningStatusBackend(raw_payload)
+        fn = _register_with_fake_backend(monkeypatch, backend)
+
+        payload = json.loads(
+            asyncio.run(
+                fn(
+                    operation=operation,
+                    data={"ins_x": 1500, "ins_y": 0},
+                    execute=True,
+                )
+            )
+        )
+
+        assert payload["ok"] is False
+        assert payload["payload"]["code"] == "OPENING_STATUS_INVALID"
+
+    @pytest.mark.parametrize(
+        ("operation", "raw_payload"),
+        [
+            (
+                "door",
+                "T20MCP-OPENING-MODE-MISMATCH|requested=door|expected=1|actual=1|rollback=ok",
+            ),
+            (
+                "window",
+                "T20MCP-OPENING-MODE-MISMATCH|requested=window|expected=1|actual=0",
+            ),
+            ("window", "T20MCP-OPENING-UNKNOWN|requested=window"),
+        ],
+    )
+    def test_opening_malformed_status_fields_fail_closed(
+        self,
+        monkeypatch,
+        operation: str,
+        raw_payload: str,
+    ) -> None:
+        backend = _OpeningStatusBackend(raw_payload)
+        fn = _register_with_fake_backend(monkeypatch, backend)
+
+        payload = json.loads(
+            asyncio.run(
+                fn(
+                    operation=operation,
+                    data={"ins_x": 1500, "ins_y": 0},
+                    execute=True,
+                )
+            )
+        )
+
+        assert payload["ok"] is False
+        assert payload["payload"]["code"] == "OPENING_STATUS_INVALID"
 
     def test_low_confidence_dry_run_has_warning(self, monkeypatch) -> None:
         fn = _register_with_fake_backend(monkeypatch, RuntimeError("unused"))
@@ -276,15 +514,14 @@ class TestTangentDryRun:
         assert "group71=1" in payload["warning"]
 
     def test_opening_live_backend_prepares_mode_before_creation(
-        self, monkeypatch,
+        self,
+        monkeypatch,
     ) -> None:
         import win32process
 
         import t20_mcp.dialog_automation as da
 
-        backend = _LiveOpeningBackend(
-            "T20MCP-OPENING-OK|requested=window|expected=1|actual=1"
-        )
+        backend = _LiveOpeningBackend("T20MCP-OPENING-OK|requested=window|expected=1|actual=1")
         driven: list[tuple[int, int, str, set[int] | None]] = []
 
         monkeypatch.setattr(
@@ -316,15 +553,14 @@ class TestTangentDryRun:
         assert driven == [(2232, 456, "window", set())]
 
     def test_opening_mode_automation_failure_stops_before_creation(
-        self, monkeypatch,
+        self,
+        monkeypatch,
     ) -> None:
         import win32process
 
         import t20_mcp.dialog_automation as da
 
-        backend = _LiveOpeningBackend(
-            "T20MCP-OPENING-OK|requested=door|expected=0|actual=0"
-        )
+        backend = _LiveOpeningBackend("T20MCP-OPENING-OK|requested=door|expected=0|actual=0")
         monkeypatch.setattr(
             win32process,
             "GetWindowThreadProcessId",
@@ -360,7 +596,12 @@ class TestTangentDryRun:
         ],
     )
     def test_opening_mode_mismatch_requests_user_switch_and_retry(
-        self, monkeypatch, operation, actual, target_zh, data,
+        self,
+        monkeypatch,
+        operation,
+        actual,
+        target_zh,
+        data,
     ) -> None:
         expected = "1" if operation == "window" else "0"
         backend = _OpeningStatusBackend(
@@ -381,22 +622,17 @@ class TestTangentDryRun:
 
     def test_opening_mode_mismatch_surfaces_failed_rollback(self, monkeypatch) -> None:
         backend = _OpeningStatusBackend(
-            "T20MCP-OPENING-MODE-MISMATCH|requested=door|"
-            "expected=0|actual=1|rollback=failed"
+            "T20MCP-OPENING-MODE-MISMATCH|requested=door|expected=0|actual=1|rollback=failed"
         )
         fn = _register_with_fake_backend(monkeypatch, backend)
-        out = asyncio.run(
-            fn(operation="door", data={"ins_x": 1500, "ins_y": 0}, execute=True)
-        )
+        out = asyncio.run(fn(operation="door", data={"ins_x": 1500, "ins_y": 0}, execute=True))
         payload = json.loads(out)
         assert payload["ok"] is False
         assert payload["payload"]["wrong_entity_rolled_back"] is False
         assert "rollback=failed" in payload["error"]
 
     def test_opening_no_entity_is_structured_failure(self, monkeypatch) -> None:
-        backend = _OpeningStatusBackend(
-            "T20MCP-OPENING-NO-ENTITY|requested=window"
-        )
+        backend = _OpeningStatusBackend("T20MCP-OPENING-NO-ENTITY|requested=window")
         fn = _register_with_fake_backend(monkeypatch, backend)
         data = {"ins_x": 1500, "ins_y": 0}
         out = asyncio.run(fn(operation="window", data=data, execute=True))
@@ -425,16 +661,19 @@ class TestTangentDryRun:
     def test_no_subcommands_are_execute_disabled(self, monkeypatch) -> None:
         # 已剔除所有 #32770 模态对话框阻塞命令, EXECUTE_DISABLED_SUBCOMMANDS 为空。
         from t20_mcp.tools.tangent import EXECUTE_DISABLED_SUBCOMMANDS
+
         assert EXECUTE_DISABLED_SUBCOMMANDS == {}
 
     def test_axis_lines_execute_allowed(self, monkeypatch) -> None:
         backend = _FakeBackend()
         fn = _register_with_fake_backend(monkeypatch, backend)
-        out = asyncio.run(fn(
-            operation="axis_lines",
-            data={"hspacings": [3000], "vspacings": [3000]},
-            execute=True,
-        ))
+        out = asyncio.run(
+            fn(
+                operation="axis_lines",
+                data={"hspacings": [3000], "vspacings": [3000]},
+                execute=True,
+            )
+        )
         payload = json.loads(out)
         assert payload["ok"] is True
         assert len(backend.calls) == 1
@@ -442,11 +681,13 @@ class TestTangentDryRun:
     def test_elevation_execute_allowed_with_warning(self, monkeypatch) -> None:
         backend = _FakeBackend()
         fn = _register_with_fake_backend(monkeypatch, backend)
-        out = asyncio.run(fn(
-            operation="elevation",
-            data={"base_x": 0, "base_y": 0, "label_x": 1000, "label_y": 1000},
-            execute=True,
-        ))
+        out = asyncio.run(
+            fn(
+                operation="elevation",
+                data={"base_x": 0, "base_y": 0, "label_x": 1000, "label_y": 1000},
+                execute=True,
+            )
+        )
         payload = json.loads(out)
         assert payload["ok"] is True
         assert "warning" in payload["payload"]

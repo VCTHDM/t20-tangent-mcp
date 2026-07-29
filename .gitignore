@@ -32,7 +32,7 @@ env.bak/
 venv.bak/
 
 # UV
-uv.lock
+.uv-cache/
 
 # AutoCAD & IPC temp
 *.bak
@@ -53,7 +53,7 @@ C:/temp/
 .pytest_cache/
 
 # Other caches
-.uv-cache/
+.ruff_cache/
 .venv-test/
 .codex-remote-attachments/
 .zcode/

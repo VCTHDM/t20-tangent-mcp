@@ -1,18 +1,14 @@
-"""离线单测: scripts/_live_lock.py 真机互斥锁.
-
-不依赖 AutoCAD/T20。每个测试独立 tmp_path 隔离锁文件位置, 避免污染
-生产 %TEMP%/t20_mcp_live.lock。
-"""
+"""离线单测：真机脚本的操作系统互斥锁。"""
 
 from __future__ import annotations
 
+import multiprocessing
 import os
 import sys
 from pathlib import Path
 
 import pytest
 
-# 把仓库的 scripts/ 加到 sys.path 以便 import _live_lock
 _REPO_ROOT = Path(__file__).resolve().parent.parent
 _SCRIPTS_DIR = _REPO_ROOT / "scripts"
 if str(_SCRIPTS_DIR) not in sys.path:
@@ -21,108 +17,101 @@ if str(_SCRIPTS_DIR) not in sys.path:
 import _live_lock  # noqa: E402
 
 
+def _hold_lock_in_child(lock_path: str, ready, release) -> None:
+    _live_lock.LOCK_PATH = Path(lock_path)
+    with _live_lock.live_lock("child_holder.py"):
+        ready.set()
+        release.wait(timeout=10)
+
+
 @pytest.fixture
 def tmp_lock(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
-    """把 _live_lock.LOCK_PATH 重定向到 tmp_path, 隔离测试。"""
-    p = tmp_path / "t20_mcp_live.lock"
-    monkeypatch.setattr(_live_lock, "LOCK_PATH", p)
-    return p
+    path = tmp_path / "t20_mcp_live.lock"
+    monkeypatch.setattr(_live_lock, "LOCK_PATH", path)
+    return path
 
 
-def test_acquire_creates_file_with_pid(tmp_lock: Path) -> None:
-    assert not tmp_lock.exists()
+def test_acquire_writes_diagnostics_and_releases_os_lock(tmp_lock: Path) -> None:
     with _live_lock.live_lock(__file__) as held:
         assert held == tmp_lock
-        assert tmp_lock.exists()
         contents = tmp_lock.read_text(encoding="utf-8")
-        # 第一行必须是当前进程 pid
-        assert contents.splitlines()[0].strip() == str(os.getpid())
+        assert contents.splitlines()[0] == str(os.getpid())
         assert "test_live_lock.py" in contents
-    # 退出后文件被清理
-    assert not tmp_lock.exists()
 
-
-def test_contention_against_live_pid_raises(tmp_lock: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    # 模拟另一个活进程持有锁
-    monkeypatch.setattr(_live_lock, "_pid_alive", lambda pid: True)
-    tmp_lock.write_text("99999\nfake_holder.py\n2026-06-17T00:00:00+00:00\n", encoding="utf-8")
-    with pytest.raises(RuntimeError) as exc:
-        with _live_lock.live_lock(__file__):
-            pass  # pragma: no cover  (should never enter)
-    msg = str(exc.value)
-    assert "pid=99999" in msg
-    assert "fake_holder.py" in msg
-    # 锁仍归原持有者, 没被误删
+    # 诊断文件保留，但退出 context 后同一进程可立即重新获取操作系统锁。
     assert tmp_lock.exists()
+    with _live_lock.live_lock("second_probe.py"):
+        assert "second_probe.py" in tmp_lock.read_text(encoding="utf-8")
 
 
-def test_stale_lock_is_reclaimed(tmp_lock: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    # 模拟旧持有者 PID 已经死了
-    monkeypatch.setattr(_live_lock, "_pid_alive", lambda pid: False)
-    tmp_lock.write_text("88888\ndead_holder.py\n2026-01-01T00:00:00+00:00\n", encoding="utf-8")
+def test_unlocked_stale_diagnostics_are_overwritten(tmp_lock: Path) -> None:
+    tmp_lock.write_text(
+        "88888\ndead_holder.py\n2026-01-01T00:00:00+00:00\n",
+        encoding="utf-8",
+    )
     with _live_lock.live_lock(__file__):
-        # 应该已经清掉旧锁并写入自己
         contents = tmp_lock.read_text(encoding="utf-8")
-        assert contents.splitlines()[0].strip() == str(os.getpid())
-    assert not tmp_lock.exists()
+        assert contents.splitlines()[0] == str(os.getpid())
+        assert "dead_holder.py" not in contents
 
 
-def test_release_does_not_remove_other_holders_lock(
-    tmp_lock: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    """如果释放时锁文件已被别人改写 (例如 PID 不再匹配), 不能误删。"""
-    monkeypatch.setattr(_live_lock, "_pid_alive", lambda pid: False)  # 允许 acquire
-    cm = _live_lock.live_lock(__file__)
-    cm.__enter__()
-    # 模拟有人覆盖锁文件 (理论上不应发生, 但防御性)
-    tmp_lock.write_text("77777\nother.py\n2026-06-17T00:00:00+00:00\n", encoding="utf-8")
-    cm.__exit__(None, None, None)
-    # 锁文件还在, 内容是别人的
-    assert tmp_lock.exists()
-    assert tmp_lock.read_text(encoding="utf-8").splitlines()[0].strip() == "77777"
-    # cleanup
-    tmp_lock.unlink()
-
-
-def test_unreadable_lock_raises(tmp_lock: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    """锁文件存在但格式坏掉 (无 PID 整数), 应当 raise 而不是误闯入。"""
+def test_malformed_unlocked_file_does_not_block(tmp_lock: Path) -> None:
     tmp_lock.write_text("not-a-pid\n", encoding="utf-8")
-    with pytest.raises(RuntimeError) as exc:
-        with _live_lock.live_lock(__file__):
-            pass  # pragma: no cover
-    # 走的是 holder is None 分支 (parse 失败) 或 alive 分支
-    assert "live lock" in str(exc.value)
+    with _live_lock.live_lock(__file__):
+        assert tmp_lock.read_text(encoding="utf-8").splitlines()[0] == str(os.getpid())
 
 
-def test_live_lock_or_exit_returns_handle(tmp_lock: Path) -> None:
-    """live_lock_or_exit 抢到时应返回一个对象, release() 后锁释放。"""
+def test_nested_acquire_reports_current_holder(tmp_lock: Path) -> None:
+    with _live_lock.live_lock("holder.py"):
+        with pytest.raises(RuntimeError) as exc:
+            with _live_lock.live_lock("contender.py"):
+                pytest.fail("contender unexpectedly acquired the live lock")
+    message = str(exc.value)
+    assert f"pid={os.getpid()}" in message
+    assert "holder.py" in message
+
+
+def test_live_lock_or_exit_returns_releasable_handle(tmp_lock: Path) -> None:
     handle = _live_lock.live_lock_or_exit(__file__)
-    try:
-        assert tmp_lock.exists()
-    finally:
-        handle.release()
-    assert not tmp_lock.exists()
+    handle.release()
+    with _live_lock.live_lock("after_release.py"):
+        pass
 
 
 def test_live_lock_or_exit_exits_on_contention(
-    tmp_lock: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+    tmp_lock: Path,
+    capsys: pytest.CaptureFixture[str],
 ) -> None:
-    """抢不到锁时 sys.exit(2) 并打印提示。"""
-    monkeypatch.setattr(_live_lock, "_pid_alive", lambda pid: True)
-    tmp_lock.write_text("99999\nholder.py\n2026-06-17T00:00:00+00:00\n", encoding="utf-8")
-    with pytest.raises(SystemExit) as exc:
-        _live_lock.live_lock_or_exit(__file__)
+    with _live_lock.live_lock("holder.py"):
+        with pytest.raises(SystemExit) as exc:
+            _live_lock.live_lock_or_exit("contender.py")
     assert exc.value.code == 2
-    err = capsys.readouterr().err
-    assert "pid=99999" in err
-    assert "holder.py" in err
+    error = capsys.readouterr().err
+    assert "holder.py" in error
+    assert "pid=" in error
 
 
-def test_pid_alive_with_invalid_pid_returns_false() -> None:
-    assert _live_lock._pid_alive(0) is False
-    assert _live_lock._pid_alive(-1) is False
+def test_cross_process_contention_and_release(tmp_lock: Path) -> None:
+    context = multiprocessing.get_context("spawn")
+    ready = context.Event()
+    release = context.Event()
+    child = context.Process(
+        target=_hold_lock_in_child,
+        args=(str(tmp_lock), ready, release),
+    )
+    child.start()
+    try:
+        assert ready.wait(timeout=10), "child did not acquire the lock"
+        with pytest.raises(RuntimeError, match="child_holder.py"):
+            with _live_lock.live_lock("parent_contender.py"):
+                pytest.fail("parent unexpectedly acquired the child lock")
+    finally:
+        release.set()
+        child.join(timeout=10)
+        if child.is_alive():
+            child.terminate()
+            child.join(timeout=5)
 
-
-def test_pid_alive_with_self_returns_true() -> None:
-    """自己的 PID 一定 alive (走真实 tasklist 路径; 如果 tasklist 异常会回 True 兜底)."""
-    assert _live_lock._pid_alive(os.getpid()) is True
+    assert child.exitcode == 0
+    with _live_lock.live_lock("parent_after_release.py"):
+        pass

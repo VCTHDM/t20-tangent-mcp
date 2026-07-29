@@ -1,23 +1,22 @@
 """Win32 对话框/面板自动化 — 白名单 + 受控原语。
 
 适用场景:
-  1. 个别天正命令 (如 TEXPLODE) 必弹原生 #32770 模态框, 无法纯命令行驱动,
-     但框内按钮可枚举可点击 —「等框 → 按序点按钮」(itest_24 真机验证)。
-  2. TGColumn 标准柱面板 (Handoff 36, itest_39 真机验证): 无标题 #32770
+  1. TGColumn 标准柱面板 (Handoff 36, itest_39 真机验证): 无标题 #32770
      浮动面板, owner 不被 disable, 无 确定/取消 按钮 — 参数即时生效,
      落地靠向命令行打插入点坐标, 退出靠 ESC。控件按「class + 标签锚点」
      每次运行时重新发现 (hwnd 会话性), 定位规则见
      docs/handoff/36_tgcolumn_control_map.md。
-  3. TOpening 门窗参数面板 (Handoff 39, itest_42 真机验证): 标题精确为
+  2. TOpening 门窗参数面板 (Handoff 39, itest_42 真机验证): 标题精确为
      「门窗参数」, 底部标准 ToolbarWindow32 的模式按钮可用受控鼠标消息
      切换。按钮会话性且切换时面板可能重建, 所以每次运行重新发现。
      TOpening 的默认提示是「<退出>」, 必须用空回车结束; ESC 会继续/重启
      放置循环, 不能作为该面板的正常退出路径。
 
 安全边界 (PROJECT_RULES.md 铁律):
-  * 只对白名单对话框动手: 标题精确匹配 (TEXPLODE「分解对象」), 或结构指纹
-    精确匹配 (TGColumn = 含 title='柱高' #32770 子面板的无标题 #32770);
-  * 按钮只用 BM_CLICK; **严禁 WM_CLOSE** (真机曾致 AutoCAD 致命错误);
+  * 只对白名单面板动手: TGColumn 使用结构指纹精确匹配, TOpening 使用
+    标题 + ToolbarWindow32 强结构指纹;
+  * 标准 Button 只用 BM_CLICK, 工具栏只发受控鼠标消息; **严禁 WM_CLOSE**
+    (真机曾致 AutoCAD 致命错误);
   * Edit 写入只用 WM_SETTEXT + 回读校验 + EN_KILLFOCUS 通知补发;
     ComboBox 只用 CB_SETCURSEL + CBN_SELENDOK/CBN_SELCHANGE 通知补发;
   * 找不到框/控件一律返回失败, 不做任何兜底强关; 恢复交给调用方 (ESC 路径)。
@@ -53,13 +52,6 @@ CBN_EDITCHANGE = 5
 CBN_SELENDOK = 9
 TB_BUTTONCOUNT = 0x0418
 
-# 唯一获准自动点击的对话框 → 按钮点击序列。新增条目必须经评审。
-TEXPLODE_DIALOG_TITLE = "分解对象"
-TEXPLODE_BUTTONS = ("分解当前选中的天正对象", "确定")
-
-# 危险按钮黑名单: 任何驱动序列都不得包含 (会波及用户实体)。
-FORBIDDEN_BUTTONS = frozenset({"分解本图所有天正对象", "分解块参照内天正对象"})
-
 
 def _win32_available() -> bool:
     if sys.platform != "win32":
@@ -70,114 +62,6 @@ def _win32_available() -> bool:
         return True
     except ImportError:
         return False
-
-
-def _find_dialog(title: str) -> int | None:
-    """在 acad 进程的可见顶层窗口中找标题精确匹配的 #32770。"""
-    import win32gui
-    import win32process
-
-    from t20_mcp.backends.file_ipc import _process_image_name
-    from t20_mcp.config import ACAD_PROCESS_NAME
-
-    found: list[int] = []
-
-    def cb(hwnd: int, _: object) -> bool:
-        try:
-            if not win32gui.IsWindowVisible(hwnd):
-                return True
-            if win32gui.GetClassName(hwnd) != "#32770":
-                return True
-            if win32gui.GetWindowText(hwnd) != title:
-                return True
-            _, pid = win32process.GetWindowThreadProcessId(hwnd)
-            if _process_image_name(pid) == ACAD_PROCESS_NAME:
-                found.append(hwnd)
-        except Exception:
-            pass
-        return True
-
-    win32gui.EnumWindows(cb, None)
-    return found[0] if found else None
-
-
-def _find_button(dialog: int, text: str) -> int | None:
-    import win32gui
-
-    found: list[int] = []
-
-    def cb(child: int, _: object) -> bool:
-        try:
-            if (
-                win32gui.GetClassName(child) == "Button"
-                and win32gui.GetWindowText(child) == text
-            ):
-                found.append(child)
-        except Exception:
-            pass
-        return True
-
-    try:
-        win32gui.EnumChildWindows(dialog, cb, None)
-    except Exception:
-        pass
-    return found[0] if found else None
-
-
-async def click_dialog_buttons(
-    title: str,
-    buttons: tuple[str, ...],
-    timeout: float = 8.0,
-    settle: float = 0.3,
-) -> str:
-    """等待标题为 ``title`` 的对话框出现, 按序 BM_CLICK ``buttons``。
-
-    返回结果描述字符串 (供日志/payload):
-      clicked-dialog-closed / dialog-never-appeared /
-      button-missing:<text> / dialog-still-open / forbidden:<text> /
-      win32-unavailable
-    """
-    for text in buttons:
-        if text in FORBIDDEN_BUTTONS:
-            return f"forbidden:{text}"
-    if not buttons:
-        return "no-buttons-specified"
-    if not _win32_available():
-        return "win32-unavailable"
-
-    import win32gui
-
-    loop = asyncio.get_event_loop()
-    deadline = loop.time() + timeout
-    while loop.time() < deadline:
-        dialog = _find_dialog(title)
-        if dialog:
-            for text in buttons:
-                btn = _find_button(dialog, text)
-                if btn is None:
-                    return f"button-missing:{text}"
-                win32gui.PostMessage(btn, BM_CLICK, 0, 0)
-                await asyncio.sleep(settle)
-            await asyncio.sleep(settle)
-            if _find_dialog(title) is None:
-                return "clicked-dialog-closed"
-            # 个别情况首次确定未关框: 再点一次最后一个按钮
-            btn = _find_button(dialog, buttons[-1])
-            if btn is not None:
-                win32gui.PostMessage(btn, BM_CLICK, 0, 0)
-                await asyncio.sleep(settle * 2)
-            return (
-                "clicked-dialog-closed"
-                if _find_dialog(title) is None
-                else "dialog-still-open"
-            )
-        await asyncio.sleep(0.25)
-    return "dialog-never-appeared"
-
-
-async def drive_texplode_dialog(timeout: float = 8.0) -> str:
-    """TEXPLODE「分解对象」框的标准驱动序列 (itest_24 真机验证)。"""
-    return await click_dialog_buttons(TEXPLODE_DIALOG_TITLE, TEXPLODE_BUTTONS, timeout)
 
 
 # ---------------------------------------------------------------------------
@@ -399,9 +283,7 @@ def click_opening_mode(panel: int, mode: str) -> str:
 
     x, y = point
     lparam = (y << 16) | (x & 0xFFFF)
-    down_posted = _user32.PostMessageW(
-        toolbar, WM_LBUTTONDOWN, MK_LBUTTON, lparam
-    )
+    down_posted = _user32.PostMessageW(toolbar, WM_LBUTTONDOWN, MK_LBUTTON, lparam)
     up_posted = _user32.PostMessageW(toolbar, WM_LBUTTONUP, 0, lparam)
     return "mode-clicked" if down_posted and up_posted else "mode-click-failed"
 
@@ -482,10 +364,7 @@ def find_column_panel(pid: int, exclude: set[int] | None = None) -> int | None:
             if win32gui.GetWindowText(h) != "":
                 continue
             for k in all_descendants(h):
-                if (
-                    win32gui.GetClassName(k) == "#32770"
-                    and win32gui.GetWindowText(k) == "柱高"
-                ):
+                if win32gui.GetClassName(k) == "#32770" and win32gui.GetWindowText(k) == "柱高":
                     return h
         except Exception:
             continue
@@ -603,8 +482,14 @@ async def drive_column_panel(
         return "panel-not-found"
 
     ctrls = locate_column_controls(panel)
-    need = ["height_edit", "material_combo", "rotation_combo", "rotation_edit",
-            "section_w_edit", "section_h_edit"]
+    need = [
+        "height_edit",
+        "material_combo",
+        "rotation_combo",
+        "rotation_edit",
+        "section_w_edit",
+        "section_h_edit",
+    ]
     missing = [k for k in need if k not in ctrls]
     if missing:
         post_escape(panel)

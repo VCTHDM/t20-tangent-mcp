@@ -39,7 +39,7 @@ from t20_mcp.dialog_automation import find_acad_popups  # noqa: E402
 from t20_mcp.tools.tangent import ParamError, execute_column  # noqa: E402
 
 RESET_ENV = (
-    '(progn (setq n 0)'
+    "(progn (setq n 0)"
     ' (while (and (< n 8) (> (getvar "CMDACTIVE") 0)) (command) (setq n (1+ n)))'
     ' (setvar "CMDDIA" 1) (setvar "FILEDIA" 1) (setvar "OSMODE" 0)'
     ' (setvar "LOGFILEMODE" 0)'
@@ -67,8 +67,10 @@ async def cleanup(backend: FileIPCBackend, base: int, pid: int, base_modals: set
     await backend.execute_lisp(RESET_ENV)
     env = await backend.drawing_get_variables(ENV_VARS)
     residual = [h for h in find_acad_popups(pid) if h not in base_modals]
-    print(f"[cleanup] rounds={rounds} final={final} (baseline {base}) "
-          f"env={env.payload} residual={residual}")
+    print(
+        f"[cleanup] rounds={rounds} final={final} (baseline {base}) "
+        f"env={env.payload} residual={residual}"
+    )
     return (
         final == base
         and env.ok
@@ -108,10 +110,18 @@ async def main() -> int:
     print(f"\n===== [full] baseline={base} =====")
     ok = False
     try:
-        r = await execute_column(backend, {
-            "x": 20000, "y": 15000, "height": 3300, "rotation": 45,
-            "sec_w": 500, "sec_h": 400, "material": "金属",
-        })
+        r = await execute_column(
+            backend,
+            {
+                "x": 20000,
+                "y": 15000,
+                "height": 3300,
+                "rotation": 45,
+                "sec_w": 500,
+                "sec_h": 400,
+                "material": "金属",
+            },
+        )
         print(f"[full] ok={r.ok} payload={r.payload!r} error={r.error!r}")
         if r.ok:
             rb = str(r.payload.get("readback", ""))

@@ -41,7 +41,6 @@ Gate B 假说 (均已真机验证):
 from __future__ import annotations
 
 import asyncio
-import re
 import sys
 import time
 from pathlib import Path
@@ -86,7 +85,7 @@ EXPECT_LINES = 7
 INS_POINT = "40000,40000"
 
 RESET_ENV = (
-    '(progn (setq n 0)'
+    "(progn (setq n 0)"
     ' (while (and (< n 8) (> (getvar "CMDACTIVE") 0)) (command) (setq n (1+ n)))'
     ' (setvar "CMDDIA" 1) (setvar "FILEDIA" 1) (setvar "OSMODE" 0)'
     ' (strcat "rst CMDACTIVE=" (itoa (getvar "CMDACTIVE"))))'
@@ -94,14 +93,13 @@ RESET_ENV = (
 ENV_VARS = ["CMDACTIVE", "CMDDIA", "FILEDIA", "OSMODE"]
 
 START_TRECTAXIS = (
-    _load_prelude()
-    + '\n(progn (setvar "CMDECHO" 1)'
+    _load_prelude() + '\n(progn (setvar "CMDECHO" 1)'
     ' (vl-catch-all-apply (quote vl-cmdf) (list "TRECTAXIS"))'
     ' (strcat "active=" (itoa (getvar "CMDACTIVE"))))'
 )
 
 # 全图实体类型直方图 (判定 TCH_AXIS 系 vs 普通 LINE) + 图层直方图 + 样本
-TYPE_HISTOGRAM = '''
+TYPE_HISTOGRAM = """
 (setq t20mcp:ga-ss (ssget "X") t20mcp:ga-i 0 t20mcp:ga-al nil t20mcp:ga-la nil)
 (if t20mcp:ga-ss
   (while (< t20mcp:ga-i (sslength t20mcp:ga-ss))
@@ -156,7 +154,7 @@ TYPE_HISTOGRAM = '''
 (strcat "types=" (vl-prin1-to-string t20mcp:ga-al)
         " layers=" (vl-prin1-to-string t20mcp:ga-la)
         " sample=" t20mcp:ga-s)
-'''
+"""
 
 
 def find_rectaxis_dialog(pid: int, exclude: set[int]) -> int | None:
@@ -170,8 +168,7 @@ def find_rectaxis_dialog(pid: int, exclude: set[int]) -> int | None:
             kids = all_descendants(h)
             has_tab = any(win32gui.GetClassName(k) == "SysTabControl32" for k in kids)
             has_total = any(
-                win32gui.GetClassName(k) == "Static"
-                and win32gui.GetWindowText(k) == "总开间:"
+                win32gui.GetClassName(k) == "Static" and win32gui.GetWindowText(k) == "总开间:"
                 for k in kids
             )
             if has_tab and has_total:
@@ -220,9 +217,14 @@ def locate(dialog: int) -> dict[str, object]:
         if name in lab:
             ar = metas[lab[name]][2]
             cands = [
-                (r[0], h) for h, (c, t, r, _s) in metas.items()
-                if c == "Static" and t != name and r[0] >= ar[2] - 4
-                and r[1] < ar[3] and ar[1] < r[3] and (r[0] - ar[2]) < 30
+                (r[0], h)
+                for h, (c, t, r, _s) in metas.items()
+                if c == "Static"
+                and t != name
+                and r[0] >= ar[2] - 4
+                and r[1] < ar[3]
+                and ar[1] < r[3]
+                and (r[0] - ar[2]) < 30
             ]
             if cands:
                 found[key] = min(cands)[1]
@@ -230,9 +232,12 @@ def locate(dialog: int) -> dict[str, object]:
     if "上开" in lab:
         row = metas[lab["上开"]][2]
         radios = sorted(
-            (r[0], h) for h, (c, _t, r, s) in metas.items()
-            if c == "Button" and (s & BS_TYPEMASK) == BS_AUTORADIOBUTTON
-            and r[1] < row[3] and row[1] - 20 < r[3]
+            (r[0], h)
+            for h, (c, _t, r, s) in metas.items()
+            if c == "Button"
+            and (s & BS_TYPEMASK) == BS_AUTORADIOBUTTON
+            and r[1] < row[3]
+            and row[1] - 20 < r[3]
         )
         if len(radios) >= 4:
             found["radios"] = [h for _x, h in radios[:4]]  # 上开/下开/左进/右进
@@ -245,8 +250,7 @@ def locate(dialog: int) -> dict[str, object]:
             if rr[1] > 300 and rr[0] > 250:
                 cands.append((rr[0], h))
     found["ok_cancel"] = [h for _x, h in sorted(cands)]
-    found["_rel"] = {k: rel(metas[v][2]) for k, v in found.items()
-                    if isinstance(v, int)}
+    found["_rel"] = {k: rel(metas[v][2]) for k, v in found.items() if isinstance(v, int)}
     return found
 
 
@@ -307,9 +311,12 @@ async def cleanup(backend, base, pid, base_modals) -> bool:
     await backend.execute_lisp(RESET_ENV)
     env = await backend.drawing_get_variables(ENV_VARS)
     residual = [h for h in find_acad_popups(pid) if h not in base_modals]
-    print(f"[cleanup] rounds={rounds} final={final} (baseline {base}) env={env.payload} residual={residual}")
+    print(
+        f"[cleanup] rounds={rounds} final={final} (baseline {base}) env={env.payload} residual={residual}"
+    )
     return (
-        final == base and env.ok
+        final == base
+        and env.ok
         and env.payload.get("CMDACTIVE") == 0
         and env.payload.get("CMDDIA") == 1
         and env.payload.get("FILEDIA") == 1
@@ -335,7 +342,9 @@ async def open_and_bind(backend, pid, base_modals) -> tuple[int | None, dict]:
 
     ctrls = locate(dialog)
     print(f"[locate] rel={ctrls.get('_rel')}")
-    print(f"[locate] radios={len(ctrls.get('radios', []))} ok_cancel={len(ctrls.get('ok_cancel', []))}")
+    print(
+        f"[locate] radios={len(ctrls.get('radios', []))} ok_cancel={len(ctrls.get('ok_cancel', []))}"
+    )
     need = ["input_edit", "angle_edit", "bay_total", "depth_total", "radios"]
     missing = [k for k in need if k not in ctrls]
     if missing or len(ctrls.get("radios", [])) < 4 or len(ctrls.get("ok_cancel", [])) < 2:
@@ -343,11 +352,13 @@ async def open_and_bind(backend, pid, base_modals) -> tuple[int | None, dict]:
         return dialog, {}
 
     radios = ctrls["radios"]
-    print(f"[bind] 初值: input={get_window_text(ctrls['input_edit'])!r} "
-          f"angle={get_window_text(ctrls['angle_edit'])!r} "
-          f"bay_total={get_window_text(ctrls['bay_total'])!r} "
-          f"depth_total={get_window_text(ctrls['depth_total'])!r} "
-          f"radio_checked={[radio_checked(h) for h in radios]}")
+    print(
+        f"[bind] 初值: input={get_window_text(ctrls['input_edit'])!r} "
+        f"angle={get_window_text(ctrls['angle_edit'])!r} "
+        f"bay_total={get_window_text(ctrls['bay_total'])!r} "
+        f"depth_total={get_window_text(ctrls['depth_total'])!r} "
+        f"radio_checked={[radio_checked(h) for h in radios]}"
+    )
 
     # H1a: 下开 = radios[1]
     _user32.SendMessageW(radios[1], BM_CLICK, 0, 0)
@@ -357,7 +368,9 @@ async def open_and_bind(backend, pid, base_modals) -> tuple[int | None, dict]:
     press_enter(ctrls["input_edit"])
     await asyncio.sleep(0.5)
     bay = get_window_text(ctrls["bay_total"])
-    print(f"[bind] 下开 radio={ok_radio1} 键入{SPACING_BAY!r}+Enter -> 总开间={bay!r} (期望 {EXPECT_BAY_TOTAL})")
+    print(
+        f"[bind] 下开 radio={ok_radio1} 键入{SPACING_BAY!r}+Enter -> 总开间={bay!r} (期望 {EXPECT_BAY_TOTAL})"
+    )
 
     # H1b: 左进 = radios[2]
     _user32.SendMessageW(radios[2], BM_CLICK, 0, 0)
@@ -367,7 +380,9 @@ async def open_and_bind(backend, pid, base_modals) -> tuple[int | None, dict]:
     press_enter(ctrls["input_edit"])
     await asyncio.sleep(0.5)
     depth = get_window_text(ctrls["depth_total"])
-    print(f"[bind] 左进 radio={ok_radio2} 键入{SPACING_DEPTH!r}+Enter -> 总进深={depth!r} (期望 {EXPECT_DEPTH_TOTAL})")
+    print(
+        f"[bind] 左进 radio={ok_radio2} 键入{SPACING_DEPTH!r}+Enter -> 总进深={depth!r} (期望 {EXPECT_DEPTH_TOTAL})"
+    )
 
     bind_ok = ok_radio1 and ok_radio2 and bay == EXPECT_BAY_TOTAL and depth == EXPECT_DEPTH_TOTAL
     print(f"[bind] H1 verdict: {'PASS' if bind_ok else 'FAIL'}")
@@ -423,8 +438,10 @@ async def _diag_clicks(backend, pid, base_modals) -> int:
         await asyncio.sleep(1.0)
         gone = not (win32gui.IsWindow(dialog) and win32gui.IsWindowVisible(dialog))
         active = await backend.drawing_get_variables(["CMDACTIVE"])
-        print(f"[diag] 方法={mname:14s} ok_cancel_ctrlids={cids} "
-              f"-> dialog_gone={gone} CMDACTIVE={active.payload}")
+        print(
+            f"[diag] 方法={mname:14s} ok_cancel_ctrlids={cids} "
+            f"-> dialog_gone={gone} CMDACTIVE={active.payload}"
+        )
         post_escape(dialog if not gone else cmd_hwnd, 4)
         await asyncio.sleep(0.4)
         await backend.execute_lisp(RESET_ENV)

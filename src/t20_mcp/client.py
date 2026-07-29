@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import asyncio
-import base64
 import functools
 import json
 from typing import Any
@@ -69,6 +68,16 @@ def _json(data: Any) -> str:
     return json.dumps(data, default=str, separators=(",", ":"))
 
 
+def _failure(error: str, *, hint: str | None = None, payload: Any = None) -> str:
+    """Serialize the shared MCP failure envelope."""
+    body: dict[str, Any] = {"ok": False, "error": error}
+    if hint:
+        body["hint"] = hint
+    if payload is not None:
+        body["payload"] = payload
+    return _json(body)
+
+
 # ---------------------------------------------------------------------------
 # Error formatting with actionable hints
 # ---------------------------------------------------------------------------
@@ -80,17 +89,21 @@ def _error(e: Exception, context: str = "") -> str:
     msg_lower = msg.lower()
 
     if "window not found" in msg_lower or "no autocad" in msg_lower:
-        hint = "AutoCAD LT is not running or no drawing is open. Start AutoCAD and open a .dwg file."
+        hint = "AutoCAD/T20 is not running or no drawing is open. Start AutoCAD + T20 and open a .dwg file."
     elif "timeout" in msg_lower:
-        hint = "Command timed out. AutoCAD may be in a modal dialog. Press ESC in AutoCAD and retry."
+        hint = (
+            "Command timed out. AutoCAD may be in a modal dialog. Press ESC in AutoCAD and retry."
+        )
     elif "not supported" in msg_lower or "backend" in msg_lower:
         hint = "Operation not supported on current backend. Check system(operation='status') for capabilities."
     elif "dispatcher" in msg_lower or "mcp_dispatch" in msg_lower:
-        hint = "mcp_dispatch.lsp not loaded. In AutoCAD command line, type: (load \"mcp_dispatch.lsp\")"
+        hint = (
+            'mcp_dispatch.lsp not loaded. In AutoCAD command line, type: (load "mcp_dispatch.lsp")'
+        )
     else:
         hint = "Unexpected error. Check AutoCAD is responsive and retry."
 
-    return _json({"error": f"[{context}] {msg}" if context else msg, "hint": hint})
+    return _failure(f"[{context}] {msg}" if context else msg, hint=hint)
 
 
 # ---------------------------------------------------------------------------
@@ -107,7 +120,7 @@ def _safe(tool_name: str):
             try:
                 return await fn(*args, **kwargs)
             except Exception as e:
-                op = kwargs.get("operation", "unknown")
+                op = kwargs.get("operation", args[0] if args else "unknown")
                 log.error("tool_error", tool=tool_name, operation=op, error=str(e))
                 return _error(e, f"{tool_name}.{op}")
 

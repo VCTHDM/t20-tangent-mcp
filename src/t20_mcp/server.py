@@ -1,16 +1,18 @@
-"""AutoCAD MCP Server v3.1 — 9 consolidated tools with operation dispatch.
+"""T20-adapted AutoCAD MCP server — 9 consolidated tools with operation dispatch.
 
 Tools: drawing, entity, layer, block, annotation, pid, view, system, tangent (天正 T20)
+Distribution/runtime version comes from ``t20_mcp.__version__``.
 """
 
 from __future__ import annotations
 
 import structlog
 from mcp.server.fastmcp import FastMCP
+from mcp.types import ImageContent, TextContent
 
 from t20_mcp import __version__
 from t20_mcp.client import (
-    _error,
+    _failure,
     _json,
     _safe,
     add_screenshot_if_available,
@@ -20,14 +22,17 @@ from t20_mcp.tools.tangent import register_tangent_tool
 
 # FastMCP validates return types via Pydantic. Tools that may return
 # ImageContent (screenshot) alongside TextContent need a union return type.
-ToolResult = str | list
+ToolResult = str | list[TextContent | ImageContent]
 
 log = structlog.get_logger()
 
+# MCP protocol compatibility identifier. Existing client configurations discover
+# this server as "autocad-mcp"; the installable distribution remains "t20-mcp".
+# Changing this string is a compatibility migration, not a package-version update.
 mcp = FastMCP("autocad-mcp")
 
-# 天正 T20 建筑实体工具 (wall/dimension/door 真机已验证, 默认 dry-run;
-# 详见 docs/handoff/05_field_test.md)。
+# 天正 T20 建筑实体工具；当前操作清单见 docs/T20_COMMANDS.md，真机证据按
+# docs/handoff/ 时间顺序保留。默认 dry-run，execute=True 才进入执行链路。
 register_tangent_tool(mcp)
 
 
@@ -81,7 +86,7 @@ async def drawing(
     elif operation == "redo":
         result = await backend.redo()
     else:
-        return _json({"error": f"Unknown drawing operation: {operation}"})
+        return _failure(f"Unknown drawing operation: {operation}")
 
     return await add_screenshot_if_available(result, include_screenshot)
 
@@ -147,11 +152,17 @@ async def entity(
     elif operation == "create_rectangle":
         result = await backend.create_rectangle(x1, y1, x2, y2, layer)
     elif operation == "create_arc":
-        result = await backend.create_arc(data["cx"], data["cy"], data["radius"], data["start_angle"], data["end_angle"], layer)
+        result = await backend.create_arc(
+            data["cx"], data["cy"], data["radius"], data["start_angle"], data["end_angle"], layer
+        )
     elif operation == "create_ellipse":
-        result = await backend.create_ellipse(data["cx"], data["cy"], data["major_x"], data["major_y"], data["ratio"], layer)
+        result = await backend.create_ellipse(
+            data["cx"], data["cy"], data["major_x"], data["major_y"], data["ratio"], layer
+        )
     elif operation == "create_mtext":
-        result = await backend.create_mtext(data["x"], data["y"], data["width"], data["text"], data.get("height", 2.5), layer)
+        result = await backend.create_mtext(
+            data["x"], data["y"], data["width"], data["text"], data.get("height", 2.5), layer
+        )
     elif operation == "create_hatch":
         result = await backend.create_hatch(entity_id, data.get("pattern", "ANSI31"))
     # --- Read ---
@@ -175,15 +186,19 @@ async def entity(
     elif operation == "offset":
         result = await backend.entity_offset(entity_id, data["distance"])
     elif operation == "array":
-        result = await backend.entity_array(entity_id, data["rows"], data["cols"], data["row_dist"], data["col_dist"])
+        result = await backend.entity_array(
+            entity_id, data["rows"], data["cols"], data["row_dist"], data["col_dist"]
+        )
     elif operation == "fillet":
         result = await backend.entity_fillet(data["id1"], data["id2"], data["radius"])
     elif operation == "chamfer":
-        result = await backend.entity_chamfer(data["id1"], data["id2"], data["dist1"], data["dist2"])
+        result = await backend.entity_chamfer(
+            data["id1"], data["id2"], data["dist1"], data["dist2"]
+        )
     elif operation == "erase":
         result = await backend.entity_erase(entity_id)
     else:
-        return _json({"error": f"Unknown entity operation: {operation}"})
+        return _failure(f"Unknown entity operation: {operation}")
 
     return await add_screenshot_if_available(result, include_screenshot)
 
@@ -218,11 +233,15 @@ async def layer(
     if operation == "list":
         result = await backend.layer_list()
     elif operation == "create":
-        result = await backend.layer_create(data["name"], data.get("color", "white"), data.get("linetype", "CONTINUOUS"))
+        result = await backend.layer_create(
+            data["name"], data.get("color", "white"), data.get("linetype", "CONTINUOUS")
+        )
     elif operation == "set_current":
         result = await backend.layer_set_current(data["name"])
     elif operation == "set_properties":
-        result = await backend.layer_set_properties(data["name"], data.get("color"), data.get("linetype"), data.get("lineweight"))
+        result = await backend.layer_set_properties(
+            data["name"], data.get("color"), data.get("linetype"), data.get("lineweight")
+        )
     elif operation == "freeze":
         result = await backend.layer_freeze(data["name"])
     elif operation == "thaw":
@@ -232,7 +251,7 @@ async def layer(
     elif operation == "unlock":
         result = await backend.layer_unlock(data["name"])
     else:
-        return _json({"error": f"Unknown layer operation: {operation}"})
+        return _failure(f"Unknown layer operation: {operation}")
 
     return await add_screenshot_if_available(result, include_screenshot)
 
@@ -266,13 +285,21 @@ async def block(
         result = await backend.block_list()
     elif operation == "insert":
         result = await backend.block_insert(
-            data["name"], data["x"], data["y"],
-            data.get("scale", 1.0), data.get("rotation", 0.0), data.get("block_id"),
+            data["name"],
+            data["x"],
+            data["y"],
+            data.get("scale", 1.0),
+            data.get("rotation", 0.0),
+            data.get("block_id"),
         )
     elif operation == "insert_with_attributes":
         result = await backend.block_insert_with_attributes(
-            data["name"], data["x"], data["y"],
-            data.get("scale", 1.0), data.get("rotation", 0.0), data.get("attributes"),
+            data["name"],
+            data["x"],
+            data["y"],
+            data.get("scale", 1.0),
+            data.get("rotation", 0.0),
+            data.get("attributes"),
         )
     elif operation == "get_attributes":
         result = await backend.block_get_attributes(data["entity_id"])
@@ -281,7 +308,7 @@ async def block(
     elif operation == "define":
         result = await backend.block_define(data["name"], data.get("entities", []))
     else:
-        return _json({"error": f"Unknown block operation: {operation}"})
+        return _failure(f"Unknown block operation: {operation}")
 
     return await add_screenshot_if_available(result, include_screenshot)
 
@@ -313,29 +340,50 @@ async def annotation(
 
     if operation == "create_text":
         result = await backend.create_text(
-            data["x"], data["y"], data["text"],
-            data.get("height", 2.5), data.get("rotation", 0.0), data.get("layer"),
+            data["x"],
+            data["y"],
+            data["text"],
+            data.get("height", 2.5),
+            data.get("rotation", 0.0),
+            data.get("layer"),
         )
     elif operation == "create_dimension_linear":
         result = await backend.create_dimension_linear(
-            data["x1"], data["y1"], data["x2"], data["y2"], data["dim_x"], data["dim_y"],
+            data["x1"],
+            data["y1"],
+            data["x2"],
+            data["y2"],
+            data["dim_x"],
+            data["dim_y"],
         )
     elif operation == "create_dimension_aligned":
         result = await backend.create_dimension_aligned(
-            data["x1"], data["y1"], data["x2"], data["y2"], data["offset"],
+            data["x1"],
+            data["y1"],
+            data["x2"],
+            data["y2"],
+            data["offset"],
         )
     elif operation == "create_dimension_angular":
         result = await backend.create_dimension_angular(
-            data["cx"], data["cy"], data["x1"], data["y1"], data["x2"], data["y2"],
+            data["cx"],
+            data["cy"],
+            data["x1"],
+            data["y1"],
+            data["x2"],
+            data["y2"],
         )
     elif operation == "create_dimension_radius":
         result = await backend.create_dimension_radius(
-            data["cx"], data["cy"], data["radius"], data["angle"],
+            data["cx"],
+            data["cy"],
+            data["radius"],
+            data["angle"],
         )
     elif operation == "create_leader":
         result = await backend.create_leader(data["points"], data["text"])
     else:
-        return _json({"error": f"Unknown annotation operation: {operation}"})
+        return _failure(f"Unknown annotation operation: {operation}")
 
     return await add_screenshot_if_available(result, include_screenshot)
 
@@ -375,8 +423,12 @@ async def pid(
         result = await backend.pid_setup_layers()
     elif operation == "insert_symbol":
         result = await backend.pid_insert_symbol(
-            data["category"], data["symbol"], data["x"], data["y"],
-            data.get("scale", 1.0), data.get("rotation", 0.0),
+            data["category"],
+            data["symbol"],
+            data["x"],
+            data["y"],
+            data.get("scale", 1.0),
+            data.get("rotation", 0.0),
         )
     elif operation == "list_symbols":
         result = await backend.pid_list_symbols(data["category"])
@@ -387,31 +439,48 @@ async def pid(
     elif operation == "add_flow_arrow":
         result = await backend.pid_add_flow_arrow(data["x"], data["y"], data.get("rotation", 0.0))
     elif operation == "add_equipment_tag":
-        result = await backend.pid_add_equipment_tag(data["x"], data["y"], data["tag"], data.get("description", ""))
+        result = await backend.pid_add_equipment_tag(
+            data["x"], data["y"], data["tag"], data.get("description", "")
+        )
     elif operation == "add_line_number":
-        result = await backend.pid_add_line_number(data["x"], data["y"], data["line_num"], data["spec"])
+        result = await backend.pid_add_line_number(
+            data["x"], data["y"], data["line_num"], data["spec"]
+        )
     elif operation == "insert_valve":
         result = await backend.pid_insert_valve(
-            data["x"], data["y"], data["valve_type"],
-            data.get("rotation", 0.0), data.get("attributes"),
+            data["x"],
+            data["y"],
+            data["valve_type"],
+            data.get("rotation", 0.0),
+            data.get("attributes"),
         )
     elif operation == "insert_instrument":
         result = await backend.pid_insert_instrument(
-            data["x"], data["y"], data["instrument_type"],
-            data.get("rotation", 0.0), data.get("tag_id", ""), data.get("range_value", ""),
+            data["x"],
+            data["y"],
+            data["instrument_type"],
+            data.get("rotation", 0.0),
+            data.get("tag_id", ""),
+            data.get("range_value", ""),
         )
     elif operation == "insert_pump":
         result = await backend.pid_insert_pump(
-            data["x"], data["y"], data["pump_type"],
-            data.get("rotation", 0.0), data.get("attributes"),
+            data["x"],
+            data["y"],
+            data["pump_type"],
+            data.get("rotation", 0.0),
+            data.get("attributes"),
         )
     elif operation == "insert_tank":
         result = await backend.pid_insert_tank(
-            data["x"], data["y"], data["tank_type"],
-            data.get("scale", 1.0), data.get("attributes"),
+            data["x"],
+            data["y"],
+            data["tank_type"],
+            data.get("scale", 1.0),
+            data.get("attributes"),
         )
     else:
-        return _json({"error": f"Unknown pid operation: {operation}"})
+        return _failure(f"Unknown pid operation: {operation}")
 
     return await add_screenshot_if_available(result, include_screenshot)
 
@@ -421,7 +490,7 @@ async def pid(
 # ==========================================================================
 
 
-@mcp.tool(annotations={"title": "AutoCAD View Operations", "readOnlyHint": True})
+@mcp.tool(annotations={"title": "AutoCAD View Operations", "readOnlyHint": False})
 @_safe("view")
 async def view(
     operation: str,
@@ -456,7 +525,7 @@ async def view(
             ]
         return _json(result.to_dict())
     else:
-        return _json({"error": f"Unknown view operation: {operation}"})
+        return _failure(f"Unknown view operation: {operation}")
 
 
 # ==========================================================================
@@ -464,7 +533,7 @@ async def view(
 # ==========================================================================
 
 
-@mcp.tool(annotations={"title": "AutoCAD MCP System", "readOnlyHint": True})
+@mcp.tool(annotations={"title": "AutoCAD MCP System", "readOnlyHint": False})
 @_safe("system")
 async def system(
     operation: str,
@@ -493,7 +562,7 @@ async def system(
             result = await backend.status()
             return _json({"ok": result.ok, "backend": backend.name})
         except Exception as e:
-            return _json({"ok": False, "error": str(e)})
+            return _failure(str(e))
     elif operation == "runtime":
         import os
         import sys
@@ -511,6 +580,7 @@ async def system(
     elif operation == "init":
         # Force re-initialization
         from t20_mcp import client
+
         client._backend = None
         backend = await get_backend()
         result = await backend.status()
@@ -518,11 +588,11 @@ async def system(
     elif operation == "execute_lisp":
         backend = await get_backend()
         if not data.get("code"):
-            return _json({"error": "data.code is required"})
+            return _failure("data.code is required")
         result = await backend.execute_lisp(data["code"])
         return await add_screenshot_if_available(result, include_screenshot)
     else:
-        return _json({"error": f"Unknown system operation: {operation}"})
+        return _failure(f"Unknown system operation: {operation}")
 
 
 # ==========================================================================
@@ -530,7 +600,7 @@ async def system(
 # ==========================================================================
 
 
-def main():
+def main() -> None:
     """Run the MCP server on stdio transport."""
     import logging
     import sys

@@ -3,9 +3,6 @@
 from __future__ import annotations
 
 import math
-import os
-from pathlib import Path
-from typing import Any
 
 import ezdxf
 import structlog
@@ -24,7 +21,6 @@ class EzdxfBackend(AutoCADBackend):
         self._msp = None  # modelspace
         self._save_path: str | None = None
         self._screenshot = MatplotlibScreenshotProvider()
-        self._entity_counter = 0
 
     @property
     def name(self) -> str:
@@ -53,38 +49,60 @@ class EzdxfBackend(AutoCADBackend):
 
     async def status(self) -> CommandResult:
         entity_count = len(self._msp) if self._msp else 0
-        return CommandResult(ok=True, payload={
-            "backend": "ezdxf",
-            "version": ezdxf.__version__,
-            "has_document": self._doc is not None,
-            "entity_count": entity_count,
-            "save_path": self._save_path,
-            "capabilities": {k: v for k, v in self.capabilities.__dict__.items()},
-        })
+        return CommandResult(
+            ok=True,
+            payload={
+                "backend": "ezdxf",
+                "version": ezdxf.__version__,
+                "has_document": self._doc is not None,
+                "entity_count": entity_count,
+                "save_path": self._save_path,
+                "capabilities": {k: v for k, v in self.capabilities.__dict__.items()},
+            },
+        )
 
-    def _next_id(self) -> str:
-        self._entity_counter += 1
-        return f"ezdxf_{self._entity_counter}"
-
-    def _ensure_layer(self, layer: str | None):
+    def _ensure_layer(self, layer: str | None) -> None:
         if layer and layer not in self._doc.layers:
             self._doc.layers.add(layer)
+
+    @staticmethod
+    def _rotated_points(
+        points: list[tuple[float, float]],
+        center_x: float,
+        center_y: float,
+        angle: float,
+    ) -> list[tuple[float, float]]:
+        if angle == 0:
+            return points
+        radians = math.radians(angle)
+        cos_a = math.cos(radians)
+        sin_a = math.sin(radians)
+        return [
+            (
+                center_x + (x - center_x) * cos_a - (y - center_y) * sin_a,
+                center_y + (x - center_x) * sin_a + (y - center_y) * cos_a,
+            )
+            for x, y in points
+        ]
 
     # --- Drawing management ---
 
     async def drawing_info(self) -> CommandResult:
         if not self._doc:
             return CommandResult(ok=False, error="No document open")
-        layers = [l.dxf.name for l in self._doc.layers]
+        layers = [layer.dxf.name for layer in self._doc.layers]
         entity_count = len(self._msp)
         blocks = [b.name for b in self._doc.blocks if not b.name.startswith("*")]
-        return CommandResult(ok=True, payload={
-            "entity_count": entity_count,
-            "layers": layers,
-            "blocks": blocks,
-            "dxf_version": self._doc.dxfversion,
-            "save_path": self._save_path,
-        })
+        return CommandResult(
+            ok=True,
+            payload={
+                "entity_count": entity_count,
+                "layers": layers,
+                "blocks": blocks,
+                "dxf_version": self._doc.dxfversion,
+                "save_path": self._save_path,
+            },
+        )
 
     async def drawing_save(self, path: str | None = None) -> CommandResult:
         if not self._doc:
@@ -103,15 +121,13 @@ class EzdxfBackend(AutoCADBackend):
         self._doc = ezdxf.new("R2013")
         self._msp = self._doc.modelspace()
         self._screenshot.doc = self._doc
-        self._entity_counter = 0
         self._save_path = f"{name}.dxf" if name else None
         return CommandResult(ok=True, payload={"name": name or "untitled"})
 
     async def drawing_purge(self) -> CommandResult:
         if not self._doc:
             return CommandResult(ok=False, error="No document open")
-        # ezdxf doesn't have a direct purge; just report
-        return CommandResult(ok=True, payload={"purged": True})
+        return CommandResult(ok=False, error="Purge is not supported on the ezdxf backend")
 
     async def drawing_open(self, path: str) -> CommandResult:
         try:
@@ -128,7 +144,7 @@ class EzdxfBackend(AutoCADBackend):
             return CommandResult(ok=False, error="No document open")
         result = {}
         header = self._doc.header
-        for name in (names or []):
+        for name in names or []:
             try:
                 result[name] = str(header[name])
             except (KeyError, ezdxf.DXFKeyError):
@@ -159,25 +175,32 @@ class EzdxfBackend(AutoCADBackend):
 
     async def create_arc(self, cx, cy, radius, start_angle, end_angle, layer=None) -> CommandResult:
         self._ensure_layer(layer)
-        e = self._msp.add_arc((cx, cy), radius, start_angle, end_angle, dxfattribs={"layer": layer or "0"})
+        e = self._msp.add_arc(
+            (cx, cy), radius, start_angle, end_angle, dxfattribs={"layer": layer or "0"}
+        )
         return CommandResult(ok=True, payload={"entity_type": "ARC", "handle": e.dxf.handle})
 
     async def create_ellipse(self, cx, cy, major_x, major_y, ratio, layer=None) -> CommandResult:
         self._ensure_layer(layer)
         e = self._msp.add_ellipse(
-            (cx, cy), major_axis=(major_x - cx, major_y - cy, 0), ratio=ratio,
+            (cx, cy),
+            major_axis=(major_x - cx, major_y - cy, 0),
+            ratio=ratio,
             dxfattribs={"layer": layer or "0"},
         )
         return CommandResult(ok=True, payload={"entity_type": "ELLIPSE", "handle": e.dxf.handle})
 
     async def create_mtext(self, x, y, width, text, height=2.5, layer=None) -> CommandResult:
         self._ensure_layer(layer)
-        e = self._msp.add_mtext(text, dxfattribs={
-            "insert": (x, y),
-            "char_height": height,
-            "width": width,
-            "layer": layer or "0",
-        })
+        e = self._msp.add_mtext(
+            text,
+            dxfattribs={
+                "insert": (x, y),
+                "char_height": height,
+                "width": width,
+                "layer": layer or "0",
+            },
+        )
         return CommandResult(ok=True, payload={"entity_type": "MTEXT", "handle": e.dxf.handle})
 
     async def entity_list(self, layer=None) -> CommandResult:
@@ -185,11 +208,13 @@ class EzdxfBackend(AutoCADBackend):
         for e in self._msp:
             if layer and e.dxf.get("layer", "0") != layer:
                 continue
-            entities.append({
-                "type": e.dxftype(),
-                "handle": e.dxf.handle,
-                "layer": e.dxf.get("layer", "0"),
-            })
+            entities.append(
+                {
+                    "type": e.dxftype(),
+                    "handle": e.dxf.handle,
+                    "layer": e.dxf.get("layer", "0"),
+                }
+            )
         return CommandResult(ok=True, payload={"entities": entities, "count": len(entities)})
 
     async def entity_count(self, layer=None) -> CommandResult:
@@ -237,8 +262,8 @@ class EzdxfBackend(AutoCADBackend):
             if e is None:
                 return CommandResult(ok=False, error=f"Entity {entity_id} not found")
             copy = e.copy()
-            self._msp.add_entity(copy)
             copy.translate(dx, dy, 0)
+            self._msp.add_entity(copy)
             return CommandResult(ok=True, payload={"handle": copy.dxf.handle})
         except Exception as ex:
             return CommandResult(ok=False, error=str(ex))
@@ -259,6 +284,7 @@ class EzdxfBackend(AutoCADBackend):
             if e is None:
                 return CommandResult(ok=False, error=f"Entity {entity_id} not found")
             from ezdxf.math import Matrix44
+
             m = Matrix44.z_rotate(math.radians(angle))
             # Translate to origin, rotate, translate back
             e.translate(-cx, -cy, 0)
@@ -274,6 +300,7 @@ class EzdxfBackend(AutoCADBackend):
             if e is None:
                 return CommandResult(ok=False, error=f"Entity {entity_id} not found")
             from ezdxf.math import Matrix44
+
             m = Matrix44.scale(factor, factor, factor)
             e.translate(-cx, -cy, 0)
             e.transform(m)
@@ -287,29 +314,44 @@ class EzdxfBackend(AutoCADBackend):
             e = self._doc.entitydb.get(entity_id)
             if e is None:
                 return CommandResult(ok=False, error=f"Entity {entity_id} not found")
-            copy = e.copy()
-            self._msp.add_entity(copy)
             # Mirror across line (x1,y1)-(x2,y2) using reflection matrix
             dx, dy = x2 - x1, y2 - y1
             length_sq = dx * dx + dy * dy
             if length_sq == 0:
                 return CommandResult(ok=False, error="Mirror line has zero length")
             from ezdxf.math import Matrix44
+
+            copy = e.copy()
             # Reflect: translate to origin, reflect, translate back
             # Reflection matrix across line through origin with direction (dx, dy):
             #   [[cos2a, sin2a], [sin2a, -cos2a]] where a = atan2(dy, dx)
             a = math.atan2(dy, dx)
             cos2a = math.cos(2 * a)
             sin2a = math.sin(2 * a)
-            m = Matrix44([
-                cos2a, sin2a, 0, 0,
-                sin2a, -cos2a, 0, 0,
-                0, 0, 1, 0,
-                0, 0, 0, 1,
-            ])
+            m = Matrix44(
+                [
+                    cos2a,
+                    sin2a,
+                    0,
+                    0,
+                    sin2a,
+                    -cos2a,
+                    0,
+                    0,
+                    0,
+                    0,
+                    1,
+                    0,
+                    0,
+                    0,
+                    0,
+                    1,
+                ]
+            )
             copy.translate(-x1, -y1, 0)
             copy.transform(m)
             copy.translate(x1, y1, 0)
+            self._msp.add_entity(copy)
             return CommandResult(ok=True, payload={"handle": copy.dxf.handle})
         except Exception as ex:
             return CommandResult(ok=False, error=str(ex))
@@ -323,15 +365,17 @@ class EzdxfBackend(AutoCADBackend):
             e = self._doc.entitydb.get(entity_id)
             if e is None:
                 return CommandResult(ok=False, error=f"Entity {entity_id} not found")
-            handles = []
+            copies = []
             for r in range(rows):
                 for c in range(cols):
                     if r == 0 and c == 0:
                         continue  # Skip original position
                     copy = e.copy()
-                    self._msp.add_entity(copy)
                     copy.translate(c * col_dist, r * row_dist, 0)
-                    handles.append(copy.dxf.handle)
+                    copies.append(copy)
+            for copy in copies:
+                self._msp.add_entity(copy)
+            handles = [copy.dxf.handle for copy in copies]
             return CommandResult(ok=True, payload={"copies": len(handles), "handles": handles})
         except Exception as ex:
             return CommandResult(ok=False, error=str(ex))
@@ -347,14 +391,23 @@ class EzdxfBackend(AutoCADBackend):
             e = self._doc.entitydb.get(entity_id)
             if e is None:
                 return CommandResult(ok=False, error=f"Entity {entity_id} not found")
+            if e.dxftype() != "LWPOLYLINE":
+                return CommandResult(
+                    ok=False,
+                    error="Hatch boundaries on the ezdxf backend must be LWPOLYLINE entities",
+                )
+            points = [(p[0], p[1]) for p in e.get_points(format="xy")]
+            if len(points) < 3:
+                return CommandResult(
+                    ok=False,
+                    error="Hatch boundary must contain at least three points",
+                )
             hatch = self._msp.add_hatch()
             hatch.set_pattern_fill(pattern, scale=1.0)
-            # Try to use the entity as a boundary path
-            hatch.paths.add_polyline_path(
-                [(p[0], p[1]) for p in e.get_points(format="xy")],
-                is_closed=True,
+            hatch.paths.add_polyline_path(points, is_closed=True)
+            return CommandResult(
+                ok=True, payload={"entity_type": "HATCH", "handle": hatch.dxf.handle}
             )
-            return CommandResult(ok=True, payload={"entity_type": "HATCH", "handle": hatch.dxf.handle})
         except Exception as ex:
             return CommandResult(ok=False, error=str(ex))
 
@@ -362,14 +415,16 @@ class EzdxfBackend(AutoCADBackend):
 
     async def layer_list(self) -> CommandResult:
         layers = []
-        for l in self._doc.layers:
-            layers.append({
-                "name": l.dxf.name,
-                "color": l.dxf.get("color", 7),
-                "linetype": l.dxf.get("linetype", "Continuous"),
-                "is_frozen": l.is_frozen(),
-                "is_locked": l.is_locked(),
-            })
+        for layer in self._doc.layers:
+            layers.append(
+                {
+                    "name": layer.dxf.name,
+                    "color": layer.dxf.get("color", 7),
+                    "linetype": layer.dxf.get("linetype", "Continuous"),
+                    "is_frozen": layer.is_frozen(),
+                    "is_locked": layer.is_locked(),
+                }
+            )
         return CommandResult(ok=True, payload={"layers": layers})
 
     async def layer_create(self, name, color="white", linetype="CONTINUOUS") -> CommandResult:
@@ -385,12 +440,22 @@ class EzdxfBackend(AutoCADBackend):
         self._doc.header["$CLAYER"] = name
         return CommandResult(ok=True, payload={"current_layer": name})
 
-    async def layer_set_properties(self, name, color=None, linetype=None, lineweight=None) -> CommandResult:
+    async def layer_set_properties(
+        self, name, color=None, linetype=None, lineweight=None
+    ) -> CommandResult:
         if name not in self._doc.layers:
             return CommandResult(ok=False, error=f"Layer '{name}' does not exist")
+        if lineweight is not None:
+            return CommandResult(
+                ok=False,
+                error="Layer lineweight changes are not supported on the ezdxf backend",
+            )
+        if linetype is not None and linetype not in self._doc.linetypes:
+            return CommandResult(ok=False, error=f"Linetype '{linetype}' does not exist")
+        color_value = self._color_to_int(color) if color is not None else None
         layer = self._doc.layers.get(name)
-        if color is not None:
-            layer.color = self._color_to_int(color)
+        if color_value is not None:
+            layer.color = color_value
         if linetype is not None:
             layer.dxf.linetype = linetype
         return CommandResult(ok=True, payload={"name": name})
@@ -425,40 +490,69 @@ class EzdxfBackend(AutoCADBackend):
         blocks = [b.name for b in self._doc.blocks if not b.name.startswith("*")]
         return CommandResult(ok=True, payload={"blocks": blocks})
 
-    async def block_insert(self, name, x, y, scale=1.0, rotation=0.0, block_id=None) -> CommandResult:
+    async def block_insert(
+        self, name, x, y, scale=1.0, rotation=0.0, block_id=None
+    ) -> CommandResult:
         if name not in self._doc.blocks:
             return CommandResult(ok=False, error=f"Block '{name}' not defined")
-        e = self._msp.add_blockref(name, (x, y), dxfattribs={
-            "xscale": scale, "yscale": scale, "zscale": scale,
-            "rotation": rotation,
-        })
-        if block_id:
-            try:
+        e = None
+        try:
+            e = self._msp.add_blockref(
+                name,
+                (x, y),
+                dxfattribs={
+                    "xscale": scale,
+                    "yscale": scale,
+                    "zscale": scale,
+                    "rotation": rotation,
+                },
+            )
+            if block_id:
                 e.add_attrib("ID", block_id)
-            except Exception:
-                pass
-        return CommandResult(ok=True, payload={"entity_type": "INSERT", "handle": e.dxf.handle})
+            return CommandResult(
+                ok=True,
+                payload={"entity_type": "INSERT", "handle": e.dxf.handle, "block_id": block_id},
+            )
+        except Exception as ex:
+            if e is not None:
+                self._msp.delete_entity(e)
+            return CommandResult(ok=False, error=str(ex))
 
-    async def block_insert_with_attributes(self, name, x, y, scale=1.0, rotation=0.0, attributes=None) -> CommandResult:
+    async def block_insert_with_attributes(
+        self, name, x, y, scale=1.0, rotation=0.0, attributes=None
+    ) -> CommandResult:
         if name not in self._doc.blocks:
             return CommandResult(ok=False, error=f"Block '{name}' not defined")
-        block = self._doc.blocks[name]
-        e = self._msp.add_blockref(name, (x, y), dxfattribs={
-            "xscale": scale, "yscale": scale, "zscale": scale,
-            "rotation": rotation,
-        })
-        if attributes:
-            # Try add_auto_attribs first (uses ATTDEF templates)
-            try:
+        e = None
+        try:
+            e = self._msp.add_blockref(
+                name,
+                (x, y),
+                dxfattribs={
+                    "xscale": scale,
+                    "yscale": scale,
+                    "zscale": scale,
+                    "rotation": rotation,
+                },
+            )
+            if attributes:
                 e.add_auto_attribs(attributes)
-            except Exception:
-                # Fallback: add manual attribs
+                existing = {attrib.dxf.tag.upper() for attrib in e.attribs}
                 for tag, value in attributes.items():
-                    try:
+                    if tag.upper() not in existing:
                         e.add_attrib(tag, value, (x, y))
-                    except Exception:
-                        pass
-        return CommandResult(ok=True, payload={"entity_type": "INSERT", "handle": e.dxf.handle})
+            return CommandResult(
+                ok=True,
+                payload={
+                    "entity_type": "INSERT",
+                    "handle": e.dxf.handle,
+                    "attributes_written": len(attributes or {}),
+                },
+            )
+        except Exception as ex:
+            if e is not None:
+                self._msp.delete_entity(e)
+            return CommandResult(ok=False, error=str(ex))
 
     async def block_get_attributes(self, entity_id) -> CommandResult:
         try:
@@ -486,37 +580,56 @@ class EzdxfBackend(AutoCADBackend):
             return CommandResult(ok=False, error=str(ex))
 
     async def block_define(self, name, entities) -> CommandResult:
-        block = self._doc.blocks.new(name=name)
-        for ent_def in entities:
-            etype = ent_def.get("type", "LINE")
-            if etype == "LINE":
-                block.add_line(
-                    (ent_def.get("x1", 0), ent_def.get("y1", 0)),
-                    (ent_def.get("x2", 0), ent_def.get("y2", 0)),
-                )
-            elif etype == "CIRCLE":
-                block.add_circle(
-                    (ent_def.get("cx", 0), ent_def.get("cy", 0)),
-                    ent_def.get("radius", 1),
-                )
-            elif etype == "ATTDEF":
-                block.add_attdef(
-                    ent_def.get("tag", "TAG"),
-                    (ent_def.get("x", 0), ent_def.get("y", 0)),
-                    dxfattribs={"height": ent_def.get("height", 2.5)},
-                )
-        return CommandResult(ok=True, payload={"block": name, "entity_count": len(entities)})
+        if name in self._doc.blocks:
+            return CommandResult(ok=False, error=f"Block '{name}' already exists")
+        supported = {"LINE", "CIRCLE", "ATTDEF"}
+        normalized = [str(ent_def.get("type", "LINE")).upper() for ent_def in entities]
+        unsupported = sorted(set(normalized) - supported)
+        if unsupported:
+            return CommandResult(
+                ok=False,
+                error=f"Unsupported block entity types: {', '.join(unsupported)}",
+            )
+
+        block = None
+        try:
+            block = self._doc.blocks.new(name=name)
+            for ent_def, etype in zip(entities, normalized):
+                if etype == "LINE":
+                    block.add_line(
+                        (ent_def.get("x1", 0), ent_def.get("y1", 0)),
+                        (ent_def.get("x2", 0), ent_def.get("y2", 0)),
+                    )
+                elif etype == "CIRCLE":
+                    block.add_circle(
+                        (ent_def.get("cx", 0), ent_def.get("cy", 0)),
+                        ent_def.get("radius", 1),
+                    )
+                else:
+                    block.add_attdef(
+                        ent_def.get("tag", "TAG"),
+                        (ent_def.get("x", 0), ent_def.get("y", 0)),
+                        dxfattribs={"height": ent_def.get("height", 2.5)},
+                    )
+            return CommandResult(ok=True, payload={"block": name, "entity_count": len(entities)})
+        except Exception as ex:
+            if block is not None:
+                self._doc.blocks.delete_block(name, safe=False)
+            return CommandResult(ok=False, error=str(ex))
 
     # --- Annotation ---
 
     async def create_text(self, x, y, text, height=2.5, rotation=0.0, layer=None) -> CommandResult:
         self._ensure_layer(layer)
-        e = self._msp.add_text(text, dxfattribs={
-            "insert": (x, y),
-            "height": height,
-            "rotation": rotation,
-            "layer": layer or "0",
-        })
+        e = self._msp.add_text(
+            text,
+            dxfattribs={
+                "insert": (x, y),
+                "height": height,
+                "rotation": rotation,
+                "layer": layer or "0",
+            },
+        )
         return CommandResult(ok=True, payload={"entity_type": "TEXT", "handle": e.dxf.handle})
 
     async def create_dimension_linear(self, x1, y1, x2, y2, dim_x, dim_y) -> CommandResult:
@@ -548,7 +661,6 @@ class EzdxfBackend(AutoCADBackend):
             # Calculate angle arc midpoint for dimension location
             a1 = math.atan2(y1 - cy, x1 - cx)
             a2 = math.atan2(y2 - cy, x2 - cx)
-            amid = (a1 + a2) / 2
             r = max(math.hypot(x1 - cx, y1 - cy), math.hypot(x2 - cx, y2 - cy)) * 0.7
             dim = self._msp.add_angular_dim_cra(
                 center=(cx, cy),
@@ -579,14 +691,17 @@ class EzdxfBackend(AutoCADBackend):
     async def create_leader(self, points, text) -> CommandResult:
         try:
             pts = [(p[0], p[1]) for p in points]
-            leader = self._msp.add_leader(pts)
+            self._msp.add_leader(pts)
             # Add text at the last point
             last = pts[-1]
-            self._msp.add_mtext(text, dxfattribs={
-                "insert": (last[0] + 2, last[1]),
-                "char_height": 2.5,
-                "width": 30,
-            })
+            self._msp.add_mtext(
+                text,
+                dxfattribs={
+                    "insert": (last[0] + 2, last[1]),
+                    "char_height": 2.5,
+                    "width": 30,
+                },
+            )
             return CommandResult(ok=True, payload={"entity_type": "LEADER"})
         except Exception as ex:
             return CommandResult(ok=False, error=str(ex))
@@ -603,83 +718,186 @@ class EzdxfBackend(AutoCADBackend):
             ("PID-ANNOTATION", 7, "CONTINUOUS"),
             ("PID-VALVES", 2, "CONTINUOUS"),
         ]
+        created = 0
         for name, color, lt in pid_layers:
             if name not in self._doc.layers:
                 self._doc.layers.add(name, color=color, linetype=lt)
-        return CommandResult(ok=True, payload={"layers_created": len(pid_layers)})
+                created += 1
+        return CommandResult(
+            ok=True,
+            payload={"layers_created": created, "layers_existing": len(pid_layers) - created},
+        )
 
     async def pid_list_symbols(self, category) -> CommandResult:
         """List CTO symbols from disk or built-in catalog."""
-        from t20_mcp.pid.cto_library import CTO_ROOT, list_symbols
-        symbols = list_symbols(category)
-        return CommandResult(ok=True, payload={"category": category, "symbols": symbols, "count": len(symbols)})
+        from t20_mcp.pid.cto_library import list_symbols
 
-    async def pid_insert_symbol(self, category, symbol, x, y, scale=1.0, rotation=0.0) -> CommandResult:
+        symbols = list_symbols(category)
+        return CommandResult(
+            ok=True, payload={"category": category, "symbols": symbols, "count": len(symbols)}
+        )
+
+    async def pid_insert_symbol(
+        self, category, symbol, x, y, scale=1.0, rotation=0.0
+    ) -> CommandResult:
         """Insert a CTO symbol as a simple block placeholder."""
         self._ensure_layer("PID-EQUIPMENT")
+        self._ensure_layer("PID-ANNOTATION")
         # In headless mode, create a placeholder rectangle with the symbol name
         half = 5 * scale
-        pts = [(x - half, y - half), (x + half, y - half), (x + half, y + half), (x - half, y + half)]
+        pts = [
+            (x - half, y - half),
+            (x + half, y - half),
+            (x + half, y + half),
+            (x - half, y + half),
+        ]
+        pts = self._rotated_points(pts, x, y, rotation)
         e = self._msp.add_lwpolyline(pts, close=True, dxfattribs={"layer": "PID-EQUIPMENT"})
-        self._msp.add_text(symbol, dxfattribs={
-            "insert": (x, y), "height": 1.5 * scale, "layer": "PID-ANNOTATION",
-        })
-        return CommandResult(ok=True, payload={"symbol": symbol, "handle": e.dxf.handle})
+        self._msp.add_text(
+            symbol,
+            dxfattribs={
+                "insert": (x, y),
+                "height": 1.5 * scale,
+                "rotation": rotation,
+                "layer": "PID-ANNOTATION",
+            },
+        )
+        return CommandResult(
+            ok=True,
+            payload={"category": category, "symbol": symbol, "handle": e.dxf.handle},
+        )
 
-    async def pid_insert_valve(self, x, y, valve_type, rotation=0.0, attributes=None) -> CommandResult:
+    async def pid_insert_valve(
+        self, x, y, valve_type, rotation=0.0, attributes=None
+    ) -> CommandResult:
         """Insert a valve symbol (simplified for headless)."""
+        if attributes:
+            return CommandResult(
+                ok=False,
+                error="Valve attributes are not supported on the ezdxf backend",
+            )
         self._ensure_layer("PID-VALVES")
+        self._ensure_layer("PID-ANNOTATION")
         # Simplified diamond shape for valve
         size = 3.0
         pts = [(x - size, y), (x, y + size), (x + size, y), (x, y - size)]
+        pts = self._rotated_points(pts, x, y, rotation)
         e = self._msp.add_lwpolyline(pts, close=True, dxfattribs={"layer": "PID-VALVES"})
-        self._msp.add_text(valve_type, dxfattribs={
-            "insert": (x, y - size - 2), "height": 1.5, "layer": "PID-ANNOTATION",
-        })
+        self._msp.add_text(
+            valve_type,
+            dxfattribs={
+                "insert": (x, y - size - 2),
+                "height": 1.5,
+                "rotation": rotation,
+                "layer": "PID-ANNOTATION",
+            },
+        )
         return CommandResult(ok=True, payload={"valve_type": valve_type, "handle": e.dxf.handle})
 
-    async def pid_insert_instrument(self, x, y, instrument_type, rotation=0.0, tag_id="", range_value="") -> CommandResult:
+    async def pid_insert_instrument(
+        self, x, y, instrument_type, rotation=0.0, tag_id="", range_value=""
+    ) -> CommandResult:
         """Insert an instrument symbol (simplified for headless)."""
         self._ensure_layer("PID-INSTRUMENTS")
-        # Circle with crosshair for instrument
+        self._ensure_layer("PID-ANNOTATION")
+        # Circle with a direction line for instrument
         e = self._msp.add_circle((x, y), 4, dxfattribs={"layer": "PID-INSTRUMENTS"})
-        self._msp.add_line((x - 4, y), (x + 4, y), dxfattribs={"layer": "PID-INSTRUMENTS"})
+        radians = math.radians(rotation)
+        dx = 4 * math.cos(radians)
+        dy = 4 * math.sin(radians)
+        self._msp.add_line(
+            (x - dx, y - dy),
+            (x + dx, y + dy),
+            dxfattribs={"layer": "PID-INSTRUMENTS"},
+        )
         label = tag_id if tag_id else instrument_type
-        self._msp.add_text(label, dxfattribs={
-            "insert": (x, y - 6), "height": 1.5, "layer": "PID-ANNOTATION",
-        })
-        return CommandResult(ok=True, payload={"instrument_type": instrument_type, "handle": e.dxf.handle})
+        self._msp.add_text(
+            label,
+            dxfattribs={
+                "insert": (x, y - 6),
+                "height": 1.5,
+                "rotation": rotation,
+                "layer": "PID-ANNOTATION",
+            },
+        )
+        range_handle = None
+        if range_value:
+            range_text = self._msp.add_text(
+                range_value,
+                dxfattribs={
+                    "insert": (x, y - 8),
+                    "height": 1.2,
+                    "rotation": rotation,
+                    "layer": "PID-ANNOTATION",
+                },
+            )
+            range_handle = range_text.dxf.handle
+        return CommandResult(
+            ok=True,
+            payload={
+                "instrument_type": instrument_type,
+                "handle": e.dxf.handle,
+                "range_handle": range_handle,
+            },
+        )
 
-    async def pid_insert_pump(self, x, y, pump_type, rotation=0.0, attributes=None) -> CommandResult:
+    async def pid_insert_pump(
+        self, x, y, pump_type, rotation=0.0, attributes=None
+    ) -> CommandResult:
         """Insert a pump symbol (simplified for headless)."""
+        if attributes:
+            return CommandResult(
+                ok=False,
+                error="Pump attributes are not supported on the ezdxf backend",
+            )
         self._ensure_layer("PID-EQUIPMENT")
+        self._ensure_layer("PID-ANNOTATION")
         # Circle with triangle for pump
         e = self._msp.add_circle((x, y), 6, dxfattribs={"layer": "PID-EQUIPMENT"})
         rad = math.radians(rotation)
         tip_x = x + 8 * math.cos(rad)
         tip_y = y + 8 * math.sin(rad)
         self._msp.add_lwpolyline(
-            [(x + 6 * math.cos(rad + 0.5), y + 6 * math.sin(rad + 0.5)),
-             (tip_x, tip_y),
-             (x + 6 * math.cos(rad - 0.5), y + 6 * math.sin(rad - 0.5))],
+            [
+                (x + 6 * math.cos(rad + 0.5), y + 6 * math.sin(rad + 0.5)),
+                (tip_x, tip_y),
+                (x + 6 * math.cos(rad - 0.5), y + 6 * math.sin(rad - 0.5)),
+            ],
             close=True,
             dxfattribs={"layer": "PID-EQUIPMENT"},
         )
-        self._msp.add_text(pump_type, dxfattribs={
-            "insert": (x, y - 8), "height": 1.5, "layer": "PID-ANNOTATION",
-        })
+        self._msp.add_text(
+            pump_type,
+            dxfattribs={
+                "insert": (x, y - 8),
+                "height": 1.5,
+                "rotation": rotation,
+                "layer": "PID-ANNOTATION",
+            },
+        )
         return CommandResult(ok=True, payload={"pump_type": pump_type, "handle": e.dxf.handle})
 
     async def pid_insert_tank(self, x, y, tank_type, scale=1.0, attributes=None) -> CommandResult:
         """Insert a tank symbol (simplified for headless)."""
+        if attributes:
+            return CommandResult(
+                ok=False,
+                error="Tank attributes are not supported on the ezdxf backend",
+            )
         self._ensure_layer("PID-EQUIPMENT")
+        self._ensure_layer("PID-ANNOTATION")
         w = 10 * scale
         h = 15 * scale
         pts = [(x - w, y), (x + w, y), (x + w, y + h), (x - w, y + h)]
         e = self._msp.add_lwpolyline(pts, close=True, dxfattribs={"layer": "PID-EQUIPMENT"})
-        self._msp.add_text(tank_type, dxfattribs={
-            "insert": (x, y + h + 2), "height": 2.0 * scale, "layer": "PID-ANNOTATION",
-        })
+        self._msp.add_text(
+            tank_type,
+            dxfattribs={
+                "insert": (x, y + h + 2),
+                "height": 2.0 * scale,
+                "layer": "PID-ANNOTATION",
+            },
+        )
         return CommandResult(ok=True, payload={"tank_type": tank_type, "handle": e.dxf.handle})
 
     async def pid_draw_process_line(self, x1, y1, x2, y2) -> CommandResult:
@@ -703,28 +921,45 @@ class EzdxfBackend(AutoCADBackend):
         p1 = (x + size * math.cos(rad), y + size * math.sin(rad))
         p2 = (x + size * 0.5 * math.cos(rad + 2.4), y + size * 0.5 * math.sin(rad + 2.4))
         p3 = (x + size * 0.5 * math.cos(rad - 2.4), y + size * 0.5 * math.sin(rad - 2.4))
-        e = self._msp.add_lwpolyline([p1, p2, p3], close=True, dxfattribs={"layer": "PID-ANNOTATION"})
+        e = self._msp.add_lwpolyline(
+            [p1, p2, p3], close=True, dxfattribs={"layer": "PID-ANNOTATION"}
+        )
         return CommandResult(ok=True, payload={"entity_type": "LWPOLYLINE", "handle": e.dxf.handle})
 
     async def pid_add_equipment_tag(self, x, y, tag, description="") -> CommandResult:
         self._ensure_layer("PID-ANNOTATION")
-        e = self._msp.add_text(tag, dxfattribs={
-            "insert": (x, y), "height": 2.5, "layer": "PID-ANNOTATION",
-        })
+        e = self._msp.add_text(
+            tag,
+            dxfattribs={
+                "insert": (x, y),
+                "height": 2.5,
+                "layer": "PID-ANNOTATION",
+            },
+        )
         result = {"entity_type": "TEXT", "handle": e.dxf.handle, "tag": tag}
         if description:
-            e2 = self._msp.add_text(description, dxfattribs={
-                "insert": (x, y - 3.5), "height": 1.8, "layer": "PID-ANNOTATION",
-            })
+            e2 = self._msp.add_text(
+                description,
+                dxfattribs={
+                    "insert": (x, y - 3.5),
+                    "height": 1.8,
+                    "layer": "PID-ANNOTATION",
+                },
+            )
             result["description_handle"] = e2.dxf.handle
         return CommandResult(ok=True, payload=result)
 
     async def pid_add_line_number(self, x, y, line_num, spec) -> CommandResult:
         self._ensure_layer("PID-ANNOTATION")
         text = f"{line_num}-{spec}"
-        e = self._msp.add_text(text, dxfattribs={
-            "insert": (x, y), "height": 2.0, "layer": "PID-ANNOTATION",
-        })
+        e = self._msp.add_text(
+            text,
+            dxfattribs={
+                "insert": (x, y),
+                "height": 2.0,
+                "layer": "PID-ANNOTATION",
+            },
+        )
         return CommandResult(ok=True, payload={"entity_type": "TEXT", "handle": e.dxf.handle})
 
     # --- View ---
@@ -742,7 +977,14 @@ class EzdxfBackend(AutoCADBackend):
         if isinstance(color, int):
             return color
         color_map = {
-            "red": 1, "yellow": 2, "green": 3, "cyan": 4,
-            "blue": 5, "magenta": 6, "white": 7, "grey": 8, "gray": 8,
+            "red": 1,
+            "yellow": 2,
+            "green": 3,
+            "cyan": 4,
+            "blue": 5,
+            "magenta": 6,
+            "white": 7,
+            "grey": 8,
+            "gray": 8,
         }
         return color_map.get(color.lower(), 7)

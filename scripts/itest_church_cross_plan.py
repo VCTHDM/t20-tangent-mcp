@@ -12,12 +12,11 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 
 from _live_lock import live_lock_or_exit  # noqa: E402
-from _opening_retry import execute_opening_with_retry  # noqa: E402
 from t20_mcp.backends.file_ipc import FileIPCBackend  # noqa: E402
-from t20_mcp.tools.tangent import generate_lisp  # noqa: E402
+from t20_mcp.tools.tangent import execute_opening, generate_lisp  # noqa: E402
 
 
-DUMP_LISP = r'''
+DUMP_LISP = r"""
 (progn
   (setq t20mcp:ss (ssget "X"))
   (setq t20mcp:i 0 t20mcp:out "")
@@ -31,12 +30,12 @@ DUMP_LISP = r'''
               (cdr (assoc 8 t20mcp:ed)) "@@"))
     (setq t20mcp:i (1+ t20mcp:i)))
   t20mcp:out)
-'''
+"""
 
 
 async def tangent(backend: FileIPCBackend, operation: str, data: dict) -> bool:
     if operation in {"door", "window"}:
-        result = await execute_opening_with_retry(backend, operation, data)
+        result = await execute_opening(backend, operation, data)
     else:
         result = await backend.execute_lisp(generate_lisp(operation, data))
     print(f"  {operation:30s} {'OK' if result.ok else 'FAIL'}")
@@ -81,10 +80,10 @@ async def main() -> int:
 
     print("\n【内部空间】")
     internal = [
-        (5000, 4000, 13000, 4000),       # 门厅 / 中殿
-        (5000, 24500, 13000, 24500),     # 圣坛区
-        (3500, 15000, 3500, 23000),      # 西侧小礼拜堂
-        (14500, 15000, 14500, 23000),    # 东侧小礼拜堂
+        (5000, 4000, 13000, 4000),  # 门厅 / 中殿
+        (5000, 24500, 13000, 24500),  # 圣坛区
+        (3500, 15000, 3500, 23000),  # 西侧小礼拜堂
+        (14500, 15000, 14500, 23000),  # 东侧小礼拜堂
     ]
     for x1, y1, x2, y2 in internal:
         await tangent(backend, "wall", {"x1": x1, "y1": y1, "x2": x2, "y2": y2, **wall_data})
@@ -115,10 +114,17 @@ async def main() -> int:
         (9000, 30000, 2400, 2400, 1500),
     ]
     for x, y, width, height, sill in windows:
-        await tangent(backend, "window", {
-            "ins_x": x, "ins_y": y, "width": width,
-            "height": height, "sill_height": sill,
-        })
+        await tangent(
+            backend,
+            "window",
+            {
+                "ins_x": x,
+                "ins_y": y,
+                "width": width,
+                "height": height,
+                "sill_height": sill,
+            },
+        )
 
     print("\n【祭坛、长椅与空间名】")
     await backend.create_rectangle(7500, 27400, 10500, 28400, "FURNITURE")
@@ -148,10 +154,16 @@ async def main() -> int:
 
     print("\n【图名与指北针】")
     await tangent(backend, "north_arrow", {"pos_x": 21500, "pos_y": 23500})
-    await tangent(backend, "drawing_name", {
-        "ins_x": 9000, "ins_y": -4800,
-        "name_text": "十字形教堂首层平面图", "scale_text": "1:100",
-    })
+    await tangent(
+        backend,
+        "drawing_name",
+        {
+            "ins_x": 9000,
+            "ins_y": -4800,
+            "name_text": "十字形教堂首层平面图",
+            "scale_text": "1:100",
+        },
+    )
     await backend.execute_lisp('(progn (command "_.ZOOM" "_E") (princ))')
     await asyncio.sleep(1)
 

@@ -1,169 +1,162 @@
-"""真机脚本互斥锁 — Windows 上 AutoCAD/T20 是单命令通道, 真机 itest 并行会污染。
+"""真机脚本互斥锁。
 
-设计:
-- 锁文件: %TEMP%\\t20_mcp_live.lock (固定路径, 跨脚本共享)
-- 抢锁: O_CREAT|O_EXCL|O_WRONLY 原子创建; 失败则视为有人持锁。
-- 持锁内容: pid\\n<script_name>\\n<acquired_at_iso>\\n  (用于诊断)
-- stale 清理: 持锁文件里 pid 不存在 (Windows tasklist 找不到), 视为死锁, 删除 + 重试一次。
-- 释放: 仅当文件内 pid 等于自己 pid 才 unlink (防止误删别人的锁)。
-- 抢不到锁直接退出, 不阻塞等待 — 真机脚本运行时长不可预期, 阻塞会更糟。
+AutoCAD/T20 只有一条命令通道，真机 itest 并行运行会相互污染。本模块使用
+操作系统的非阻塞独占文件锁；锁随文件句柄或进程退出自动释放，不再依赖
+“读取 PID → 删除 stale 文件”的竞态协议。
 
-使用 (脚本顶层):
+诊断文件固定为 ``%TEMP%/t20_mcp_live.lock``，旁路 ``.guard`` 文件只承载
+操作系统锁。两者都会保留；是否持锁以操作系统锁为准。
+
+使用：
+
     from _live_lock import live_lock_or_exit
-    _lock = live_lock_or_exit(__file__)   # 抢不到就 sys.exit(2) + 提示
-    # 必须把返回值存到变量持有引用; 否则临时对象语句结束即析构, 立即释放锁。
 
-或显式 with:
+    _lock = live_lock_or_exit(__file__)
+
+也可以显式使用 context manager：
+
     from _live_lock import live_lock
+
     with live_lock(__file__):
         ...
-
-不要把这个模块塞进 src/t20_mcp/ — 必须脱离 t20_mcp 包独立运行,
-因为某些脚本 (例如 itest_19_mcp_stdio_smoke.py) 不把 src/ 加入 sys.path。
 """
 
 from __future__ import annotations
 
 import contextlib
-import datetime as _dt
+import datetime as dt
 import os
 import sys
 import tempfile
+from collections.abc import Iterator
 from pathlib import Path
-from typing import Iterator
+from typing import BinaryIO
 
 LOCK_PATH = Path(tempfile.gettempdir()) / "t20_mcp_live.lock"
 
 
-def _pid_alive(pid: int) -> bool:
-    """Windows-only: 用 tasklist 探测 pid 是否仍存在 (不依赖 psutil).
-    用 raw bytes 避免中文 Windows 上 tasklist 输出非 UTF-8 触发 decode error。"""
-    if pid <= 0:
-        return False
-    try:
-        import subprocess
-
-        out = subprocess.run(
-            ["tasklist", "/FI", f"PID eq {pid}", "/NH", "/FO", "CSV"],
-            capture_output=True, timeout=5, check=False,
-        )
-        # 进程在: stdout 含 b',"<pid>",'; 不在: 含 b"INFO: No tasks"
-        needle = f',"{pid}",'.encode("ascii")
-        return needle in (out.stdout or b"")
-    except Exception:
-        # 任何错误都保守地当作 alive, 避免误删别人的锁
-        return True
+def _guard_path() -> Path:
+    return LOCK_PATH.with_name(f"{LOCK_PATH.name}.guard")
 
 
 def _read_holder() -> tuple[int, str, str] | None:
+    """Read best-effort diagnostics from the lock file."""
     try:
         raw = LOCK_PATH.read_text(encoding="utf-8", errors="replace").strip()
     except (FileNotFoundError, OSError):
         return None
     parts = raw.split("\n", 2)
-    if len(parts) < 1:
-        return None
     try:
         pid = int(parts[0].strip())
-    except ValueError:
+    except (IndexError, ValueError):
         return None
     name = parts[1].strip() if len(parts) > 1 else "?"
     started = parts[2].strip() if len(parts) > 2 else "?"
     return pid, name, started
 
 
-def _try_create_locked(content: str) -> bool:
-    """O_EXCL 原子创建; True = 抢到, False = 已存在."""
-    flags = os.O_CREAT | os.O_EXCL | os.O_WRONLY
-    if hasattr(os, "O_BINARY"):
-        flags |= os.O_BINARY
+def _try_lock(stream: BinaryIO) -> bool:
+    """Acquire a one-byte non-blocking exclusive lock."""
+    stream.seek(0)
+    if os.name == "nt":
+        import msvcrt
+
+        try:
+            msvcrt.locking(stream.fileno(), msvcrt.LK_NBLCK, 1)
+        except OSError:
+            return False
+        return True
+
+    import fcntl
+
     try:
-        fd = os.open(LOCK_PATH, flags, 0o644)
-    except FileExistsError:
+        fcntl.flock(stream.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except OSError:
         return False
-    try:
-        os.write(fd, content.encode("utf-8"))
-    finally:
-        os.close(fd)
     return True
+
+
+def _unlock(stream: BinaryIO) -> None:
+    """Release the platform file lock."""
+    stream.seek(0)
+    if os.name == "nt":
+        import msvcrt
+
+        msvcrt.locking(stream.fileno(), msvcrt.LK_UNLCK, 1)
+        return
+
+    import fcntl
+
+    fcntl.flock(stream.fileno(), fcntl.LOCK_UN)
+
+
+def _write_holder(script_path: str | os.PathLike[str]) -> None:
+    payload = (
+        f"{os.getpid()}\n"
+        f"{Path(script_path).name}\n"
+        f"{dt.datetime.now(dt.UTC).isoformat(timespec='seconds')}\n"
+    )
+    LOCK_PATH.write_text(payload, encoding="utf-8", newline="\n")
 
 
 @contextlib.contextmanager
 def live_lock(script_path: str | os.PathLike[str]) -> Iterator[Path]:
-    """真机脚本互斥锁 context manager. 抢不到锁直接 raise RuntimeError."""
-    name = Path(script_path).name
-    my_pid = os.getpid()
-    started = _dt.datetime.now(_dt.timezone.utc).isoformat(timespec="seconds")
-    payload = f"{my_pid}\n{name}\n{started}\n"
+    """Acquire the shared live-test lock or raise ``RuntimeError`` immediately."""
+    LOCK_PATH.parent.mkdir(parents=True, exist_ok=True)
+    stream = _guard_path().open("a+b", buffering=0)
+    try:
+        # Windows byte-range locking requires the byte to exist before locking.
+        stream.seek(0, os.SEEK_END)
+        if stream.tell() == 0:
+            stream.write(b"\0")
+            stream.flush()
 
-    if not _try_create_locked(payload):
-        # 已被别人持有 — 看是不是 stale
-        holder = _read_holder()
-        if holder is not None:
-            holder_pid, holder_name, holder_started = holder
-            if not _pid_alive(holder_pid):
-                # stale: 旧脚本进程不在了, 清理并重试一次
-                try:
-                    LOCK_PATH.unlink()
-                except OSError:
-                    pass
-                if not _try_create_locked(payload):
-                    raise RuntimeError(
-                        f"t20_mcp live lock contended even after stale cleanup: "
-                        f"someone else just acquired it"
-                    )
+        if not _try_lock(stream):
+            holder = _read_holder()
+            if holder is None:
+                detail = f"at {LOCK_PATH}; holder diagnostics unavailable"
             else:
-                raise RuntimeError(
-                    f"t20_mcp live lock held by pid={holder_pid} "
-                    f"script={holder_name!r} since {holder_started}; "
-                    f"refuse to run {name!r} concurrently. "
-                    f"If you are sure no other live test is running, "
-                    f"delete {LOCK_PATH} and retry."
-                )
-        else:
-            raise RuntimeError(
-                f"t20_mcp live lock at {LOCK_PATH} exists but is unreadable; "
-                f"refuse to run. Inspect or delete it manually."
-            )
+                pid, name, started = holder
+                detail = f"held by pid={pid} script={name!r} since {started}"
+            raise RuntimeError(f"t20_mcp live lock {detail}")
 
-    try:
-        yield LOCK_PATH
+        _write_holder(script_path)
+        try:
+            yield LOCK_PATH
+        finally:
+            _unlock(stream)
     finally:
-        # 仅当 lock 仍是我们的才 unlink
-        holder = _read_holder()
-        if holder is not None and holder[0] == my_pid:
-            try:
-                LOCK_PATH.unlink()
-            except OSError:
-                pass
+        stream.close()
 
 
-def live_lock_or_exit(script_path: str | os.PathLike[str]) -> "_LockHandle":
-    """脚本入口便捷函数: 抢不到就 sys.exit(2) + 提示, 抢到了返回一个对象,
-    保持引用直到脚本结束 (析构时释放)."""
-    name = Path(script_path).name
+def live_lock_or_exit(script_path: str | os.PathLike[str]) -> _LockHandle:
+    """Acquire the lock; on contention print a diagnostic and exit with code 2."""
     try:
-        cm = live_lock(script_path)
-        path = cm.__enter__()
-    except RuntimeError as e:
-        print(f"[live_lock] {e}", file=sys.stderr)
-        sys.exit(2)
-    return _LockHandle(cm)
+        manager = live_lock(script_path)
+        manager.__enter__()
+    except RuntimeError as exc:
+        print(f"[live_lock] {exc}", file=sys.stderr)
+        raise SystemExit(2) from exc
+    return _LockHandle(manager)
 
 
 class _LockHandle:
-    def __init__(self, cm):
-        self._cm = cm
+    def __init__(self, manager: contextlib.AbstractContextManager[Path]) -> None:
+        self._manager: contextlib.AbstractContextManager[Path] | None = manager
 
     def release(self) -> None:
-        if self._cm is not None:
+        if self._manager is not None:
             try:
-                self._cm.__exit__(None, None, None)
+                self._manager.__exit__(None, None, None)
             finally:
-                self._cm = None
+                self._manager = None
 
-    def __del__(self):
-        self.release()
+    def __del__(self) -> None:
+        try:
+            self.release()
+        except Exception:
+            # Interpreter shutdown can tear down I/O modules before __del__.
+            pass
 
 
 __all__ = ["LOCK_PATH", "live_lock", "live_lock_or_exit"]

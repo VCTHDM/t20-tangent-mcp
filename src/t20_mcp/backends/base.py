@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Any
 
 
@@ -15,7 +15,7 @@ class CommandResult:
     payload: Any = None
     error: str | None = None
 
-    def to_dict(self) -> dict:
+    def to_dict(self) -> dict[str, Any]:
         d: dict[str, Any] = {"ok": self.ok}
         if self.ok:
             d["payload"] = self.payload
@@ -104,25 +104,57 @@ class AutoCADBackend(ABC):
 
     # --- Entity operations ---
 
-    async def create_line(self, x1: float, y1: float, x2: float, y2: float, layer: str | None = None) -> CommandResult:
+    async def create_line(
+        self, x1: float, y1: float, x2: float, y2: float, layer: str | None = None
+    ) -> CommandResult:
         return CommandResult(ok=False, error="Not supported on this backend")
 
-    async def create_circle(self, cx: float, cy: float, radius: float, layer: str | None = None) -> CommandResult:
+    async def create_circle(
+        self, cx: float, cy: float, radius: float, layer: str | None = None
+    ) -> CommandResult:
         return CommandResult(ok=False, error="Not supported on this backend")
 
-    async def create_polyline(self, points: list[list[float]], closed: bool = False, layer: str | None = None) -> CommandResult:
+    async def create_polyline(
+        self, points: list[list[float]], closed: bool = False, layer: str | None = None
+    ) -> CommandResult:
         return CommandResult(ok=False, error="Not supported on this backend")
 
-    async def create_rectangle(self, x1: float, y1: float, x2: float, y2: float, layer: str | None = None) -> CommandResult:
+    async def create_rectangle(
+        self, x1: float, y1: float, x2: float, y2: float, layer: str | None = None
+    ) -> CommandResult:
         return CommandResult(ok=False, error="Not supported on this backend")
 
-    async def create_arc(self, cx: float, cy: float, radius: float, start_angle: float, end_angle: float, layer: str | None = None) -> CommandResult:
+    async def create_arc(
+        self,
+        cx: float,
+        cy: float,
+        radius: float,
+        start_angle: float,
+        end_angle: float,
+        layer: str | None = None,
+    ) -> CommandResult:
         return CommandResult(ok=False, error="Not supported on this backend")
 
-    async def create_ellipse(self, cx: float, cy: float, major_x: float, major_y: float, ratio: float, layer: str | None = None) -> CommandResult:
+    async def create_ellipse(
+        self,
+        cx: float,
+        cy: float,
+        major_x: float,
+        major_y: float,
+        ratio: float,
+        layer: str | None = None,
+    ) -> CommandResult:
         return CommandResult(ok=False, error="Not supported on this backend")
 
-    async def create_mtext(self, x: float, y: float, width: float, text: str, height: float = 2.5, layer: str | None = None) -> CommandResult:
+    async def create_mtext(
+        self,
+        x: float,
+        y: float,
+        width: float,
+        text: str,
+        height: float = 2.5,
+        layer: str | None = None,
+    ) -> CommandResult:
         return CommandResult(ok=False, error="Not supported on this backend")
 
     async def create_hatch(self, entity_id: str, pattern: str = "ANSI31") -> CommandResult:
@@ -146,25 +178,35 @@ class AutoCADBackend(ABC):
     async def entity_move(self, entity_id: str, dx: float, dy: float) -> CommandResult:
         return CommandResult(ok=False, error="Not supported on this backend")
 
-    async def entity_rotate(self, entity_id: str, cx: float, cy: float, angle: float) -> CommandResult:
+    async def entity_rotate(
+        self, entity_id: str, cx: float, cy: float, angle: float
+    ) -> CommandResult:
         return CommandResult(ok=False, error="Not supported on this backend")
 
-    async def entity_scale(self, entity_id: str, cx: float, cy: float, factor: float) -> CommandResult:
+    async def entity_scale(
+        self, entity_id: str, cx: float, cy: float, factor: float
+    ) -> CommandResult:
         return CommandResult(ok=False, error="Not supported on this backend")
 
-    async def entity_mirror(self, entity_id: str, x1: float, y1: float, x2: float, y2: float) -> CommandResult:
+    async def entity_mirror(
+        self, entity_id: str, x1: float, y1: float, x2: float, y2: float
+    ) -> CommandResult:
         return CommandResult(ok=False, error="Not supported on this backend")
 
     async def entity_offset(self, entity_id: str, distance: float) -> CommandResult:
         return CommandResult(ok=False, error="Not supported on this backend")
 
-    async def entity_array(self, entity_id: str, rows: int, cols: int, row_dist: float, col_dist: float) -> CommandResult:
+    async def entity_array(
+        self, entity_id: str, rows: int, cols: int, row_dist: float, col_dist: float
+    ) -> CommandResult:
         return CommandResult(ok=False, error="Not supported on this backend")
 
     async def entity_fillet(self, entity_id1: str, entity_id2: str, radius: float) -> CommandResult:
         return CommandResult(ok=False, error="Not supported on this backend")
 
-    async def entity_chamfer(self, entity_id1: str, entity_id2: str, dist1: float, dist2: float) -> CommandResult:
+    async def entity_chamfer(
+        self, entity_id1: str, entity_id2: str, dist1: float, dist2: float
+    ) -> CommandResult:
         return CommandResult(ok=False, error="Not supported on this backend")
 
     # --- Layer operations ---
@@ -172,13 +214,21 @@ class AutoCADBackend(ABC):
     async def layer_list(self) -> CommandResult:
         return CommandResult(ok=False, error="Not supported on this backend")
 
-    async def layer_create(self, name: str, color: str | int = "white", linetype: str = "CONTINUOUS") -> CommandResult:
+    async def layer_create(
+        self, name: str, color: str | int = "white", linetype: str = "CONTINUOUS"
+    ) -> CommandResult:
         return CommandResult(ok=False, error="Not supported on this backend")
 
     async def layer_set_current(self, name: str) -> CommandResult:
         return CommandResult(ok=False, error="Not supported on this backend")
 
-    async def layer_set_properties(self, name: str, color: str | int | None = None, linetype: str | None = None, lineweight: str | None = None) -> CommandResult:
+    async def layer_set_properties(
+        self,
+        name: str,
+        color: str | int | None = None,
+        linetype: str | None = None,
+        lineweight: str | None = None,
+    ) -> CommandResult:
         return CommandResult(ok=False, error="Not supported on this backend")
 
     async def layer_freeze(self, name: str) -> CommandResult:
@@ -198,10 +248,26 @@ class AutoCADBackend(ABC):
     async def block_list(self) -> CommandResult:
         return CommandResult(ok=False, error="Not supported on this backend")
 
-    async def block_insert(self, name: str, x: float, y: float, scale: float = 1.0, rotation: float = 0.0, block_id: str | None = None) -> CommandResult:
+    async def block_insert(
+        self,
+        name: str,
+        x: float,
+        y: float,
+        scale: float = 1.0,
+        rotation: float = 0.0,
+        block_id: str | None = None,
+    ) -> CommandResult:
         return CommandResult(ok=False, error="Not supported on this backend")
 
-    async def block_insert_with_attributes(self, name: str, x: float, y: float, scale: float = 1.0, rotation: float = 0.0, attributes: dict[str, str] | None = None) -> CommandResult:
+    async def block_insert_with_attributes(
+        self,
+        name: str,
+        x: float,
+        y: float,
+        scale: float = 1.0,
+        rotation: float = 0.0,
+        attributes: dict[str, str] | None = None,
+    ) -> CommandResult:
         return CommandResult(ok=False, error="Not supported on this backend")
 
     async def block_get_attributes(self, entity_id: str) -> CommandResult:
@@ -215,19 +281,35 @@ class AutoCADBackend(ABC):
 
     # --- Annotation ---
 
-    async def create_text(self, x: float, y: float, text: str, height: float = 2.5, rotation: float = 0.0, layer: str | None = None) -> CommandResult:
+    async def create_text(
+        self,
+        x: float,
+        y: float,
+        text: str,
+        height: float = 2.5,
+        rotation: float = 0.0,
+        layer: str | None = None,
+    ) -> CommandResult:
         return CommandResult(ok=False, error="Not supported on this backend")
 
-    async def create_dimension_linear(self, x1: float, y1: float, x2: float, y2: float, dim_x: float, dim_y: float) -> CommandResult:
+    async def create_dimension_linear(
+        self, x1: float, y1: float, x2: float, y2: float, dim_x: float, dim_y: float
+    ) -> CommandResult:
         return CommandResult(ok=False, error="Not supported on this backend")
 
-    async def create_dimension_aligned(self, x1: float, y1: float, x2: float, y2: float, offset: float) -> CommandResult:
+    async def create_dimension_aligned(
+        self, x1: float, y1: float, x2: float, y2: float, offset: float
+    ) -> CommandResult:
         return CommandResult(ok=False, error="Not supported on this backend")
 
-    async def create_dimension_angular(self, cx: float, cy: float, x1: float, y1: float, x2: float, y2: float) -> CommandResult:
+    async def create_dimension_angular(
+        self, cx: float, cy: float, x1: float, y1: float, x2: float, y2: float
+    ) -> CommandResult:
         return CommandResult(ok=False, error="Not supported on this backend")
 
-    async def create_dimension_radius(self, cx: float, cy: float, radius: float, angle: float) -> CommandResult:
+    async def create_dimension_radius(
+        self, cx: float, cy: float, radius: float, angle: float
+    ) -> CommandResult:
         return CommandResult(ok=False, error="Not supported on this backend")
 
     async def create_leader(self, points: list[list[float]], text: str) -> CommandResult:
@@ -238,37 +320,82 @@ class AutoCADBackend(ABC):
     async def pid_setup_layers(self) -> CommandResult:
         return CommandResult(ok=False, error="Not supported on this backend")
 
-    async def pid_insert_symbol(self, category: str, symbol: str, x: float, y: float, scale: float = 1.0, rotation: float = 0.0) -> CommandResult:
+    async def pid_insert_symbol(
+        self,
+        category: str,
+        symbol: str,
+        x: float,
+        y: float,
+        scale: float = 1.0,
+        rotation: float = 0.0,
+    ) -> CommandResult:
         return CommandResult(ok=False, error="Not supported on this backend")
 
     async def pid_list_symbols(self, category: str) -> CommandResult:
         return CommandResult(ok=False, error="Not supported on this backend")
 
-    async def pid_draw_process_line(self, x1: float, y1: float, x2: float, y2: float) -> CommandResult:
+    async def pid_draw_process_line(
+        self, x1: float, y1: float, x2: float, y2: float
+    ) -> CommandResult:
         return CommandResult(ok=False, error="Not supported on this backend")
 
-    async def pid_connect_equipment(self, x1: float, y1: float, x2: float, y2: float) -> CommandResult:
+    async def pid_connect_equipment(
+        self, x1: float, y1: float, x2: float, y2: float
+    ) -> CommandResult:
         return CommandResult(ok=False, error="Not supported on this backend")
 
     async def pid_add_flow_arrow(self, x: float, y: float, rotation: float = 0.0) -> CommandResult:
         return CommandResult(ok=False, error="Not supported on this backend")
 
-    async def pid_add_equipment_tag(self, x: float, y: float, tag: str, description: str = "") -> CommandResult:
+    async def pid_add_equipment_tag(
+        self, x: float, y: float, tag: str, description: str = ""
+    ) -> CommandResult:
         return CommandResult(ok=False, error="Not supported on this backend")
 
-    async def pid_add_line_number(self, x: float, y: float, line_num: str, spec: str) -> CommandResult:
+    async def pid_add_line_number(
+        self, x: float, y: float, line_num: str, spec: str
+    ) -> CommandResult:
         return CommandResult(ok=False, error="Not supported on this backend")
 
-    async def pid_insert_valve(self, x: float, y: float, valve_type: str, rotation: float = 0.0, attributes: dict[str, str] | None = None) -> CommandResult:
+    async def pid_insert_valve(
+        self,
+        x: float,
+        y: float,
+        valve_type: str,
+        rotation: float = 0.0,
+        attributes: dict[str, str] | None = None,
+    ) -> CommandResult:
         return CommandResult(ok=False, error="Not supported on this backend")
 
-    async def pid_insert_instrument(self, x: float, y: float, instrument_type: str, rotation: float = 0.0, tag_id: str = "", range_value: str = "") -> CommandResult:
+    async def pid_insert_instrument(
+        self,
+        x: float,
+        y: float,
+        instrument_type: str,
+        rotation: float = 0.0,
+        tag_id: str = "",
+        range_value: str = "",
+    ) -> CommandResult:
         return CommandResult(ok=False, error="Not supported on this backend")
 
-    async def pid_insert_pump(self, x: float, y: float, pump_type: str, rotation: float = 0.0, attributes: dict[str, str] | None = None) -> CommandResult:
+    async def pid_insert_pump(
+        self,
+        x: float,
+        y: float,
+        pump_type: str,
+        rotation: float = 0.0,
+        attributes: dict[str, str] | None = None,
+    ) -> CommandResult:
         return CommandResult(ok=False, error="Not supported on this backend")
 
-    async def pid_insert_tank(self, x: float, y: float, tank_type: str, scale: float = 1.0, attributes: dict[str, str] | None = None) -> CommandResult:
+    async def pid_insert_tank(
+        self,
+        x: float,
+        y: float,
+        tank_type: str,
+        scale: float = 1.0,
+        attributes: dict[str, str] | None = None,
+    ) -> CommandResult:
         return CommandResult(ok=False, error="Not supported on this backend")
 
     # --- View ---

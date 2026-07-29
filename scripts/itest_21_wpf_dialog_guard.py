@@ -135,12 +135,8 @@ async def probe_dialog_command(backend: FileIPCBackend, command: str) -> dict:
             break
     if backend._command_hwnd:
         for _ in range(2):
-            win32gui.PostMessage(
-                backend._command_hwnd, win32con.WM_KEYDOWN, win32con.VK_ESCAPE, 0
-            )
-            win32gui.PostMessage(
-                backend._command_hwnd, win32con.WM_KEYUP, win32con.VK_ESCAPE, 0
-            )
+            win32gui.PostMessage(backend._command_hwnd, win32con.WM_KEYDOWN, win32con.VK_ESCAPE, 0)
+            win32gui.PostMessage(backend._command_hwnd, win32con.WM_KEYUP, win32con.VK_ESCAPE, 0)
     try:
         result = await asyncio.wait_for(task, timeout=20.0)
         outcome["lisp_result"] = f"ok={result.ok} error={result.error!r}"

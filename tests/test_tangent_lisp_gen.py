@@ -17,8 +17,8 @@ from t20_mcp.tools.tangent import (
     EXECUTE_DISABLED_SUBCOMMANDS,
     LOW_CONFIDENCE_SUBCOMMANDS,
     LOW_CONFIDENCE_WARNINGS,
-    ParamError,
     SUBCOMMANDS,
+    ParamError,
     _render,
     _strip_line_comments,
     generate_lisp,
@@ -39,16 +39,29 @@ VALID_CASES: dict[str, dict] = {
         "layer": "AXIS",
     },
     "wall": {
-        "x1": 0, "y1": 0, "x2": 6000, "y2": 0,
-        "left_width": 120, "right_width": 120, "height": 3000,
-        "wall_type": "砖墙", "layer": "WALL",
+        "x1": 0,
+        "y1": 0,
+        "x2": 6000,
+        "y2": 0,
+        "left_width": 120,
+        "right_width": 120,
+        "height": 3000,
+        "wall_type": "砖墙",
+        "layer": "WALL",
     },
     "door": {"ins_x": 1500, "ins_y": 0, "width": 900, "height": 2100},
     "window": {"ins_x": 3000, "ins_y": 0, "width": 1500, "height": 1500, "sill_height": 900},
     "dimension": {"p1_x": 0, "p1_y": 0, "p2_x": 6000, "p2_y": 0},
     "wall_thickness_dimension": {"p1_x": 1500, "p1_y": -500, "p2_x": 1500, "p2_y": 500},
     "opening_dimension": {"p1_x": -200, "p1_y": 600, "p2_x": 3200, "p2_y": 600},
-    "two_point_dimension": {"p1_x": -1000, "p1_y": 0, "p2_x": 7000, "p2_y": 0, "pos_x": 3000, "pos_y": 1500},
+    "two_point_dimension": {
+        "p1_x": -1000,
+        "p1_y": 0,
+        "p2_x": 7000,
+        "p2_y": 0,
+        "pos_x": 3000,
+        "pos_y": 1500,
+    },
     "elevation": {"base_x": 0, "base_y": 0, "label_x": 1000, "label_y": 1000, "text": "3.000"},
     "coordinate": {"point_x": 1234, "point_y": 5678, "label_x": 1234, "label_y": 6678},
     "symmetry": {"x1": 0, "y1": 0, "x2": 0, "y2": 3000},
@@ -62,8 +75,15 @@ VALID_CASES: dict[str, dict] = {
     "step": {"points": [[0, 0], [3000, 0], [3000, 600], [0, 600]]},
     "ramp": {"x": 0, "y": 0},
     "arrow": {"x1": 0, "y1": 0, "x2": 2000, "y2": 0, "text": "见详图", "text2": "1:20"},
-    "column": {"x": 20000, "y": 15000, "height": 3300, "rotation": 45,
-               "sec_w": 500, "sec_h": 400, "material": "钢筋砼"},
+    "column": {
+        "x": 20000,
+        "y": 15000,
+        "height": 3300,
+        "rotation": 45,
+        "sec_w": 500,
+        "sec_h": 400,
+        "material": "钢筋砼",
+    },
     "rect_roof": {"x1": 0, "y1": 0, "x2": 6000, "y2": 0, "x3": 6000, "y3": 4000},
     "cusp_roof": {"center_x": 3000, "center_y": 3000, "base_x": 6000, "base_y": 3000},
     "insight": {"x": 0, "y": 0},
@@ -84,23 +104,29 @@ VALID_CASES: dict[str, dict] = {
 
 
 class TestParenBalance:
-    @pytest.mark.parametrize("code", [
-        "(a (b c) d)",
-        "()",
-        "",
-        '(princ "())(")',          # 括号在字符串内, 应忽略
-        "(setq x 1) ; (注释里的括号)",  # 括号在注释内, 应忽略
-        '(strcat "he said \\"(\\"")',  # 转义引号
-    ])
+    @pytest.mark.parametrize(
+        "code",
+        [
+            "(a (b c) d)",
+            "()",
+            "",
+            '(princ "())(")',  # 括号在字符串内, 应忽略
+            "(setq x 1) ; (注释里的括号)",  # 括号在注释内, 应忽略
+            '(strcat "he said \\"(\\"")',  # 转义引号
+        ],
+    )
     def test_balanced(self, code: str) -> None:
         assert is_paren_balanced(code) is True
 
-    @pytest.mark.parametrize("code", [
-        "(a (b c) d",   # 缺右括号
-        "(a)) ",        # 多右括号
-        ")(",           # 顺序错误
-        '(princ "未闭合字符串)',  # 字符串未闭合
-    ])
+    @pytest.mark.parametrize(
+        "code",
+        [
+            "(a (b c) d",  # 缺右括号
+            "(a)) ",  # 多右括号
+            ")(",  # 顺序错误
+            '(princ "未闭合字符串)',  # 字符串未闭合
+        ],
+    )
     def test_unbalanced(self, code: str) -> None:
         assert is_paren_balanced(code) is False
 
@@ -165,11 +191,17 @@ class TestParamInjection:
         # axis_lines 使用 LINE 段而非 t20mcp:pt 点序列
         # (历史名 test_axis_grid_*: axis_grid 子命令已在 slimming 提交 441e890 中移除,
         #  当前仅保留 axis_lines 普通 LINE 轴网替代路径)
-        code = generate_lisp("axis_lines", {
-            "base_x": 100, "base_y": 200,
-            "hspacings": [3000, 3600], "vspacings": [4500],
-            "angle": 30, "layer": "AXIS",
-        })
+        code = generate_lisp(
+            "axis_lines",
+            {
+                "base_x": 100,
+                "base_y": 200,
+                "hspacings": [3000, 3600],
+                "vspacings": [4500],
+                "angle": 30,
+                "layer": "AXIS",
+            },
+        )
         assert '"_.-LAYER" "_M" "AXIS"' in code
         assert '"LINE"' in code
         assert "list" in code  # LINE 段用 (list x1 y1 x2 y2) 形式
@@ -177,11 +209,17 @@ class TestParamInjection:
         assert "{{" not in _strip_line_comments(code)
 
     def test_axis_lines_injects_line_segments(self) -> None:
-        code = generate_lisp("axis_lines", {
-            "base_x": 100, "base_y": 200,
-            "hspacings": [3000], "vspacings": [4500],
-            "angle": 0, "layer": "AXIS",
-        })
+        code = generate_lisp(
+            "axis_lines",
+            {
+                "base_x": 100,
+                "base_y": 200,
+                "hspacings": [3000],
+                "vspacings": [4500],
+                "angle": 0,
+                "layer": "AXIS",
+            },
+        )
         assert '"LINE"' in code
         assert "(list 100 200 100 4700)" in code
         assert "(list 3100 200 3100 4700)" in code
@@ -190,20 +228,33 @@ class TestParamInjection:
         assert "{{" not in _strip_line_comments(code)
 
     def test_axis_lines_applies_rotation(self) -> None:
-        code = generate_lisp("axis_lines", {
-            "base_x": 0, "base_y": 0,
-            "hspacings": [1000], "vspacings": [1000],
-            "angle": 90,
-        })
+        code = generate_lisp(
+            "axis_lines",
+            {
+                "base_x": 0,
+                "base_y": 0,
+                "hspacings": [1000],
+                "vspacings": [1000],
+                "angle": 90,
+            },
+        )
         assert "(list 0 0 -1000 0)" in code
         assert "(list 0 1000 -1000 1000)" in code
 
     def test_wall_injects_endpoints_and_widths(self) -> None:
         # 真机验证后的 wall 路线: TGWALL 两点画墙 + ActiveX 属性注入宽/高
-        code = generate_lisp("wall", {
-            "x1": 0, "y1": 0, "x2": 6000, "y2": 1200,
-            "left_width": 100, "right_width": 140, "height": 2900,
-        })
+        code = generate_lisp(
+            "wall",
+            {
+                "x1": 0,
+                "y1": 0,
+                "x2": 6000,
+                "y2": 1200,
+                "left_width": 100,
+                "right_width": 140,
+                "height": 2900,
+            },
+        )
         assert "t20mcp:pt 0 0" in code
         assert "t20mcp:pt 6000 1200" in code
         assert '"TGWALL"' in code
@@ -213,19 +264,32 @@ class TestParamInjection:
 
     def test_dimension_uses_tdimmp_pos_first(self) -> None:
         # 真机验证: TDIMMP, 顺序 = 尺寸线位置点 -> 点1 -> 点2 -> 回车
-        code = generate_lisp("dimension", {
-            "p1_x": 0, "p1_y": 0, "p2_x": 6000, "p2_y": 0,
-            "pos_x": 3000, "pos_y": 1000,
-        })
+        code = generate_lisp(
+            "dimension",
+            {
+                "p1_x": 0,
+                "p1_y": 0,
+                "p2_x": 6000,
+                "p2_y": 0,
+                "pos_x": 3000,
+                "pos_y": 1000,
+            },
+        )
         assert '"TDIMMP"' in code
         pos = code.index("t20mcp:pt 3000 1000")
         p1 = code.index("t20mcp:pt 0 0")
         assert pos < p1  # 位置点在标注点之前
 
     def test_wall_thickness_dimension_uses_tdimwall_two_points(self) -> None:
-        code = generate_lisp("wall_thickness_dimension", {
-            "p1_x": 1500, "p1_y": -500, "p2_x": 1500, "p2_y": 500,
-        })
+        code = generate_lisp(
+            "wall_thickness_dimension",
+            {
+                "p1_x": 1500,
+                "p1_y": -500,
+                "p2_x": 1500,
+                "p2_y": 500,
+            },
+        )
         assert '"TDIMWALL"' in code
         assert "t20mcp:pt 1500 -500" in code
         assert "t20mcp:pt 1500 500" in code
@@ -239,19 +303,31 @@ class TestParamInjection:
         assert "vla-delete" in door
 
     def test_opening_dimension_uses_tdim3_line_select(self) -> None:
-        code = generate_lisp("opening_dimension", {
-            "p1_x": -200, "p1_y": 600, "p2_x": 3200, "p2_y": 600,
-        })
+        code = generate_lisp(
+            "opening_dimension",
+            {
+                "p1_x": -200,
+                "p1_y": 600,
+                "p2_x": 3200,
+                "p2_y": 600,
+            },
+        )
         assert '"TDIM3"' in code
         assert "t20mcp:pt -200 600" in code
         assert "t20mcp:pt 3200 600" in code
 
     def test_two_point_dimension_uses_tdimtp_sequence(self) -> None:
-        code = generate_lisp("two_point_dimension", {
-            "p1_x": -1000, "p1_y": 0,
-            "p2_x": 7000, "p2_y": 0,
-            "pos_x": 3000, "pos_y": 1500,
-        })
+        code = generate_lisp(
+            "two_point_dimension",
+            {
+                "p1_x": -1000,
+                "p1_y": 0,
+                "p2_x": 7000,
+                "p2_y": 0,
+                "pos_x": 3000,
+                "pos_y": 1500,
+            },
+        )
         assert '"TDIMTP"' in code
         p1 = code.index("t20mcp:pt -1000 0")
         p2 = code.index("t20mcp:pt 7000 0")
@@ -262,9 +338,15 @@ class TestParamInjection:
 
     def test_elevation_uses_tmelev_two_points(self) -> None:
         # TMElev 真机试验: 双点序列可生成 TCH_ELEVATION; 单点序列会挂起等待输入。
-        code = generate_lisp("elevation", {
-            "base_x": 0, "base_y": 0, "label_x": 1000, "label_y": 1000,
-        })
+        code = generate_lisp(
+            "elevation",
+            {
+                "base_x": 0,
+                "base_y": 0,
+                "label_x": 1000,
+                "label_y": 1000,
+            },
+        )
         assert '"TMELEV"' in code
         base = code.index("t20mcp:pt 0 0")
         label = code.index("t20mcp:pt 1000 1000")
@@ -273,9 +355,15 @@ class TestParamInjection:
 
     def test_coordinate_uses_tcoord_two_points(self) -> None:
         # TCoord 真机试验: 标注点 -> 坐标标注方向点 -> 回车, 生成 TCH_COORD。
-        code = generate_lisp("coordinate", {
-            "point_x": 1234, "point_y": 5678, "label_x": 1234, "label_y": 6678,
-        })
+        code = generate_lisp(
+            "coordinate",
+            {
+                "point_x": 1234,
+                "point_y": 5678,
+                "label_x": 1234,
+                "label_y": 6678,
+            },
+        )
         assert '"TCOORD"' in code
         point = code.index("t20mcp:pt 1234 5678")
         label = code.index("t20mcp:pt 1234 6678")
@@ -325,9 +413,17 @@ class TestParamInjection:
 
     def test_section_symbol_uses_tsection_three_points(self) -> None:
         # TSection 真机试验: 第一剖切点 -> 第二剖切点 -> 剖视方向 -> 回车, 生成 TCH_SYMB_SECTION。
-        code = generate_lisp("section_symbol", {
-            "x1": 0, "y1": 0, "x2": 3000, "y2": 0, "dir_x": 1500, "dir_y": -1000,
-        })
+        code = generate_lisp(
+            "section_symbol",
+            {
+                "x1": 0,
+                "y1": 0,
+                "x2": 3000,
+                "y2": 0,
+                "dir_x": 1500,
+                "dir_y": -1000,
+            },
+        )
         assert '"TSECTION"' in code
         p1 = code.index("t20mcp:pt 0 0")
         p2 = code.index("t20mcp:pt 3000 0")
@@ -398,9 +494,15 @@ class TestParamInjection:
     # --- 标注文本 COM 注入 (Handoff 35: itest_40 真机验证可写) ---
 
     def test_drawing_name_injects_nametext_and_scaletext(self) -> None:
-        code = generate_lisp("drawing_name", {
-            "ins_x": 0, "ins_y": 0, "name_text": "一层平面图", "scale_text": "1:50",
-        })
+        code = generate_lisp(
+            "drawing_name",
+            {
+                "ins_x": 0,
+                "ins_y": 0,
+                "name_text": "一层平面图",
+                "scale_text": "1:50",
+            },
+        )
         assert '(list t20mcp:obj "NameText" "一层平面图")' in code
         assert '(list t20mcp:obj "ScaleText" "1:50")' in code
         assert "vlax-put-property" in code
@@ -410,9 +512,17 @@ class TestParamInjection:
         assert "vlax-put-property" not in code
 
     def test_arrow_injects_text_and_text2(self) -> None:
-        code = generate_lisp("arrow", {
-            "x1": 0, "y1": 0, "x2": 2000, "y2": 0, "text": "做法见详图", "text2": "1:20",
-        })
+        code = generate_lisp(
+            "arrow",
+            {
+                "x1": 0,
+                "y1": 0,
+                "x2": 2000,
+                "y2": 0,
+                "text": "做法见详图",
+                "text2": "1:20",
+            },
+        )
         assert '(list t20mcp:obj "Text" "做法见详图")' in code
         assert '(list t20mcp:obj "Text2" "1:20")' in code
 
@@ -456,21 +566,34 @@ class TestParamInjection:
         with pytest.raises(ParamError, match="material"):
             generate_lisp("column", {"x": 0, "y": 0, "material": 123})
 
-    @pytest.mark.parametrize("field,value", [
-        ("height", 0), ("height", 200_000),
-        ("rotation", 361), ("rotation", -361),
-        ("sec_w", 0), ("sec_w", 50_000),
-        ("sec_h", 0),
-    ])
+    @pytest.mark.parametrize(
+        "field,value",
+        [
+            ("height", 0),
+            ("height", 200_000),
+            ("rotation", 361),
+            ("rotation", -361),
+            ("sec_w", 0),
+            ("sec_w", 50_000),
+            ("sec_h", 0),
+        ],
+    )
     def test_column_out_of_range_rejected(self, field: str, value: float) -> None:
         with pytest.raises(ParamError):
             generate_lisp("column", {"x": 0, "y": 0, field: value})
 
     def test_label_text_quotes_are_escaped(self) -> None:
         # 文本内的双引号必须转义, 不能逃逸出 LISP 字符串字面量。
-        code = generate_lisp("arrow", {
-            "x1": 0, "y1": 0, "x2": 2000, "y2": 0, "text": '打"引号"的文字',
-        })
+        code = generate_lisp(
+            "arrow",
+            {
+                "x1": 0,
+                "y1": 0,
+                "x2": 2000,
+                "y2": 0,
+                "text": '打"引号"的文字',
+            },
+        )
         assert '\\"引号\\"' in code
         assert is_paren_balanced(code)
 
@@ -566,7 +689,7 @@ class TestParamInjection:
         # 整数值不应带小数点; 小数值应保留
         code = generate_lisp("door", {"ins_x": 1500.0, "ins_y": 0, "width": 912.5, "height": 2100})
         assert "t20mcp:pt 1500 0" in code  # 1500.0 -> 1500
-        assert "912.5" in code             # 保留小数
+        assert "912.5" in code  # 保留小数
 
     def test_no_layer_means_no_layer_command(self) -> None:
         code = generate_lisp("door", {"ins_x": 1500, "ins_y": 0})
@@ -574,10 +697,16 @@ class TestParamInjection:
 
     def test_layer_name_injection_balanced(self) -> None:
         # 图层名含特殊字符不应破坏平衡
-        code = generate_lisp("wall", {
-            "x1": 0, "y1": 0, "x2": 1000, "y2": 0,
-            "layer": 'WALL"X',
-        })
+        code = generate_lisp(
+            "wall",
+            {
+                "x1": 0,
+                "y1": 0,
+                "x2": 1000,
+                "y2": 0,
+                "layer": 'WALL"X',
+            },
+        )
         assert is_paren_balanced(code)
 
 
@@ -622,22 +751,36 @@ class TestInvalidParamsRejected:
         with pytest.raises(ParamError):
             generate_lisp("dimension", {"p1_x": 1, "p1_y": 1, "p2_x": 1, "p2_y": 1})
 
-    @pytest.mark.parametrize("operation", ["wall_thickness_dimension", "opening_dimension", "two_point_dimension"])
+    @pytest.mark.parametrize(
+        "operation", ["wall_thickness_dimension", "opening_dimension", "two_point_dimension"]
+    )
     def test_two_point_dimension_coincident_points_rejected(self, operation: str) -> None:
         with pytest.raises(ParamError):
             generate_lisp(operation, {"p1_x": 1, "p1_y": 1, "p2_x": 1, "p2_y": 1})
 
     def test_elevation_coincident_points_rejected(self) -> None:
         with pytest.raises(ParamError):
-            generate_lisp("elevation", {
-                "base_x": 1, "base_y": 1, "label_x": 1, "label_y": 1,
-            })
+            generate_lisp(
+                "elevation",
+                {
+                    "base_x": 1,
+                    "base_y": 1,
+                    "label_x": 1,
+                    "label_y": 1,
+                },
+            )
 
     def test_coordinate_coincident_points_rejected(self) -> None:
         with pytest.raises(ParamError):
-            generate_lisp("coordinate", {
-                "point_x": 1, "point_y": 1, "label_x": 1, "label_y": 1,
-            })
+            generate_lisp(
+                "coordinate",
+                {
+                    "point_x": 1,
+                    "point_y": 1,
+                    "label_x": 1,
+                    "label_y": 1,
+                },
+            )
 
     def test_symmetry_coincident_points_rejected(self) -> None:
         with pytest.raises(ParamError):
@@ -677,13 +820,16 @@ class TestInvalidParamsRejected:
         with pytest.raises(ParamError):
             generate_lisp("arrow", {"x1": 5, "y1": 5, "x2": 5, "y2": 5})
 
-    @pytest.mark.parametrize("bad_text", [
-        "",                 # 空字符串
-        "x" * 101,          # 超长 (LABEL_TEXT_MAX=100)
-        "换\n行",           # 控制字符
-        "带\U0001f600表情",  # GBK 无法编码 (emoji)
-        123,                # 非字符串
-    ])
+    @pytest.mark.parametrize(
+        "bad_text",
+        [
+            "",  # 空字符串
+            "x" * 101,  # 超长 (LABEL_TEXT_MAX=100)
+            "换\n行",  # 控制字符
+            "带\U0001f600表情",  # GBK 无法编码 (emoji)
+            123,  # 非字符串
+        ],
+    )
     def test_label_text_invalid_rejected(self, bad_text) -> None:
         with pytest.raises(ParamError):
             generate_lisp("arrow", {"x1": 0, "y1": 0, "x2": 2000, "y2": 0, "text": bad_text})
@@ -694,15 +840,11 @@ class TestInvalidParamsRejected:
 
     def test_rect_roof_coincident_corners_rejected(self) -> None:
         with pytest.raises(ParamError):
-            generate_lisp(
-                "rect_roof", {"x1": 0, "y1": 0, "x2": 0, "y2": 0, "x3": 6000, "y3": 4000}
-            )
+            generate_lisp("rect_roof", {"x1": 0, "y1": 0, "x2": 0, "y2": 0, "x3": 6000, "y3": 4000})
 
     def test_cusp_roof_coincident_points_rejected(self) -> None:
         with pytest.raises(ParamError):
-            generate_lisp(
-                "cusp_roof", {"center_x": 1, "center_y": 1, "base_x": 1, "base_y": 1}
-            )
+            generate_lisp("cusp_roof", {"center_x": 1, "center_y": 1, "base_x": 1, "base_y": 1})
 
     def test_insight_missing_coord_rejected(self) -> None:
         with pytest.raises(ParamError):
@@ -750,18 +892,24 @@ class TestInvalidParamsRejected:
 
     def test_removed_axis_grid_subcommand_rejected(self) -> None:
         # axis_grid 已在 slimming 提交 441e890 中移除, 应作为 unknown subcommand 拒绝;
-        # 这里同时覆盖 column / export_t3 两个同批移除的子命令, 防止意外回归。
-        for removed in ("axis_grid", "column", "export_t3"):
+        # export_t3 同批移除。column 已在 Handoff 36 重新上线，不应列入 removed。
+        for removed in ("axis_grid", "export_t3"):
             with pytest.raises(ParamError):
                 generate_lisp(removed, {})
 
     def test_control_char_in_string_rejected(self) -> None:
         # 换行注入企图破坏单行 LISP 字符串 / 命令序列
         with pytest.raises(ParamError):
-            generate_lisp("wall", {
-                "x1": 0, "y1": 0, "x2": 1000, "y2": 0,
-                "layer": "WALL\n(command \"erase\")",
-            })
+            generate_lisp(
+                "wall",
+                {
+                    "x1": 0,
+                    "y1": 0,
+                    "x2": 1000,
+                    "y2": 0,
+                    "layer": 'WALL\n(command "erase")',
+                },
+            )
 
     def test_layer_too_long_rejected(self) -> None:
         with pytest.raises(ParamError):
@@ -770,15 +918,29 @@ class TestInvalidParamsRejected:
     def test_non_gbk_layer_rejected_with_field(self) -> None:
         # P1-3: GBK 外字符 (emoji) 应在参数层被拒, 报错含字段名。
         with pytest.raises(ParamError, match="layer"):
-            generate_lisp("wall", {
-                "x1": 0, "y1": 0, "x2": 1000, "y2": 0, "layer": "测试🔥",
-            })
+            generate_lisp(
+                "wall",
+                {
+                    "x1": 0,
+                    "y1": 0,
+                    "x2": 1000,
+                    "y2": 0,
+                    "layer": "测试🔥",
+                },
+            )
 
     def test_gbk_chinese_layer_accepted(self) -> None:
         # 常规中文图层名 (GBK 可编码) 不应被误拒。
-        code = generate_lisp("wall", {
-            "x1": 0, "y1": 0, "x2": 1000, "y2": 0, "layer": "墙体",
-        })
+        code = generate_lisp(
+            "wall",
+            {
+                "x1": 0,
+                "y1": 0,
+                "x2": 1000,
+                "y2": 0,
+                "layer": "墙体",
+            },
+        )
         assert "墙体" in code
 
 
@@ -793,7 +955,7 @@ class TestExplodeRead:
         assert is_paren_balanced(code)
         assert "{{" not in _strip_line_comments(code)
         assert '(handent "1A3F")' in code  # handle 统一大写注入
-        assert "TEXPLODE" in code
+        assert '(t20mcp:call-nocheck "_.EXPLODE"' in code
 
     def test_bad_handle_rejected(self) -> None:
         for bad in (None, "", "XYZ-1", "1A3G", 42, "(princ)"):
@@ -817,6 +979,8 @@ class TestExplodeRead:
             "ARC|1000100.0,1000200.0|40=60.0|50=0.0|51=1.5707963;"
         )
         out = tangent.parse_explode_payload(payload, 1_000_000.0, 1_000_000.0)
+        assert out["protocol_valid"] is True
+        assert out["protocol_error"] is None
         assert out["rc"] is True and out["clean"] is True and out["count"] == 2
         line, arc = out["entities"]
         assert line["type"] == "LINE"
@@ -825,9 +989,31 @@ class TestExplodeRead:
 
     def test_parse_payload_empty_and_malformed(self) -> None:
         out = tangent.parse_explode_payload("", 0.0, 0.0)
-        assert out == {"rc": False, "clean": False, "count": 0, "entities": []}
+        assert out["rc"] is False and out["clean"] is False
+        assert out["count"] == 0 and out["entities"] == []
+        assert out["protocol_valid"] is False
+        assert "missing data delimiter" in out["protocol_error"]
+
         out = tangent.parse_explode_payload("rc=nil clean=nil n=0 data=", 0.0, 0.0)
         assert out["rc"] is False and out["entities"] == []
+        assert out["protocol_valid"] is True
+
+    @pytest.mark.parametrize(
+        "payload",
+        [
+            "rc=T clean=T n=oops data=",
+            "rc=T clean=T n=1 data=",
+            "rc=maybe clean=T n=0 data=",
+            "rc=T clean=T n=1 data=LINE|40=oops;",
+            "rc=T clean=T n=1 data=TEXT|s=ok|broken;",
+            "garbage",
+        ],
+    )
+    def test_parse_payload_marks_invalid_protocol(self, payload: str) -> None:
+        out = tangent.parse_explode_payload(payload, 0.0, 0.0)
+
+        assert out["protocol_valid"] is False
+        assert out["protocol_error"]
 
     def test_text_entity_preserved(self) -> None:
         payload = "rc=T clean=T n=1 data=TEXT|1000010.0,1000020.0|40=350.0|s=砖墙;"
@@ -835,33 +1021,3 @@ class TestExplodeRead:
         ent = out["entities"][0]
         assert ent["text"] == "砖墙"
         assert ent["points"] == [[10.0, 20.0]]
-
-
-class TestDialogAutomationWhitelist:
-    def test_forbidden_button_refused(self) -> None:
-        import asyncio
-
-        from t20_mcp.dialog_automation import click_dialog_buttons
-
-        result = asyncio.run(
-            click_dialog_buttons("分解对象", ("分解本图所有天正对象", "确定"), timeout=0.1)
-        )
-        assert result == "forbidden:分解本图所有天正对象"
-
-    def test_empty_buttons_refused(self) -> None:
-        import asyncio
-
-        from t20_mcp.dialog_automation import click_dialog_buttons
-
-        result = asyncio.run(click_dialog_buttons("分解对象", (), timeout=0.1))
-        assert result == "no-buttons-specified"
-
-    def test_texplode_sequence_is_whitelisted(self) -> None:
-        from t20_mcp.dialog_automation import (
-            FORBIDDEN_BUTTONS,
-            TEXPLODE_BUTTONS,
-            TEXPLODE_DIALOG_TITLE,
-        )
-
-        assert TEXPLODE_DIALOG_TITLE == "分解对象"
-        assert not (set(TEXPLODE_BUTTONS) & FORBIDDEN_BUTTONS)

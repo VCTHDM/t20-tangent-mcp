@@ -1,151 +1,139 @@
-# T20 天正建筑常用命令编目
+# T20 天正建筑命令编目
 
-> 目的：为 `tangent` 工具的封装提供命令级清单与可驱动性评估。
->
-> **命令名来源（2026-06-12 升级）**
-> 命令名不再是推测：全部取自本机安装目录**官方命令表**
-> `C:\Tangent\TArchT20V10\SYS\tchcmd.txt`（454 条「中文名 → 命令名」映射，
-> UTF-8 副本见 `docs/t20_official_commands.txt`），并已在真机
-> （T20 V10 / AutoCAD 2024）经 `getcname` 批量验证注册状态（442/451 命中），
-> 全表见 **`docs/T20_OFFICIAL_COMMANDS.md`**。
-> 本文档只保留「封装相关命令」的精编条目；**交互序列**仍需逐条真机验证，
-> 验证记录见 `docs/handoff/05_field_test.md`。
+本文描述当前 `tangent` 接口、关键行为限制和未交付裁定。命令探索过程与旧结论保存在
+[`docs/handoff/`](handoff/)；本文不重复按时间展开同一命令的多轮状态。
 
-## 0. 关键前提与坑（真机证实）
+## 1. 命令来源与事实边界
 
-1. **天正对话框 ≠ AutoCAD 原生对话框。** `CMDDIA=0`/`FILEDIA=0` 只对 AutoCAD
-   原生命令生效，对天正自有对话框**无效**——已真机证实两例：
-   - `TSaveAs`（图形导出）弹天正自绘导出框，无视 `FILEDIA=0`。
-     2026-06-13 勘误（Handoff 09）：其顶层窗口类名实测为 `#32770`（WPF 内容
-     寄宿其中），原探测盲因更可能是对话框不在主 UI 线程；现已新增
-     「主窗口 IsWindowEnabled」信号（与类名/线程无关），itest_21 验收通过；
-   - `TRectAxis`（绘制轴网）弹模态参数框（`#32770`）。
-   **严禁对天正 ARX 对话框发送 `WM_CLOSE` 强关**——真机曾因此导致 AutoCAD
-   致命错误崩溃。安全做法：向对话框发 ESC 键，或点击其"取消"按钮（BM_CLICK）。
-2. **`vl-cmdf` 对无效输入是"假成功"**：命令吞掉无效关键字后正常返回（非 nil），
-   不抛错也不建实体。因此模板一律以**实体增量 + 实体类型**为成功判据
-   （见 wall/dimension/door/window 模板），不能信任 `vl-cmdf` 返回值。
-3. **可驱动的天正命令模式（真机证实）**：命令行给点 → 用参数面板记忆值生成
-   实体 → 实体为 `TCH_*` 自定义对象，**几何/尺寸参数可经 ActiveX 属性
-   (`vlax-put-property`) 事后注入**。这是 wall/door 的落地路线，优先推广。
-4. 本项目铁律：所有封装走 **LISP 模板 + 参数注入**，不硬编码键击序列。
-5. 坐标单位默认 **毫米 (mm)**；角度单位默认 **度**。
+T20 命令名来自本机官方命令表
+`C:\Tangent\TArchT20V10\SYS\tchcmd.txt`。仓库保留了
+[`t20_official_commands.txt`](t20_official_commands.txt) 的 454 行 UTF-8 副本，以及
+[`T20_OFFICIAL_COMMANDS.md`](T20_OFFICIAL_COMMANDS.md) 的注册状态表。历史批量
+`getcname` 结果为 442/451 个大小写无关命令名命中；未注册项可能来自延迟加载模块或
+官方表拼写，不等于命令永久不存在。
 
-## 1. 封装相关命令精编
+不同层次的权威来源如下：
 
-列含义：
-- **命令名**：官方命令表名称（已全部真机验证注册，不再推测）。
-- **驱动方式**：真机验证出的可行驱动路径。
-- **置信度**：高=真机端到端验证；中=部分验证；低=未行为验证；禁=对话框命令不可驱动。
+- 可执行子命令名：`src/t20_mcp/tools/tangent.py::SUBCOMMANDS`。
+- 参数校验与实际生成/执行行为：`src/t20_mcp/tools/tangent.py` 与 LISP 模板。
+- 面向使用者的快速参数表：[`README.md`](../README.md)。
+- 当前交付与重开条件：[`TODO_BACKLOG.md`](../TODO_BACKLOG.md)。
+- 真机证据：`docs/handoff/`，只证明记录当时的环境和代码。
 
-### 1.1 已封装（tangent 子命令）
+`_GENERATORS` 是可执行子命令注册来源，但不是所有文档文字的“单一事实源”；修改接口时
+必须同步 README、本文、工具 docstring 和一致性测试。
 
-| 中文命令名 | 命令名 | 驱动方式（真机验证） | 生成实体 | 置信度 |
-|---|---|---|---|---|
-| 绘制墙体 | `TgWall` | 起点→终点→回车（面板记忆值）；左/右宽、高、材料经 COM 注入 `LeftWidth/RightWidth/Height/Style` | `TCH_WALL` | **高** (E2E) |
-| 逐点标注 | `TDimMP` | 尺寸线位置点→点1→点2→回车（顺序错则 0 实体假成功）；会按墙体/门窗节点重新吸附，不适合建筑总宽/总高，总尺寸应调用 `annotation.create_dimension_linear` | `TCH_DIMENSION2` | **高** (E2E，语义受限) |
-| 墙厚标注 | `TDimWall` | 直线第一点→直线第二点；两点连线穿过墙体 | `TCH_DIMENSION2` | **高** (E2E) |
-| 门窗标注 | `TDim3` | 线选起点→线选终点→回车；线选段穿过墙体/门窗 | `TCH_DIMENSION2` | **高** (E2E) |
-| 两点标注 | `TDimTP` | 穿越线起点→穿越线终点→标注位置→回车；三墙场景 E2E 生成尺寸，穿过对象不足会报"对象数目太少" | `TCH_DIMENSION2` | **高** (E2E) |
-| 标高标注 | `TMElev` | 标高基准点→标注放置点→回车；单点序列会挂起等待输入，严禁改成单点序列；`text` 经 COM 注入 `Text` 覆盖自动计算标高 (Handoff 35) | `TCH_ELEVATION` | **高** (E2E) |
-| 坐标标注 | `TCoord` | 标注点→坐标标注方向点→回车 | `TCH_COORD` | **高** (E2E) |
-| 画对称轴 | `TSymmetry` | 起点→终点；两点即收尾 (active=0) | `TCH_SYMMETRY` | **高** (E2E) |
-| 线图案 | `TLinePattern` | 起点→终点→回车→回车（补第二个空回车退出循环）；样式走面板记忆值 | `TCH_PATH_ARRAY` | **高** (E2E) |
-| 画指北针 | `TNorthThumb` | 指北针位置点→方向点；两点即收尾 (active=0) | `TCH_NORTHTHUMB` | **高** (E2E) |
-| 加折断线 | `TSymbCut` | 起点→终点→回车 (接受 `<不切割>` 默认)；两点后命令仍 active, 必须补空回车 | `TCH_RUPTURE` | **高** (E2E) |
-| 剖切符号 | `TSection` | 第一剖切点→第二剖切点→剖视方向→回车退出循环；编号文字走面板记忆值 | `TCH_SYMB_SECTION` | **高** (E2E) |
-| 图名标注 | `TDrawingName` | 插入位置→回车退出循环；`name_text`/`scale_text` 经 COM 注入 `NameText/ScaleText` (Handoff 35)；未提供时走面板记忆值；样式不可参数化 | `TCH_DRAWINGNAME` | **高** (E2E) |
-| 矩形 | `TRect` | 第一角点→第二角点→回车退出循环 | `TCH_RECT` | **高** (E2E) |
-| 阳台 | `TBalcony` | 各轮廓点→回车；类型/挑出宽走面板记忆值；点数≥2 | `TCH_BALCONY` | **高** (E2E) |
-| 台阶 | `TStep` | 各轮廓点→回车；踏步数/宽走面板记忆值；点数≥2 | `TCH_STEP` | **高** (E2E) |
-| 坡道 | `TAscent` | 点取位置→回车退出循环；宽度/坡长走面板记忆值 | `TCH_ASCENT` | **高** (E2E) |
-| 箭头引注 | `TArrow` | 起点→终点→回车→回车（先结束引线循环再退外层循环）；`text`/`text2` 经 COM 注入 `Text/Text2` 上下标文字 (Handoff 35)；未提供时走面板记忆值 | `TCH_ARROW` | **高** (E2E) |
-| 矩形屋顶 | `TRectRoof` | 左下角点→右下角点→右上角点→回车退出循环；坡角/出檐走面板记忆值 | `TCH_MOUNTROOF` | **高** (E2E) |
-| 攒尖屋顶 | `TCuspRoof` | 屋顶中心位置→第二点(定半径/朝向)；两点即收尾 (active=0)；边数/屋顶高走面板记忆值 | `TCH_CUSPROOF` | **高** (E2E) |
-| 内视符号 | `TInsight` | 标注位置点→回车退出循环 (每点一个)；朝向/编号走面板记忆值 | `TCH_TDBINSIGHT` | **高** (E2E) |
-| 任意布树 | `TSingleTree` | 插入点→回车退出循环 (每点一棵)；树种/尺寸走面板记忆值；实体为通用 INSERT 图块 | `INSERT` | **高** (E2E) |
-| 标准柱 | `TGColumn` | **面板 UI 自动化** (Handoff 36, 项目首例)：启动后浮动面板 WM_SETTEXT 填柱高/转角/截面 + CB_SETCURSEL 选材料 (通知补发触发 DDX)，命令行 WM_CHAR 打插入点，ESC 退出；`height/rotation/sec_w/sec_h/material` 五参数 COM 读回精确匹配；图层强制 COLUMN | `TCH_COLUMN` | **高** (E2E) |
-| 直线梯段 | `TLStair` | 点取位置→回车退出循环；梯段宽/踏步数/踏步高走面板记忆值 | `TCH_LINESTAIR` | **高** (E2E) |
-| 圆弧梯段 | `TAStair` | 点取位置→回车退出循环；内外半径/踏步数/圆心角走面板记忆值 | `TCH_ARCSTAIR` | **高** (E2E) |
-| 双跑楼梯 | `TRStair` | 插入点→回车退出循环；梯段宽/踏步数/楼梯高/井宽走面板记忆值 | `TCH_RECTSTAIR` | **高** (E2E) |
-| 多跑楼梯 | `TMultiStair` | 起点→下一点→回车（在"起点<退出>"处空回车收尾）；跑数/梯段宽/楼梯高走面板记忆值 | `TCH_MULTISTAIR` | **高** (E2E) |
-| 轮椅直径 | `TWheelchairDaim` | 中心点→半径/方向点→回车；edge 缺省为中心正右 1500mm；官方命令拼写为 `Daim` | `TCH_RADIUSDIM` | **高** (E2E) |
-| 门窗 | `TOpening` | 先自动启动并识别「门窗参数」面板，以 `ToolbarWindow32` 强结构指纹后台切换插门/插窗，空回车退出；随后墙上插入点→回车，`Width/Height/DoorSill` COM 注入；创建后硬校验 group71 (0=门, 1=窗)，模式错则删除错误实体 | `TCH_OPENING` | **高**：Handoff 39 已真机闭合 window→door 双向自动切换；group71/图层/实体增量/面板关闭/清理全部验证 |
-| 普通线轴网 | 原生 `LINE` | `axis_lines` 替代路径：按开间/进深生成普通线网格，可旋转；不生成天正智能轴网 | `LINE` | **中** (替代路径) |
-| 几何读回 | 原生 `EXPLODE` | `explode_read`：COPY 副本到暂存区→分解副本→序列化产物→UNDO 回滚，非破坏。已知 T20 缺陷：墙体产物起点侧顶点归零 | `LINE` 等 | **高** (E2E) |
-| 搜索房间 | `TUpdSpace` | `search_room`：全图选择 `TCH_WALL` → 选择集 → 回车；闭合墙体围合区域生成房间对象 | `TCH_SPACE` | **高** (E2E) |
+## 2. 当前安全前提
 
-### 1.2 已验证存在、待封装评估
+1. `CMDDIA=0`/`FILEDIA=0` 不能屏蔽天正自有对话框。TSaveAs「图形导出」经
+   Handoff 34 复核为经典 Win32 `#32770` 真模态框，37 个子控件，WPF 子控件数为 0。
+2. 严禁向天正 ARX 对话框发送 `WM_CLOSE`。安全退出只使用已验证的 ESC、空回车或
+   白名单按钮路径。
+3. `vl-cmdf` clean exit 可能是 0 实体假成功。验收必须检查实体增量、类型和关键属性。
+4. 常规子命令走 LISP 模板与参数注入。`column`、`door/window` 是受控 GUI 例外：
+   只允许强结构指纹、白名单 Win32 消息、读回验真和失败回滚。
+5. 坐标单位默认毫米，角度单位默认度。`execute=False` 是 dry-run；只有
+   `execute=True` 才进入 AutoCAD/T20 执行链路。
 
-| 中文命令名 | 命令名 | 备注 |
+## 3. 当前 33 个 tangent 子命令
+
+| 子命令 | 底层命令 | 主要产物 | 当前行为要点 |
+|---|---|---|---|
+| `axis_lines` | 原生 `LINE` | `LINE` | 普通线轴网，可旋转；不生成天正智能轴网 |
+| `wall` | `TgWall` | `TCH_WALL` | 两点建墙，宽度、高度、材料经属性注入 |
+| `door` | `TOpening` | `TCH_OPENING` | 自动切门模式；创建后硬校验 group71=0 |
+| `window` | `TOpening` | `TCH_OPENING` | 自动切窗模式；窗台高写 `DoorSill`；硬校验 group71=1 |
+| `dimension` | `TDimMP` | `TCH_DIMENSION2` | 逐点吸附标注，不用于严格总宽/总高 |
+| `wall_thickness_dimension` | `TDimWall` | `TCH_DIMENSION2` | 穿墙线段生成墙厚标注 |
+| `opening_dimension` | `TDim3` | `TCH_DIMENSION2` | 穿过墙/门窗的线段生成门窗标注 |
+| `two_point_dimension` | `TDimTP` | `TCH_DIMENSION2` | 穿越多个独立对象后放置尺寸线 |
+| `elevation` | `TMElev` | `TCH_ELEVATION` | 必须使用已验证双点序列；可经 COM 写 `Text` |
+| `coordinate` | `TCoord` | `TCH_COORD` | 标注点与方向点 |
+| `symmetry` | `TSymmetry` | `TCH_SYMMETRY` | 两点生成对称轴 |
+| `line_pattern` | `TLinePattern` | `TCH_PATH_ARRAY` | 两点路径，样式取面板记忆值 |
+| `north_arrow` | `TNorthThumb` | `TCH_NORTHTHUMB` | 位置点与方向点 |
+| `break_line` | `TSymbCut` | `TCH_RUPTURE` | 两点后补默认回车收尾 |
+| `section_symbol` | `TSection` | `TCH_SYMB_SECTION` | 两个剖切点与方向点 |
+| `drawing_name` | `TDrawingName` | `TCH_DRAWINGNAME` | 可经 COM 写 `NameText/ScaleText` |
+| `rectangle` | `TRect` | `TCH_RECT` | 两角点矩形 |
+| `balcony` | `TBalcony` | `TCH_BALCONY` | 点列轮廓；类型和挑出宽取面板记忆值 |
+| `step` | `TStep` | `TCH_STEP` | 点列轮廓；踏步参数取面板记忆值 |
+| `ramp` | `TAscent` | `TCH_ASCENT` | 单点放置；宽度/坡长取面板记忆值 |
+| `arrow` | `TArrow` | `TCH_ARROW` | 两点引线；可经 COM 写 `Text/Text2` |
+| `column` | `TGColumn` | `TCH_COLUMN` | 受控面板自动化；五参数读回；图层由 T20 强制为 COLUMN |
+| `rect_roof` | `TRectRoof` | `TCH_MOUNTROOF` | 三点矩形屋顶 |
+| `cusp_roof` | `TCuspRoof` | `TCH_CUSPROOF` | 中心与半径/方向点 |
+| `insight` | `TInsight` | `TCH_TDBINSIGHT` | 单点循环后退出 |
+| `tree` | `TSingleTree` | `INSERT` | 插入普通树木图块，不是 `TCH_*` |
+| `line_stair` | `TLStair` | `TCH_LINESTAIR` | 单点放置直线梯段 |
+| `arc_stair` | `TAStair` | `TCH_ARCSTAIR` | 单点放置圆弧梯段 |
+| `double_stair` | `TRStair` | `TCH_RECTSTAIR` | 单点放置双跑楼梯 |
+| `multi_stair` | `TMultiStair` | `TCH_MULTISTAIR` | 起点与下一点，空回车收尾 |
+| `wheelchair_diameter` | `TWheelchairDaim` | `TCH_RADIUSDIM` | 官方拼写为 `Daim`；缺省半径点在右侧 1500 mm |
+| `explode_read` | 原生 `EXPLODE` | `LINE` 等 | COPY 副本、分解、序列化、UNDO；不修改原实体 |
+| `search_room` | `TUpdSpace` | `TCH_SPACE` | 全图墙体围合生成房间对象 |
+
+完整参数名与可选字段见 README 的 33 项表和 tangent 工具 docstring。执行时附带的 warning
+表示调用限制或环境依赖，不等于“尚未验证”。
+
+## 4. 门窗与柱的受控 GUI 例外
+
+### door / window
+
+当前链路先用独立 LISP 启动 `TOpening`，按「门窗参数」标题、唯一可见
+`ToolbarWindow32`、control id、按钮数和尺寸定位模式工具栏，再发送后台鼠标消息选择
+插门或插窗。空回车退出面板后，正式 opening 模板创建实体并注入属性。
+
+按钮消息不是成功依据。创建后的 DXF group71 是最终权威；不匹配时删除错误实体并返回
+`OPENING_MODE_MISMATCH`。当前闭合证据见
+[`Handoff 39`](handoff/39_opening_mode_automation.md)，前一阶段回滚协议见
+[`Handoff 38`](handoff/38_opening_mode_gate.md)。
+
+### column
+
+`column` 没有独立 `column.lsp` 模板。generator 只生成启动 `TGColumn` 的 LISP 片段，
+正式执行由 Python 在 `CMDACTIVE=1` 期间驱动强结构指纹面板，填入高度、旋转、截面和
+材料，向命令行输入插入点，退出后再通过 IPC 读回 `TCH_COLUMN` 属性。证据见
+[`Handoff 36`](handoff/36_tgcolumn_gate_b_close.md)。
+
+因此 33 个子命令当前对应 31 个命令模板加 `_prelude.lsp`：door/window 共用
+`opening.lsp`，column 使用受控编排而非独立模板。
+
+## 5. 未交付或不再交付
+
+| 命令/方向 | 当前裁定 | 原因或替代 |
 |---|---|---|
-| 分解对象 | `TExplode` | **已被 `explode_read` 取代**（实体副本 + 原生 `EXPLODE`，不弹框）。TExplode 必弹「分解对象」#32770 框（itest_23），白名单按钮驱动已验证可行（itest_24）但不再需要 |
-| 两点标注 | `TDimTP` | **已封装为 `two_point_dimension`**。Handoff 13 改用三墙穿越线场景后 E2E 验证通过 |
-| 墙厚标注 | `TDimWall` / 门窗标注 `TDim3` | 已封装为 `wall_thickness_dimension` / `opening_dimension` |
-| 标高标注 | `TMElev` | 已封装为 `elevation`；双点序列 E2E 验证，单点序列禁用 |
-| 坐标标注 | `TCoord` | **已封装为 `coordinate`**（Handoff 17，E2E 验证） |
-| 平行标注 | `TParallelDim` | 已探测：提示为起点→终点；无足够平行对象时报“与第一个对象平行的对象太少”；三墙穿越线场景未生成新实体，暂不封装（Handoff 18） |
-| 箭头引注 | `TArrow` | 已探测：起点→下一点可生成 `TCH_ARROW`，但回车后命令仍 active，完成/退出语义未确认，暂不封装（Handoff 18） |
-| 画对称轴 | `TSymmetry` | **已封装为 `symmetry`**（Handoff 19，E2E 生成 `TCH_SYMMETRY`） |
-| 画指北针 | `TNorthThumb` | **已封装为 `north_arrow`**（Handoff 19，E2E 生成 `TCH_NORTHTHUMB`） |
-| 加折断线 | `TSymbCut` | **已封装为 `break_line`**（Handoff 19，E2E 生成 `TCH_RUPTURE`） |
-| 剖切符号 | `TSection` | **已封装为 `section_symbol`**（Handoff 20，E2E 生成 `TCH_SYMB_SECTION`） |
-| 图名标注 | `TDrawingName` | **已封装为 `drawing_name`**（Handoff 20，E2E 生成 `TCH_DRAWINGNAME`；图名文字取面板记忆值） |
-| 矩形 | `TRect` | **已封装为 `rectangle`**（Handoff 21，E2E 生成 `TCH_RECT`） |
-| 阳台 | `TBalcony` | **已封装为 `balcony`**（Handoff 21，E2E 生成 `TCH_BALCONY`；轮廓点列驱动） |
-| 台阶 | `TStep` | **已封装为 `step`**（Handoff 21，E2E 生成 `TCH_STEP`；轮廓点列驱动） |
-| 坡道 | `TAscent` | **已封装为 `ramp`**（Handoff 22，E2E 生成 `TCH_ASCENT`；点取位置→回车，宽度/坡长取面板记忆值） |
-| 箭头引注 | `TArrow` | **已封装为 `arrow`**（Handoff 22，E2E 生成 `TCH_ARROW`；起点→终点→回车→回车，引注文字取面板记忆值）。补完 Handoff 18 未确认的退出语义：两点引线后需补**两个**空回车（先结束本引线"直段下一点<结束>"循环，再退"箭头起点<退出>"外层循环） |
-| 平板 | `TSlab` | 已探测：提示"选择一封闭的多段线或圆"；选对象步不吃脚本点(ssget"_L"/ename/拾取点均不消费，命令滞留或默认退出，0 平板)，同标注族选择步坑，暂不封装（Handoff 22） |
-| 地下坡道 | `TUndergroundRamp` | 已探测：坡道起点→下一点→回车可生成几何，但产物是裸 `LWPOLYLINE`(非干净 TCH_ 实体，一次出 3 个杂实体)，难以断言，暂不封装（Handoff 22） |
-| 矩形屋顶 | `TRectRoof` | **已封装为 `rect_roof`**（Handoff 23，E2E 生成 `TCH_MOUNTROOF`；左下→右下→右上→回车） |
-| 攒尖屋顶 | `TCuspRoof` | **已封装为 `cusp_roof`**（Handoff 23，E2E 生成 `TCH_CUSPROOF`；中心→半径点两点收尾） |
-| 单轴绘制 | `TSingleAxis` | 已探测：起点→终点→回车可成，但产物是裸 `LINE`(非天正智能轴线)，不比 `axis_lines` 强，暂不封装（Handoff 23） |
-| 引出标注 | `TLeader` | 已探测：第一点→引线位置→文字基线位置；文字基线给空回车则放弃(0 实体)，正常完成需内联文字编辑(挂死风险)，暂不封装（Handoff 23） |
-| 墙体造型 | `TAddPatch` | 已探测：外凸/内凹→轮廓点列→结束；无依附墙体时 0 实体(造型需附墙)，前置重，暂不封装（Handoff 23） |
-| 内视符号 | `TInsight` | **已封装为 `insight`**（Handoff 24，E2E 生成 `TCH_TDBINSIGHT`；单点循环补回车退出） |
-| 任意布树 | `TSingleTree` | **已封装为 `tree`**（Handoff 24，E2E 插入 INSERT 树木图块 `tree1`；单点循环补回车退出） |
-| 指向索引/剖切索引 | `TPointIndex`/`TSectIndex` | 已探测：索引节点位置→参考点；需编号文字，空回车则 0 实体，暂不封装（Handoff 24） |
-| 直线梯段 | `TLStair` | **已封装为 `line_stair`**（Handoff 25，E2E 生成 `TCH_LINESTAIR`；单点循环补回车退出） |
-| 圆弧梯段 | `TAStair` | **已封装为 `arc_stair`**（Handoff 25，E2E 生成 `TCH_ARCSTAIR`；单点循环补回车退出） |
-| 双跑楼梯 | `TRStair` | **已封装为 `double_stair`**（Handoff 27，E2E 生成 `TCH_RECTSTAIR`；插入点→回车，单点循环补回车退出） |
-| 多跑楼梯 | `TMultiStair` | **已封装为 `multi_stair`**（Handoff 27，E2E 生成 `TCH_MULTISTAIR`；起点→下一点→回车，在"起点<退出>"处空回车收尾） |
-| 线图案 | `TLinePattern` | **已封装为 `line_pattern`**（Handoff 28，E2E 生成 `TCH_PATH_ARRAY`；起点→终点→回车→回车） |
-| 轮椅直径 | `TWheelchairDaim` | **已封装为 `wheelchair_diameter`**（Handoff 28，E2E 生成 `TCH_RADIUSDIM`；中心点→半径/方向点→回车） |
-| 矩形屏蔽 | `TBlkMask1` | 已探测：两角点序列 clean exit 但 0 实体，暂不封装（Handoff 28） |
-| 任意屏蔽 | `WIPEOUT` | 已探测：四点+C 可生成原生 `WIPEOUT`，但不是天正 `TCH_*` 智能实体，暂不纳入 `tangent` 智能实体封装（Handoff 28） |
-| 双分/转角/三跑/交叉/剪刀/三角楼梯·自动扶梯 | `TDrawParallelStair`/`TDrawCornerStair`/`TDrawDoubleMulStair`/`TDrawScissorsStair`/`TDrawCrossStair`/`TDrawTriangleStair`/`tdrawautostair` | 已探测：均**先弹 #32770 模态参数面板**（如"双分平行楼梯"框）再取点，命令行点序列到不了放置处理器，同 column/axis_grid 墙2 死路，暂不封装（Handoff 27） |
-| 绘制梁 | `TGirDer` | 已探测：两点序列命令行无弹框但 0 实体（梁需依附墙/柱/轴线，前置重），暂不封装（Handoff 27） |
-| 风玫瑰 | `TWINDROSE` | 已探测：**弹"风玫瑰"模态框**（地区/参数面板），墙2 死路，暂不封装（Handoff 27） |
-| 电梯 | `TElevator` | 已探测：电梯间角点→对角点→**点取开电梯门的墙线**(选墙线步，需前置墙，空回车则 0 实体)，暂不封装（Handoff 25） |
-| 半径/直径/角度/弧弦标注 | `TDimRad`/`TDimDia`/`TDimAng`/`TDimArc` | 已探测：均命令行无弹框，但**选择待标注对象的拾取步不吃脚本点/ename**（报"点无效"，命令滞留 active），vl-cmdf 点序列打不通，暂不封装（Handoff 21） |
-| 局部导出 | `TPartSaveAs` | **Handoff 33 已 BLOCKED**: LOGFILEMODE 抓取确认提示流为 selection-first (`请选择要导出的对象<退出>:`); 选择集到位后必弹 `#32770` "图形导出" 模态框, 即使 `FILEDIA=0` 也跳不过去, 不可静默封装。证据: `scripts/itest_33_tpartsaveas_args_probe.py` 三阶段 + LOGFILEMODE 抓取。|
-| BIM导出 | `TGetXML` | 空输入弹 `#32770` “天正模型导出到TGL”，不可静默封装 |
-| 单线变墙 | `TSWall` | 已复核：选择 LINE 后回车直接结束，0 实体；未观察到弹框；额外 `240` 被当未知命令。暂不封装（Handoff 15） |
-| 搜索房间 | `TUpdSpace` | **已封装为 `search_room`**（Handoff 11，E2E 验证） |
+| `TRectAxis` | WON'T-SHIP | 可驱动但只产普通 `LINE@DOTE`，没有 TCH_AXIS/xdata/轴号；改用 `axis_lines` |
+| `TPartSaveAs` | BLOCKED | selection-first 后强制弹经典 Win32「图形导出」模态框 |
+| `TSaveAs` / `TGetXML` | WON'T-SHIP | 强模态导出链不满足静默、可回滚的 MCP 边界；不是 WPF 判定 |
+| `TSingleAxisDim` | WON'T-SHIP | `entsel` 风格不接受坐标注入 |
+| `TLeader`、`TPointIndex`、`TSectIndex` | WON'T-SHIP | 依赖选择或内联文字编辑 |
+| `TDimRad/Dia/Ang/Arc` | WON'T-SHIP | 选择待标对象的步骤不能由现有安全坐标链确定驱动 |
+| 原生 `WIPEOUT` | 范围外 | 真机可生成，但不是 T20 智能实体；不是“不可自动化” |
+| `TExplode` | 已被替代 | `explode_read` 使用副本 + 原生 EXPLODE，不需要其模态框 |
+| window 占位/延迟替换 | DEFERRED | 常规门窗自动切换已交付；仅在离线规划或跨墙变换场景重开 |
+| 通用 WPF 寄宿守卫 | DEFERRED | 当前没有真实 WPF 模态触发场景 |
 
-> 其余 ~440 条见 `docs/T20_OFFICIAL_COMMANDS.md`（含真机注册标记）。
-> 未注册的 9 条集中在渲染/动画模块（延迟加载 ARX）与官方表笔误。
+其它探测过但未交付的命令不属于隐含待办。重新评审条件和停止规则见
+[`TODO_BACKLOG.md`](../TODO_BACKLOG.md)。
 
-## 2. 未封装/暂拒命令
+## 6. 验证与证据
 
-已从命令集移除不可行项 (axis_grid/export_t3 经证实为 #32770 模态对话框阻塞;
-column 曾同列, Handoff 36 经面板 UI 自动化复活为 `column` 子命令)。
-完整选型历史见`docs/handoff/`系列。
+离线接口一致性：
 
-| 命令 | 状态 | 备注 |
-|---|---|---|
-| 标准柱 TGColumn | **已封装为 `column`** (Handoff 36) | 面板 UI 自动化突破: WM_SETTEXT+通知补发填参 (柱高/转角/截面/材料) + 命令行 WM_CHAR 打插入点 + ESC 退出; 五参数 COM 读回精确匹配 (Height/Rotation/Width/Deep/Style); 历史"点序列不可达"结论仍成立, 本路线绕开点序列 |
-| 绘制轴网 TRectAxis | 不封装 (Handoff 37, 价值裁定) | Gate B 机制已打通 (WM_COMMAND IDOK 关框 + 命令行打点, COUNT*SPACING 语法), 但产物为纯 LINE@DOTE 无 xdata/无 TCH_AXIS/无轴号, 与 axis_lines 同类零增益 → 不封装 rect_axis; 需 DOTE 轴网用 `axis_lines` + `layer="DOTE"` |
-| 导出天正3 TSaveAs | 已移除 | WPF 框无视 FILEDIA=0 |
-| 门窗模式切换 | 自动化 + 最终门禁 (已闭合) | Handoff 33 + 34 证实 TCH_OPENING 不暴露独立 SillHeight，门/窗共用 DoorSill，模式由面板 + DXF group71 决定；Handoff 38 先增加双向校验和错误实体回滚；Handoff 39 再以控件级 UI 自动化切换面板模式。按钮点击不是成功依据，创建后的 group71 仍是权威门禁 |
-| 轴网对话框自动化 | 不推进 (Handoff 37) | TRectAxis Gate B 虽已打通，但产物只是普通 LINE@DOTE，与 `axis_lines` 同类且更慢更脆；除非未来发现可生成 TCH_AXIS/轴号的配置，否则维持 WON'T-SHIP |
-| TPartSaveAs | Handoff 33 BLOCKED | selection-first 后弹「图形导出」`#32770`, 即便 FILEDIA=0 也无法绕开 (itest_33) |
-| TSingleAxisDim | Handoff 33 STOPPED | 提示 `点取待标注的轴线或[手工绘制(D)]<退出>:` 是 entsel 风格, 命令行坐标输入会被命令吞掉后报「未知命令」, 不接受坐标注入; selection-injection 族, 不包装 (itest_32 LOGFILEMODE 抓取) |
+```powershell
+uv run pytest -q
+uv run python -m compileall -q src scripts tests
+uv run python scripts/itest_19_mcp_stdio_smoke.py
+```
 
-## 3. 模板与测试
+真机管线：
 
-子命令 → 模板 → 命令 已在 `tangent.py` 的 `_GENERATORS` 字典与 docstring
-中维护 (单一事实来源)。离线测试: `uv run pytest -q`。
-真机管线: `scripts/itest_01_bringup.py` (引导) → `scripts/itest_12_e2e.py` (核心)
-→ `scripts/itest_e2e_suite.py` (批量)。
+```powershell
+uv run python scripts/itest_01_bringup.py
+uv run python scripts/itest_42_opening_panel_mode_auto.py
+uv run python scripts/itest_12_e2e.py
+uv run python scripts/itest_e2e_suite.py
+```
+
+离线门禁不能替代 AutoCAD/T20 真机证据；历史真机 PASS 也不能冒充本轮复验。

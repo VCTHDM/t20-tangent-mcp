@@ -1,10 +1,14 @@
-"""真机联调 Step 30 — TGColumn / column 子命令 #32770 面板阻塞复测 (Handoff 13).
+"""历史 raw-vl-cmdf 探针 — TGColumn #32770 面板阻塞复测 (Handoff 13).
+
+注意：本脚本只固化「直接用 vl-cmdf 喂插入点无法穿透标准柱面板」这一历史结论，
+不代表当前 ``tangent.column`` 不可执行。现行实现已由 Handoff 36 改为 Win32
+控件级 UI 自动化，并完成真机验证；当前 column 验收应走 execute_column/itest_39。
 
 背景: Handoff 12 曾记录 TGCOLUMN 单点序列生成 1 个 TCH_COLUMN (delta=1),
 据此把 column 转正为 "E2E 已验证"。2026-06-13 真机复测**不可复现**:
 TGCOLUMN 弹 #32770 标准柱面板且命令保持 active=1, vl-cmdf 喂入的点字符串
 到不了"绘图区放置"处理器 -> 0 实体。Handoff 12 的 delta=1 是面板恰好开着的
-顺序依赖假成功。column 已降级为仅 dry-run (EXECUTE_DISABLED_SUBCOMMANDS)。
+顺序依赖假成功；该 raw-vl-cmdf 路径随后被控件级 UI 自动化取代。
 
 本脚本固化该结论, 作为回归记录: 断言 TGCOLUMN
   (a) 不生成任何实体, 且 (b) 留命令 active, 且 (c) 弹出 #32770 面板。
@@ -32,15 +36,14 @@ from t20_mcp.backends.file_ipc import FileIPCBackend  # noqa: E402
 from t20_mcp.tools.tangent import _load_prelude, generate_lisp  # noqa: E402
 
 RESET_ENV = (
-    '(progn (setq n 0)'
+    "(progn (setq n 0)"
     ' (while (and (< n 8) (> (getvar "CMDACTIVE") 0)) (command) (setq n (1+ n)))'
     ' (setvar "CMDDIA" 1) (setvar "FILEDIA" 1) (setvar "OSMODE" 0) "env-reset")'
 )
 
 # CMDECHO=0 静默跑 TGCOLUMN + 一个点, 留命令活动 (由 Python 侧后续 reset 取消)。
 RUN_TGCOLUMN = (
-    _load_prelude()
-    + '\n(progn (setvar "CMDECHO" 0)'
+    _load_prelude() + '\n(progn (setvar "CMDECHO" 0)'
     ' (vl-catch-all-apply (quote vl-cmdf) (list "TGCOLUMN" "2000,2000"))'
     ' (strcat "active=" (itoa (getvar "CMDACTIVE"))))'
 )
@@ -78,9 +81,19 @@ async def main() -> int:
 
     # --- 对照: wall 命令行驱动应正常 ---
     await b.execute_lisp(
-        generate_lisp("wall", {"x1": 0, "y1": 0, "x2": 3000, "y2": 0,
-                               "left_width": 120, "right_width": 120,
-                               "height": 3000, "wall_type": "砖"})
+        generate_lisp(
+            "wall",
+            {
+                "x1": 0,
+                "y1": 0,
+                "x2": 3000,
+                "y2": 0,
+                "left_width": 120,
+                "right_width": 120,
+                "height": 3000,
+                "wall_type": "砖",
+            },
+        )
     )
     wall_ok = await count(b) == base + 1
     for _ in range(6):
@@ -94,7 +107,7 @@ async def main() -> int:
     after = await count(b)
     classes = popup_classes(pid)
     has_dialog = "#32770" in classes
-    active = (r.payload or "")
+    active = r.payload or ""
 
     # 取消活动命令并确认面板消失 + 图面回到 baseline
     await b.execute_lisp(RESET_ENV)
@@ -109,7 +122,9 @@ async def main() -> int:
 
     blocker = after == base and "active=1" in active and has_dialog
     clean = (
-        dialog_gone and final == base and env.ok
+        dialog_gone
+        and final == base
+        and env.ok
         and env.payload.get("CMDACTIVE") == 0
         and env.payload.get("CMDDIA") == 1
     )
@@ -122,7 +137,7 @@ async def main() -> int:
     print(f"  弹 #32770 面板: {'PASS' if has_dialog else 'FAIL'}")
     print(f"  阻塞结论复现: {'PASS' if blocker else 'FAIL'}")
     print(f"  清理还原: {'PASS' if clean else 'FAIL'}")
-    print("  -> column 仅支持 dry-run; 放置需面板 UI 自动化 (见 Handoff 13)")
+    print("  -> 仅 raw vl-cmdf 路径被阻塞；现行 column 使用控件级 UI 自动化")
     return 0 if blocker and clean and wall_ok else 1
 
 

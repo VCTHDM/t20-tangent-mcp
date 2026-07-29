@@ -77,13 +77,15 @@ async def bootstrap_dispatcher(backend: FileIPCBackend) -> bool:
 
     target = backend._command_hwnd or backend._hwnd
     if target:
-        print(f"  引导加载(PostMessage): (load \"{load_path}\")")
+        print(f'  引导加载(PostMessage): (load "{load_path}")')
         type_line(target, '(setvar "SECURELOAD" 0)')
         type_line(target, f'(load "{load_path}")')
         time.sleep(1.0)
         type_line(target, '(setvar "SECURELOAD" 1)')
         result = await backend._dispatch("ping", {})
-        print(f"  PostMessage 引导后 ping: ok={result.ok} payload={result.payload!r} error={result.error!r}")
+        print(
+            f"  PostMessage 引导后 ping: ok={result.ok} payload={result.payload!r} error={result.error!r}"
+        )
         if result.ok:
             return True
     else:
@@ -94,7 +96,9 @@ async def bootstrap_dispatcher(backend: FileIPCBackend) -> bool:
         return False
     time.sleep(1.0)
     result = await backend._dispatch("ping", {})
-    print(f"  COM fallback 后 ping: ok={result.ok} payload={result.payload!r} error={result.error!r}")
+    print(
+        f"  COM fallback 后 ping: ok={result.ok} payload={result.payload!r} error={result.error!r}"
+    )
     return result.ok
 
 
@@ -124,7 +128,9 @@ async def main() -> int:
             return 1
 
     # --- Step 3: 环境变量 ---
-    vars_result = await backend.drawing_get_variables(["ACADVER", "DWGNAME", "CLAYER", "CMDDIA", "FILEDIA", "OSMODE"])
+    vars_result = await backend.drawing_get_variables(
+        ["ACADVER", "DWGNAME", "CLAYER", "CMDDIA", "FILEDIA", "OSMODE"]
+    )
     print(f"[3] drawing-get-variables -> ok={vars_result.ok} payload={vars_result.payload!r}")
     if not vars_result.ok:
         print(f"FAIL: {vars_result.error}")
@@ -132,9 +138,13 @@ async def main() -> int:
 
     # --- Step 4: 中文编码往返 (P0-1/P2-1) ---
     create = await backend.layer_create(TEST_LAYER, "yellow")
-    print(f"[4a] layer-create {TEST_LAYER!r} -> ok={create.ok} payload={create.payload!r} error={create.error!r}")
+    print(
+        f"[4a] layer-create {TEST_LAYER!r} -> ok={create.ok} payload={create.payload!r} error={create.error!r}"
+    )
     layers = await backend.layer_list()
-    names = [item.get("name") for item in (layers.payload or {}).get("layers", [])] if layers.ok else []
+    names = (
+        [item.get("name") for item in (layers.payload or {}).get("layers", [])] if layers.ok else []
+    )
     roundtrip = TEST_LAYER in names
     print(f"[4b] layer-list 含 {TEST_LAYER!r}: {roundtrip}  (layers={names})")
 

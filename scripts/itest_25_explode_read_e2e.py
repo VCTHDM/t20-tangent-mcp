@@ -64,8 +64,13 @@ async def main() -> int:
         generate_lisp(
             "wall",
             {
-                "x1": 0, "y1": 0, "x2": 3000, "y2": 0,
-                "left_width": 120, "right_width": 120, "height": 3000,
+                "x1": 0,
+                "y1": 0,
+                "x2": 3000,
+                "y2": 0,
+                "left_width": 120,
+                "right_width": 120,
+                "height": 3000,
                 "wall_type": "砖",
             },
         )
@@ -108,9 +113,7 @@ async def main() -> int:
 
     coords_ok = all(point_ok(p) for e in lines for p in e["points"])
     # 终点侧 (右端 x≈3000) 必须真实存在, 证明分解发生在暂存区且平移正确
-    right_side = [
-        p for e in lines for p in e["points"] if abs(p[0] - 3000.0) < 1.0
-    ]
+    right_side = [p for e in lines for p in e["points"] if abs(p[0] - 3000.0) < 1.0]
     coords_ok = coords_ok and len(right_side) >= 3
     after_read = await count(backend)
     print(f"[post] entities={after_read} (期望 {after_wall}, clean={parsed['clean']})")

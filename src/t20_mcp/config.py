@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import math
 import os
 import sys
 from pathlib import Path
@@ -10,8 +11,14 @@ import structlog
 
 log = structlog.get_logger()
 
-# Paths
-LISP_DIR = Path(__file__).resolve().parent.parent.parent / "lisp-code"
+# Paths. Hatch maps the repository-level dispatcher into ``t20_mcp/lisp_code``
+# in built wheels; editable/source runs keep using the single root source file.
+PACKAGE_DIR = Path(__file__).resolve().parent
+PACKAGED_LISP_DIR = PACKAGE_DIR / "lisp_code"
+SOURCE_LISP_DIR = PACKAGE_DIR.parent.parent / "lisp-code"
+LISP_DIR = (
+    PACKAGED_LISP_DIR if (PACKAGED_LISP_DIR / "mcp_dispatch.lsp").is_file() else SOURCE_LISP_DIR
+)
 # IPC 目录默认放在 %TEMP%/t20_mcp (避免要求 C:\ 根写权限); 可用 env 覆盖。
 # dispatcher (lisp-code/mcp_dispatch.lsp) 用同样规则解析, 两端必须一致。
 IPC_DIR = Path(
@@ -26,9 +33,28 @@ ACAD_PROCESS_NAME = os.environ.get("AUTOCAD_MCP_ACAD_PROCESS", "acad.exe").strip
 
 # Backend selection
 BACKEND_DEFAULT = "auto"  # auto | file_ipc | ezdxf
+BACKEND_CHOICES = frozenset({"auto", "file_ipc", "ezdxf"})
+IPC_TIMEOUT_MIN = 1.0
+IPC_TIMEOUT_MAX = 300.0
+
+
+def _parse_ipc_timeout(raw: str) -> float:
+    """Parse and clamp the IPC timeout with an actionable config error."""
+    try:
+        value = float(raw)
+    except ValueError as exc:
+        raise RuntimeError(
+            "AUTOCAD_MCP_IPC_TIMEOUT must be a finite number between 1 and 300 seconds"
+        ) from exc
+    if not math.isfinite(value):
+        raise RuntimeError(
+            "AUTOCAD_MCP_IPC_TIMEOUT must be a finite number between 1 and 300 seconds"
+        )
+    return max(IPC_TIMEOUT_MIN, min(IPC_TIMEOUT_MAX, value))
+
 
 # IPC timeout (seconds), clamped to [1, 300]
-IPC_TIMEOUT = max(1.0, min(300.0, float(os.environ.get("AUTOCAD_MCP_IPC_TIMEOUT", "10.0"))))
+IPC_TIMEOUT = _parse_ipc_timeout(os.environ.get("AUTOCAD_MCP_IPC_TIMEOUT", "10.0"))
 
 # Screenshot
 ONLY_TEXT_FEEDBACK = os.environ.get("AUTOCAD_MCP_ONLY_TEXT", "").lower() in ("1", "true", "yes")
@@ -52,7 +78,7 @@ def _is_wsl() -> bool:
         return False
 
 
-def _write_debug_snapshot(backend_env: str):
+def _write_debug_snapshot(backend_env: str) -> None:
     """Optionally write backend detection debug information.
 
     Set AUTOCAD_MCP_DEBUG_DETECT_FILE to enable.
@@ -82,6 +108,12 @@ def detect_backend() -> str:
     backend_env = _current_backend_env()
     _write_debug_snapshot(backend_env)
 
+    if backend_env not in BACKEND_CHOICES:
+        choices = ", ".join(sorted(BACKEND_CHOICES))
+        raise RuntimeError(
+            f"Unknown AUTOCAD_MCP_BACKEND={backend_env!r}; expected one of: {choices}"
+        )
+
     if backend_env == "ezdxf":
         return "ezdxf"
 
@@ -97,7 +129,7 @@ def detect_backend() -> str:
                 elif backend_env == "file_ipc":
                     raise RuntimeError(
                         "AUTOCAD_MCP_BACKEND=file_ipc but no AutoCAD window found. "
-                        "Start AutoCAD LT and open a .dwg file."
+                        "Start AutoCAD + T20 and open a .dwg file."
                     )
             except ImportError:
                 if backend_env == "file_ipc":

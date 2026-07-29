@@ -152,9 +152,7 @@ async def main() -> int:
             )
             checks[f"{operation}_layer"] = f"layer={expected_layer}" in last_payload
             checks[f"{operation}_delta"] = after == before + 1
-            checks[f"{operation}_panel_closed"] = (
-                da.find_opening_panel(acad_pid) is None
-            )
+            checks[f"{operation}_panel_closed"] = da.find_opening_panel(acad_pid) is None
             evidence[operation] = {
                 "status": status,
                 "last": last_payload,

@@ -50,7 +50,7 @@ from t20_mcp.tools.tangent import execute_opening, generate_lisp  # noqa: E402
 
 # 退出活动命令 (最多 8 层, 与 itest_11 一致) + 复位四变量; 返回 rst CMDACTIVE=N。
 RESET_ENV = (
-    '(progn (setq n 0)'
+    "(progn (setq n 0)"
     ' (while (and (< n 8) (> (getvar "CMDACTIVE") 0)) (command) (setq n (1+ n)))'
     ' (setvar "CMDDIA" 1) (setvar "FILEDIA" 1) (setvar "OSMODE" 0)'
     ' (strcat "rst CMDACTIVE=" (itoa (getvar "CMDACTIVE"))))'
@@ -65,7 +65,7 @@ GROUP71 = '(if (entlast) (cdr (assoc 71 (entget (entlast)))) "none")'
 
 # 读回最后一个 TCH_OPENING 的 entity type + COM 属性 (返回单字符串供 IPC payload 解析)
 # 注意: 必须在外层 setq, 否则 c:t20mcp-rb 的 ( / ...) 局部变量在 strcat 时已脱出作用域。
-READBACK_LISP = '''
+READBACK_LISP = """
 (setq t20mcp:rb-etyp "no-entity"
       t20mcp:rb-w nil t20mcp:rb-h nil t20mcp:rb-ds nil t20mcp:rb-sh nil)
 (if (entlast)
@@ -82,7 +82,7 @@ READBACK_LISP = '''
   " H="  (vl-prin1-to-string t20mcp:rb-h)
   " DS=" (vl-prin1-to-string t20mcp:rb-ds)
   " SH=" (vl-prin1-to-string t20mcp:rb-sh))
-'''
+"""
 
 # 必须同时复位这四个变量; cleanup 判定逐项检查。
 ENV_VARS = ["CMDACTIVE", "CMDDIA", "FILEDIA", "OSMODE"]
@@ -149,11 +149,19 @@ async def run(mode: str) -> int:
     verdict_ok = False
     try:
         # 1) 准备一道墙 — 参数对齐 itest_12 已真机验证的 good 路径。
-        wall_code = generate_lisp("wall", {
-            "x1": 0, "y1": 0, "x2": 6000, "y2": 0,
-            "left_width": 240, "right_width": 120,
-            "height": 3300, "wall_type": "砖",
-        })
+        wall_code = generate_lisp(
+            "wall",
+            {
+                "x1": 0,
+                "y1": 0,
+                "x2": 6000,
+                "y2": 0,
+                "left_width": 240,
+                "right_width": 120,
+                "height": 3300,
+                "wall_type": "砖",
+            },
+        )
         wall_r = await backend.execute_lisp(wall_code)
         after_wall = await count(backend)
         print(f"[wall] ok={wall_r.ok} count {base}->{after_wall}")
@@ -163,16 +171,26 @@ async def run(mode: str) -> int:
 
         # 2) 在墙上插入 door 或 window — door 参数对齐 itest_12 good 路径。
         if mode == "door":
-            params = {"ins_x": 3000.0, "ins_y": 0.0,
-                      "width": 1000.0, "height": 2000.0, "sill_distance": 0.0}
+            params = {
+                "ins_x": 3000.0,
+                "ins_y": 0.0,
+                "width": 1000.0,
+                "height": 2000.0,
+                "sill_distance": 0.0,
+            }
             expect_w, expect_h, expect_ds = 1000.0, 2000.0, 0.0
             expect_sh = None
         elif mode == "window":
-            params = {"ins_x": 3000.0, "ins_y": 0.0,
-                      "width": 1500.0, "height": 1500.0, "sill_height": 900.0}
+            params = {
+                "ins_x": 3000.0,
+                "ins_y": 0.0,
+                "width": 1500.0,
+                "height": 1500.0,
+                "sill_height": 900.0,
+            }
             expect_w, expect_h = 1500.0, 1500.0
-            expect_ds = 900.0   # window 模式 DoorSill 承载窗台高 (Handoff 33 修复后)
-            expect_sh = None    # TCH_OPENING 不暴露 SillHeight (Handoff 33 枚举证伪)
+            expect_ds = 900.0  # window 模式 DoorSill 承载窗台高 (Handoff 33 修复后)
+            expect_sh = None  # TCH_OPENING 不暴露 SillHeight (Handoff 33 枚举证伪)
         else:
             print(f"unknown mode: {mode}")
             return 2
@@ -183,8 +201,10 @@ async def run(mode: str) -> int:
         last_type = await backend.execute_lisp(LAST_TYPE)
         ca = await backend.drawing_get_variables(["CMDACTIVE"])
         ca_val = ca.payload.get("CMDACTIVE") if ca.ok else "?"
-        print(f"[{mode}] ok={op_r.ok} payload={op_r.payload!r} "
-              f"count {after_wall}->{after_op} last_type={last_type.payload!r} CMDACTIVE={ca_val}")
+        print(
+            f"[{mode}] ok={op_r.ok} payload={op_r.payload!r} "
+            f"count {after_wall}->{after_op} last_type={last_type.payload!r} CMDACTIVE={ca_val}"
+        )
 
         # 3) 读回
         rb = await backend.execute_lisp(READBACK_LISP)
@@ -214,9 +234,11 @@ async def run(mode: str) -> int:
         # P0: 无论 PASS/FAIL/SKIP/异常, 都执行 cleanup — 撤实体 + 复位四环境变量。
         cleanup_ok = await _cleanup(backend, base)
 
-    print(f"  cleanup clean (entity baseline + "
-          f"CMDACTIVE=0/CMDDIA=1/FILEDIA=1/OSMODE=0): "
-          f"{'PASS' if cleanup_ok else 'FAIL'}")
+    print(
+        f"  cleanup clean (entity baseline + "
+        f"CMDACTIVE=0/CMDDIA=1/FILEDIA=1/OSMODE=0): "
+        f"{'PASS' if cleanup_ok else 'FAIL'}"
+    )
     return 0 if (verdict_ok and cleanup_ok) else 2
 
 

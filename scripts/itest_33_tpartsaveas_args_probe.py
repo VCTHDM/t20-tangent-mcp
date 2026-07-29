@@ -48,15 +48,14 @@ from t20_mcp.backends.file_ipc import FileIPCBackend  # noqa: E402
 from t20_mcp.tools.tangent import _load_prelude  # noqa: E402
 
 RESET_ENV = (
-    '(progn (setq n 0)'
+    "(progn (setq n 0)"
     ' (while (and (< n 8) (> (getvar "CMDACTIVE") 0)) (command) (setq n (1+ n)))'
     ' (setvar "CMDDIA" 1) (setvar "FILEDIA" 1) (setvar "OSMODE" 0) "rst")'
 )
 
 # 阶段 A: 仅检查命令是否注册, 不启动它。
 PHASE_A_LISP = (
-    _load_prelude()
-    + '\n(progn'
+    _load_prelude() + "\n(progn"
     '  (setq cn (getcname "TPartSaveAs"))'
     '  (princ (strcat "\\n@@@CNAME=" (vl-prin1-to-string cn) "@@@\\n"))'
     '  (strcat "cname=" (vl-prin1-to-string cn)))'
@@ -112,7 +111,12 @@ def popup_classes(pid: int) -> list[tuple[str, str]]:
             if wp == pid:
                 cls = win32gui.GetClassName(h)
                 title = win32gui.GetWindowText(h)
-                if cls in ("#32770",) or "WPF" in cls or "天正" in title or ".dwg" not in title.lower():
+                if (
+                    cls in ("#32770",)
+                    or "WPF" in cls
+                    or "天正" in title
+                    or ".dwg" not in title.lower()
+                ):
                     out.append((cls, title))
         return True
 
@@ -129,7 +133,7 @@ async def phase_a(backend: FileIPCBackend) -> int:
     print("=== Phase A: getcname 注册确认 ===")
     r = await backend.execute_lisp(PHASE_A_LISP)
     print(f"  ok={r.ok} payload={r.payload!r} error={r.error!r}")
-    cname = (r.payload or "")
+    cname = r.payload or ""
     registered = "nil" not in cname.lower() and "TPartSaveAs".lower() in cname.lower()
     print(f"  registered: {'PASS' if registered else 'FAIL'} (payload={cname})")
     env = await assert_env_clean(backend)
@@ -188,7 +192,9 @@ async def phase_b(backend: FileIPCBackend) -> int:
     success = file_ok and env_clean and not has_modal_left
     # 阻塞判据: 期间弹 #32770 + 无文件 -> path-only 形态需要对话框, 路线阻塞
     blocked_by_modal = has_modal_during and not file_ok
-    print(f"  -> 结论: {'SUCCESS' if success else ('BLOCKED-by-#32770' if blocked_by_modal else 'INDETERMINATE')}")
+    print(
+        f"  -> 结论: {'SUCCESS' if success else ('BLOCKED-by-#32770' if blocked_by_modal else 'INDETERMINATE')}"
+    )
     return 0
 
 
@@ -216,11 +222,19 @@ def build_phase_c_lisp(out_path: str) -> str:
 
 def _wall_prereq_lisp() -> str:
     from t20_mcp.tools.tangent import generate_lisp
+
     return generate_lisp(
         "wall",
-        {"x1": 0, "y1": 0, "x2": 3000, "y2": 0,
-         "left_width": 120, "right_width": 120,
-         "height": 3000, "wall_type": "砖"},
+        {
+            "x1": 0,
+            "y1": 0,
+            "x2": 3000,
+            "y2": 0,
+            "left_width": 120,
+            "right_width": 120,
+            "height": 3000,
+            "wall_type": "砖",
+        },
     )
 
 
@@ -300,7 +314,9 @@ async def phase_c(backend: FileIPCBackend) -> int:
     print(f"  环境干净              : {'YES' if env_clean else 'no'}")
     print(f"  cleanup 回到 baseline : {'YES' if final_n == pre_count else 'no'}")
     success = file_ok and env_clean and not has_modal_left and final_n == pre_count
-    print(f"  -> 结论: {'SUCCESS-silent-export' if success else ('BLOCKED-by-modal' if has_modal_during else 'INDETERMINATE')}")
+    print(
+        f"  -> 结论: {'SUCCESS-silent-export' if success else ('BLOCKED-by-modal' if has_modal_during else 'INDETERMINATE')}"
+    )
     return 0 if success else 2
 
 

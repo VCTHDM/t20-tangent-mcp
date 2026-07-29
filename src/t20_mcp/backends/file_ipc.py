@@ -1,4 +1,4 @@
-"""File-based IPC backend for AutoCAD LT.
+"""File-based IPC backend for AutoCAD + Tangent T20.
 
 Protocol:
 1. Python writes JSON command to C:/temp/t20_mcp_cmd_{request_id}.json
@@ -22,14 +22,22 @@ from pathlib import Path
 import structlog
 
 from t20_mcp.backends.base import AutoCADBackend, BackendCapabilities, CommandResult
-from t20_mcp.config import ACAD_PROCESS_NAME, IPC_DIR, IPC_TIMEOUT, LISP_DIR
+from t20_mcp.config import (
+    ACAD_PROCESS_NAME,
+    IPC_DIR,
+    IPC_TIMEOUT,
+    IPC_TIMEOUT_MAX,
+    LISP_DIR,
+)
 
 log = structlog.get_logger()
 
 # IPC settings
 POLL_INTERVAL = 0.1  # seconds
 TIMEOUT = IPC_TIMEOUT  # seconds (configurable via AUTOCAD_MCP_IPC_TIMEOUT)
-STALE_THRESHOLD = 60.0  # clean up files older than this
+# A second server instance can use a different timeout. Base cleanup on the
+# global allowed maximum so it cannot delete another process's active request.
+STALE_THRESHOLD = IPC_TIMEOUT_MAX + 30.0
 
 
 def _decode_result_bytes(raw: bytes, ansi: str | None = None) -> str:
@@ -111,7 +119,7 @@ def find_autocad_window() -> int | None:
         return None
 
     title_hints = ("autocad", "天正", "tarch")
-    primary: list[tuple[int, str]] = []   # process-name matches: (hwnd, title)
+    primary: list[tuple[int, str]] = []  # process-name matches: (hwnd, title)
     secondary: list[tuple[int, str]] = []  # title-only matches (fallback)
 
     def callback(hwnd, _):
@@ -154,7 +162,7 @@ def find_autocad_window() -> int | None:
 
 
 class FileIPCBackend(AutoCADBackend):
-    """File-based IPC with AutoCAD LT via mcp_dispatch.lsp."""
+    """File-based IPC with AutoCAD + Tangent T20 via mcp_dispatch.lsp."""
 
     def __init__(self):
         self._hwnd: int | None = None
@@ -282,10 +290,21 @@ class FileIPCBackend(AutoCADBackend):
             # which the dispatcher's minimal JSON parser can't decode), and the
             # command file is written GBK to match the encoding contract — AutoCAD
             # reads .json command files in the system ANSI page (cp936) just like
-            # .lsp. errors="replace" keeps a stray non-GBK char from aborting the
-            # whole dispatch (param-layer GBK validation is the real gate).
+            # .lsp. Reject non-GBK input explicitly; replacing it with "?" would
+            # silently execute different user data.
             cmd_json = json.dumps(payload, ensure_ascii=False)
-            tmp_file.write_bytes(cmd_json.encode("gbk", errors="replace"))
+            try:
+                cmd_bytes = cmd_json.encode("gbk", errors="strict")
+            except UnicodeEncodeError as e:
+                bad = cmd_json[e.start : e.end]
+                return CommandResult(
+                    ok=False,
+                    error=(
+                        f"IPC 参数含 GBK 无法编码的字符 {bad!r} (位置 {e.start}); "
+                        "请移除 emoji 或扩展区字符。"
+                    ),
+                )
+            tmp_file.write_bytes(cmd_bytes)
             tmp_file.rename(cmd_file)
 
             # Type the fixed dispatch trigger. Only inject ESC cancel when the
@@ -320,7 +339,11 @@ class FileIPCBackend(AutoCADBackend):
 
             # Timed out: arm ESC cancel for the next dispatch's first attempt.
             self._needs_cancel = True
-            return CommandResult(ok=False, error=f"Timeout waiting for result (request_id={request_id})")
+            return CommandResult(
+                ok=False,
+                payload={"code": "IPC_TIMEOUT", "request_id": request_id},
+                error=f"Timeout waiting for result (request_id={request_id})",
+            )
 
         finally:
             # Cleanup
@@ -491,7 +514,10 @@ class FileIPCBackend(AutoCADBackend):
     async def execute_lisp(self, code: str) -> CommandResult:
         """Execute arbitrary AutoLISP code via temp file.
 
-        File persists for session; cleaned up by _cleanup_stale_files().
+        The per-call file is removed after a terminal dispatch result or local
+        exception. An ambiguous timeout preserves it for bounded stale cleanup,
+        because AutoCAD may already have read the command JSON but not loaded
+        the code file yet.
 
         编码契约 (见 _prelude.lsp §2): AutoCAD (load) 在 2021 之前只按系统
         ANSI 代码页解码 .lsp; 中文 Windows 上 = GBK(cp936)。仓库内模板是
@@ -504,7 +530,7 @@ class FileIPCBackend(AutoCADBackend):
         try:
             gbk_bytes = code.encode("gbk", errors="strict")
         except UnicodeEncodeError as e:
-            bad = code[e.start:e.end]
+            bad = code[e.start : e.end]
             return CommandResult(
                 ok=False,
                 error=(
@@ -513,35 +539,87 @@ class FileIPCBackend(AutoCADBackend):
                 ),
             )
         code_file.write_bytes(gbk_bytes)
-        return await self._dispatch("execute-lisp", {
-            "code_file": str(code_file).replace("\\", "/")
-        })
+        remove_code_file = True
+        try:
+            result = await self._dispatch(
+                "execute-lisp",
+                {"code_file": str(code_file).replace("\\", "/")},
+            )
+            # A timeout is ambiguous: AutoCAD may already have read the command
+            # JSON but not loaded this file yet. Preserve it for bounded stale
+            # cleanup instead of deleting a file an in-flight command may need.
+            if (
+                not result.ok
+                and isinstance(result.payload, dict)
+                and result.payload.get("code") == "IPC_TIMEOUT"
+            ):
+                remove_code_file = False
+            return result
+        except asyncio.CancelledError:
+            remove_code_file = False
+            raise
+        finally:
+            if remove_code_file:
+                try:
+                    code_file.unlink(missing_ok=True)
+                except OSError:
+                    pass
 
     # --- Entity operations ---
 
     async def create_line(self, x1, y1, x2, y2, layer=None) -> CommandResult:
-        return await self._dispatch("create-line", {"x1": x1, "y1": y1, "x2": x2, "y2": y2, "layer": layer})
+        return await self._dispatch(
+            "create-line", {"x1": x1, "y1": y1, "x2": x2, "y2": y2, "layer": layer}
+        )
 
     async def create_circle(self, cx, cy, radius, layer=None) -> CommandResult:
-        return await self._dispatch("create-circle", {"cx": cx, "cy": cy, "radius": radius, "layer": layer})
+        return await self._dispatch(
+            "create-circle", {"cx": cx, "cy": cy, "radius": radius, "layer": layer}
+        )
 
     async def create_polyline(self, points, closed=False, layer=None) -> CommandResult:
         pts_str = ";".join(f"{p[0]},{p[1]}" for p in points)
-        return await self._dispatch("create-polyline", {
-            "points_str": pts_str, "closed": "1" if closed else "0", "layer": layer
-        })
+        return await self._dispatch(
+            "create-polyline",
+            {"points_str": pts_str, "closed": "1" if closed else "0", "layer": layer},
+        )
 
     async def create_rectangle(self, x1, y1, x2, y2, layer=None) -> CommandResult:
-        return await self._dispatch("create-rectangle", {"x1": x1, "y1": y1, "x2": x2, "y2": y2, "layer": layer})
+        return await self._dispatch(
+            "create-rectangle", {"x1": x1, "y1": y1, "x2": x2, "y2": y2, "layer": layer}
+        )
 
     async def create_arc(self, cx, cy, radius, start_angle, end_angle, layer=None) -> CommandResult:
-        return await self._dispatch("create-arc", {"cx": cx, "cy": cy, "radius": radius, "start_angle": start_angle, "end_angle": end_angle, "layer": layer})
+        return await self._dispatch(
+            "create-arc",
+            {
+                "cx": cx,
+                "cy": cy,
+                "radius": radius,
+                "start_angle": start_angle,
+                "end_angle": end_angle,
+                "layer": layer,
+            },
+        )
 
     async def create_ellipse(self, cx, cy, major_x, major_y, ratio, layer=None) -> CommandResult:
-        return await self._dispatch("create-ellipse", {"cx": cx, "cy": cy, "major_x": major_x, "major_y": major_y, "ratio": ratio, "layer": layer})
+        return await self._dispatch(
+            "create-ellipse",
+            {
+                "cx": cx,
+                "cy": cy,
+                "major_x": major_x,
+                "major_y": major_y,
+                "ratio": ratio,
+                "layer": layer,
+            },
+        )
 
     async def create_mtext(self, x, y, width, text, height=2.5, layer=None) -> CommandResult:
-        return await self._dispatch("create-mtext", {"x": x, "y": y, "width": width, "text": text, "height": height, "layer": layer})
+        return await self._dispatch(
+            "create-mtext",
+            {"x": x, "y": y, "width": width, "text": text, "height": height, "layer": layer},
+        )
 
     async def create_hatch(self, entity_id, pattern="ANSI31") -> CommandResult:
         return await self._dispatch("create-hatch", {"entity_id": entity_id, "pattern": pattern})
@@ -565,25 +643,44 @@ class FileIPCBackend(AutoCADBackend):
         return await self._dispatch("entity-move", {"entity_id": entity_id, "dx": dx, "dy": dy})
 
     async def entity_rotate(self, entity_id, cx, cy, angle) -> CommandResult:
-        return await self._dispatch("entity-rotate", {"entity_id": entity_id, "cx": cx, "cy": cy, "angle": angle})
+        return await self._dispatch(
+            "entity-rotate", {"entity_id": entity_id, "cx": cx, "cy": cy, "angle": angle}
+        )
 
     async def entity_scale(self, entity_id, cx, cy, factor) -> CommandResult:
-        return await self._dispatch("entity-scale", {"entity_id": entity_id, "cx": cx, "cy": cy, "factor": factor})
+        return await self._dispatch(
+            "entity-scale", {"entity_id": entity_id, "cx": cx, "cy": cy, "factor": factor}
+        )
 
     async def entity_mirror(self, entity_id, x1, y1, x2, y2) -> CommandResult:
-        return await self._dispatch("entity-mirror", {"entity_id": entity_id, "x1": x1, "y1": y1, "x2": x2, "y2": y2})
+        return await self._dispatch(
+            "entity-mirror", {"entity_id": entity_id, "x1": x1, "y1": y1, "x2": x2, "y2": y2}
+        )
 
     async def entity_offset(self, entity_id, distance) -> CommandResult:
         return await self._dispatch("entity-offset", {"entity_id": entity_id, "distance": distance})
 
     async def entity_array(self, entity_id, rows, cols, row_dist, col_dist) -> CommandResult:
-        return await self._dispatch("entity-array", {"entity_id": entity_id, "rows": rows, "cols": cols, "row_dist": row_dist, "col_dist": col_dist})
+        return await self._dispatch(
+            "entity-array",
+            {
+                "entity_id": entity_id,
+                "rows": rows,
+                "cols": cols,
+                "row_dist": row_dist,
+                "col_dist": col_dist,
+            },
+        )
 
     async def entity_fillet(self, entity_id1, entity_id2, radius) -> CommandResult:
-        return await self._dispatch("entity-fillet", {"id1": entity_id1, "id2": entity_id2, "radius": radius})
+        return await self._dispatch(
+            "entity-fillet", {"id1": entity_id1, "id2": entity_id2, "radius": radius}
+        )
 
     async def entity_chamfer(self, entity_id1, entity_id2, dist1, dist2) -> CommandResult:
-        return await self._dispatch("entity-chamfer", {"id1": entity_id1, "id2": entity_id2, "dist1": dist1, "dist2": dist2})
+        return await self._dispatch(
+            "entity-chamfer", {"id1": entity_id1, "id2": entity_id2, "dist1": dist1, "dist2": dist2}
+        )
 
     # --- Layer operations ---
 
@@ -591,13 +688,20 @@ class FileIPCBackend(AutoCADBackend):
         return await self._dispatch("layer-list", {})
 
     async def layer_create(self, name, color="white", linetype="CONTINUOUS") -> CommandResult:
-        return await self._dispatch("layer-create", {"name": name, "color": color, "linetype": linetype})
+        return await self._dispatch(
+            "layer-create", {"name": name, "color": color, "linetype": linetype}
+        )
 
     async def layer_set_current(self, name) -> CommandResult:
         return await self._dispatch("layer-set-current", {"name": name})
 
-    async def layer_set_properties(self, name, color=None, linetype=None, lineweight=None) -> CommandResult:
-        return await self._dispatch("layer-set-properties", {"name": name, "color": color, "linetype": linetype, "lineweight": lineweight})
+    async def layer_set_properties(
+        self, name, color=None, linetype=None, lineweight=None
+    ) -> CommandResult:
+        return await self._dispatch(
+            "layer-set-properties",
+            {"name": name, "color": color, "linetype": linetype, "lineweight": lineweight},
+        )
 
     async def layer_freeze(self, name) -> CommandResult:
         return await self._dispatch("layer-freeze", {"name": name})
@@ -616,17 +720,43 @@ class FileIPCBackend(AutoCADBackend):
     async def block_list(self) -> CommandResult:
         return await self._dispatch("block-list", {})
 
-    async def block_insert(self, name, x, y, scale=1.0, rotation=0.0, block_id=None) -> CommandResult:
-        return await self._dispatch("block-insert", {"name": name, "x": x, "y": y, "scale": scale, "rotation": rotation, "block_id": block_id})
+    async def block_insert(
+        self, name, x, y, scale=1.0, rotation=0.0, block_id=None
+    ) -> CommandResult:
+        return await self._dispatch(
+            "block-insert",
+            {
+                "name": name,
+                "x": x,
+                "y": y,
+                "scale": scale,
+                "rotation": rotation,
+                "block_id": block_id,
+            },
+        )
 
-    async def block_insert_with_attributes(self, name, x, y, scale=1.0, rotation=0.0, attributes=None) -> CommandResult:
-        return await self._dispatch("block-insert-with-attributes", {"name": name, "x": x, "y": y, "scale": scale, "rotation": rotation, "attributes": attributes or {}})
+    async def block_insert_with_attributes(
+        self, name, x, y, scale=1.0, rotation=0.0, attributes=None
+    ) -> CommandResult:
+        return await self._dispatch(
+            "block-insert-with-attributes",
+            {
+                "name": name,
+                "x": x,
+                "y": y,
+                "scale": scale,
+                "rotation": rotation,
+                "attributes": attributes or {},
+            },
+        )
 
     async def block_get_attributes(self, entity_id) -> CommandResult:
         return await self._dispatch("block-get-attributes", {"entity_id": entity_id})
 
     async def block_update_attribute(self, entity_id, tag, value) -> CommandResult:
-        return await self._dispatch("block-update-attribute", {"entity_id": entity_id, "tag": tag, "value": value})
+        return await self._dispatch(
+            "block-update-attribute", {"entity_id": entity_id, "tag": tag, "value": value}
+        )
 
     async def block_define(self, name, entities) -> CommandResult:
         return await self._dispatch("block-define", {"name": name, "entities": entities})
@@ -634,19 +764,31 @@ class FileIPCBackend(AutoCADBackend):
     # --- Annotation ---
 
     async def create_text(self, x, y, text, height=2.5, rotation=0.0, layer=None) -> CommandResult:
-        return await self._dispatch("create-text", {"x": x, "y": y, "text": text, "height": height, "rotation": rotation, "layer": layer})
+        return await self._dispatch(
+            "create-text",
+            {"x": x, "y": y, "text": text, "height": height, "rotation": rotation, "layer": layer},
+        )
 
     async def create_dimension_linear(self, x1, y1, x2, y2, dim_x, dim_y) -> CommandResult:
-        return await self._dispatch("create-dimension-linear", {"x1": x1, "y1": y1, "x2": x2, "y2": y2, "dim_x": dim_x, "dim_y": dim_y})
+        return await self._dispatch(
+            "create-dimension-linear",
+            {"x1": x1, "y1": y1, "x2": x2, "y2": y2, "dim_x": dim_x, "dim_y": dim_y},
+        )
 
     async def create_dimension_aligned(self, x1, y1, x2, y2, offset) -> CommandResult:
-        return await self._dispatch("create-dimension-aligned", {"x1": x1, "y1": y1, "x2": x2, "y2": y2, "offset": offset})
+        return await self._dispatch(
+            "create-dimension-aligned", {"x1": x1, "y1": y1, "x2": x2, "y2": y2, "offset": offset}
+        )
 
     async def create_dimension_angular(self, cx, cy, x1, y1, x2, y2) -> CommandResult:
-        return await self._dispatch("create-dimension-angular", {"cx": cx, "cy": cy, "x1": x1, "y1": y1, "x2": x2, "y2": y2})
+        return await self._dispatch(
+            "create-dimension-angular", {"cx": cx, "cy": cy, "x1": x1, "y1": y1, "x2": x2, "y2": y2}
+        )
 
     async def create_dimension_radius(self, cx, cy, radius, angle) -> CommandResult:
-        return await self._dispatch("create-dimension-radius", {"cx": cx, "cy": cy, "radius": radius, "angle": angle})
+        return await self._dispatch(
+            "create-dimension-radius", {"cx": cx, "cy": cy, "radius": radius, "angle": angle}
+        )
 
     async def create_leader(self, points, text) -> CommandResult:
         pts_str = ";".join(f"{p[0]},{p[1]}" for p in points)
@@ -657,38 +799,101 @@ class FileIPCBackend(AutoCADBackend):
     async def pid_setup_layers(self) -> CommandResult:
         return await self._dispatch("pid-setup-layers", {})
 
-    async def pid_insert_symbol(self, category, symbol, x, y, scale=1.0, rotation=0.0) -> CommandResult:
-        return await self._dispatch("pid-insert-symbol", {"category": category, "symbol": symbol, "x": x, "y": y, "scale": scale, "rotation": rotation})
+    async def pid_insert_symbol(
+        self, category, symbol, x, y, scale=1.0, rotation=0.0
+    ) -> CommandResult:
+        return await self._dispatch(
+            "pid-insert-symbol",
+            {
+                "category": category,
+                "symbol": symbol,
+                "x": x,
+                "y": y,
+                "scale": scale,
+                "rotation": rotation,
+            },
+        )
 
     async def pid_list_symbols(self, category) -> CommandResult:
         return await self._dispatch("pid-list-symbols", {"category": category})
 
     async def pid_draw_process_line(self, x1, y1, x2, y2) -> CommandResult:
-        return await self._dispatch("pid-draw-process-line", {"x1": x1, "y1": y1, "x2": x2, "y2": y2})
+        return await self._dispatch(
+            "pid-draw-process-line", {"x1": x1, "y1": y1, "x2": x2, "y2": y2}
+        )
 
     async def pid_connect_equipment(self, x1, y1, x2, y2) -> CommandResult:
-        return await self._dispatch("pid-connect-equipment", {"x1": x1, "y1": y1, "x2": x2, "y2": y2})
+        return await self._dispatch(
+            "pid-connect-equipment", {"x1": x1, "y1": y1, "x2": x2, "y2": y2}
+        )
 
     async def pid_add_flow_arrow(self, x, y, rotation=0.0) -> CommandResult:
         return await self._dispatch("pid-add-flow-arrow", {"x": x, "y": y, "rotation": rotation})
 
     async def pid_add_equipment_tag(self, x, y, tag, description="") -> CommandResult:
-        return await self._dispatch("pid-add-equipment-tag", {"x": x, "y": y, "tag": tag, "description": description})
+        return await self._dispatch(
+            "pid-add-equipment-tag", {"x": x, "y": y, "tag": tag, "description": description}
+        )
 
     async def pid_add_line_number(self, x, y, line_num, spec) -> CommandResult:
-        return await self._dispatch("pid-add-line-number", {"x": x, "y": y, "line_num": line_num, "spec": spec})
+        return await self._dispatch(
+            "pid-add-line-number", {"x": x, "y": y, "line_num": line_num, "spec": spec}
+        )
 
-    async def pid_insert_valve(self, x, y, valve_type, rotation=0.0, attributes=None) -> CommandResult:
-        return await self._dispatch("pid-insert-valve", {"x": x, "y": y, "valve_type": valve_type, "rotation": rotation, "attributes": attributes or {}})
+    async def pid_insert_valve(
+        self, x, y, valve_type, rotation=0.0, attributes=None
+    ) -> CommandResult:
+        return await self._dispatch(
+            "pid-insert-valve",
+            {
+                "x": x,
+                "y": y,
+                "valve_type": valve_type,
+                "rotation": rotation,
+                "attributes": attributes or {},
+            },
+        )
 
-    async def pid_insert_instrument(self, x, y, instrument_type, rotation=0.0, tag_id="", range_value="") -> CommandResult:
-        return await self._dispatch("pid-insert-instrument", {"x": x, "y": y, "instrument_type": instrument_type, "rotation": rotation, "tag_id": tag_id, "range_value": range_value})
+    async def pid_insert_instrument(
+        self, x, y, instrument_type, rotation=0.0, tag_id="", range_value=""
+    ) -> CommandResult:
+        return await self._dispatch(
+            "pid-insert-instrument",
+            {
+                "x": x,
+                "y": y,
+                "instrument_type": instrument_type,
+                "rotation": rotation,
+                "tag_id": tag_id,
+                "range_value": range_value,
+            },
+        )
 
-    async def pid_insert_pump(self, x, y, pump_type, rotation=0.0, attributes=None) -> CommandResult:
-        return await self._dispatch("pid-insert-pump", {"x": x, "y": y, "pump_type": pump_type, "rotation": rotation, "attributes": attributes or {}})
+    async def pid_insert_pump(
+        self, x, y, pump_type, rotation=0.0, attributes=None
+    ) -> CommandResult:
+        return await self._dispatch(
+            "pid-insert-pump",
+            {
+                "x": x,
+                "y": y,
+                "pump_type": pump_type,
+                "rotation": rotation,
+                "attributes": attributes or {},
+            },
+        )
 
     async def pid_insert_tank(self, x, y, tank_type, scale=1.0, attributes=None) -> CommandResult:
-        return await self._dispatch("pid-insert-tank", {"x": x, "y": y, "tank_type": tank_type, "scale": scale, "attributes": attributes or {}})
+        return await self._dispatch(
+            "pid-insert-tank",
+            {
+                "x": x,
+                "y": y,
+                "tank_type": tank_type,
+                "scale": scale,
+                "attributes": attributes or {},
+            },
+        )
 
     # --- View ---
 

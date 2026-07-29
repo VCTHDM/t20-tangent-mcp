@@ -24,7 +24,7 @@ import time
 from pathlib import Path
 
 sys.stdout.reconfigure(errors="replace")
-sys.path.insert(0, str(Path(__file__).resolve().parent))            # for _live_lock
+sys.path.insert(0, str(Path(__file__).resolve().parent))  # for _live_lock
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 
 import win32con
@@ -50,7 +50,7 @@ KNOWN_CANCELABLE_TITLES = (
 IDCANCEL = 2  # 标准 Cancel 按钮 ID
 
 RESET_ENV_LISP = (
-    '(progn (setq n 0)'
+    "(progn (setq n 0)"
     ' (while (and (< n 8) (> (getvar "CMDACTIVE") 0)) (command) (setq n (1+ n)))'
     ' (setvar "CMDDIA" 1) (setvar "FILEDIA" 1) (setvar "OSMODE" 0)'
     ' (strcat "rst CMDACTIVE=" (itoa (getvar "CMDACTIVE"))))'
@@ -113,7 +113,7 @@ async def main() -> int:
         post_idcancel(hwnd)
         time.sleep(0.5)
         if win32gui.IsWindow(hwnd) and win32gui.IsWindowVisible(hwnd):
-            print(f"  IDCANCEL 后仍可见, 再补一次 ESC")
+            print("  IDCANCEL 后仍可见, 再补一次 ESC")
             post_escape(hwnd)
             time.sleep(0.4)
 
@@ -141,9 +141,9 @@ async def main() -> int:
     # 5) 二次窗口枚举, 确认弹框已退
     after = enum_acad_windows()
     leftovers = [
-        (h, c, t) for h, c, t in after
-        if h != main_hwnd and c == "#32770"
-        and any(tt in t for tt in KNOWN_CANCELABLE_TITLES)
+        (h, c, t)
+        for h, c, t in after
+        if h != main_hwnd and c == "#32770" and any(tt in t for tt in KNOWN_CANCELABLE_TITLES)
     ]
     print(f"[verify] 残留白名单弹框: {leftovers}")
 

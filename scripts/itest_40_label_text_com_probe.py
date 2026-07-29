@@ -69,25 +69,40 @@ TEST_STR = "T20MCP-B2"
 # inject 模式: generate_lisp 文本参数 -> 期望 COM 属性值 (含中文验证 GBK 全链路)。
 INJECT_CASES: dict[str, dict] = {
     "drawing_name": {
-        "params": {"ins_x": 5000.0, "ins_y": 5000.0,
-                   "name_text": "一层平面图", "scale_text": "1:50"},
+        "params": {
+            "ins_x": 5000.0,
+            "ins_y": 5000.0,
+            "name_text": "一层平面图",
+            "scale_text": "1:50",
+        },
         "expect": {"NameText": "一层平面图", "ScaleText": "1:50"},
     },
     "arrow": {
-        "params": {"x1": 0.0, "y1": 0.0, "x2": 2000.0, "y2": 1000.0,
-                   "text": "做法见详图", "text2": "1:20"},
+        "params": {
+            "x1": 0.0,
+            "y1": 0.0,
+            "x2": 2000.0,
+            "y2": 1000.0,
+            "text": "做法见详图",
+            "text2": "1:20",
+        },
         "expect": {"Text": "做法见详图", "Text2": "1:20"},
     },
     "elevation": {
-        "params": {"base_x": 0.0, "base_y": 0.0,
-                   "label_x": 1000.0, "label_y": 1000.0, "text": "3.000"},
+        "params": {
+            "base_x": 0.0,
+            "base_y": 0.0,
+            "label_x": 1000.0,
+            "label_y": 1000.0,
+            "text": "3.000",
+        },
         "expect": {"Text": "3.000"},
     },
 }
 
 # 退出活动命令 + 复位环境 (对齐 itest_35, 追加 LOGFILEMODE=0)。
 RESET_ENV = (
-    '(progn (setq n 0)'
+    "(progn (setq n 0)"
     ' (while (and (< n 8) (> (getvar "CMDACTIVE") 0)) (command) (setq n (1+ n)))'
     ' (setvar "CMDDIA" 1) (setvar "FILEDIA" 1) (setvar "OSMODE" 0)'
     ' (setvar "LOGFILEMODE" 0)'
@@ -98,7 +113,7 @@ ENV_VARS = ["CMDACTIVE", "CMDDIA", "FILEDIA", "OSMODE", "LOGFILEMODE"]
 
 # 阶段 A: 记 handle -> LOGFILE 捕获 vlax-dump-object (含方法) -> 关日志。
 # LOGFILENAME 必须在 mode=1 且已有输出后读取, 否则可能为空。
-DUMP_LISP = '''
+DUMP_LISP = """
 (vl-load-com)
 (setq t20mcp:b2-h (cdr (assoc 5 (entget (entlast)))))
 (setq t20mcp:b2-o (vlax-ename->vla-object (entlast)))
@@ -107,10 +122,10 @@ DUMP_LISP = '''
 (setq t20mcp:b2-log (getvar "LOGFILENAME"))
 (setvar "LOGFILEMODE" 0)
 (strcat "handle=" t20mcp:b2-h " log=" t20mcp:b2-log)
-'''
+"""
 
 # 阶段 A 补充: entget 字符串组快照 (探 DXF 文本落点)。
-ENTGET_STR_LISP = '''
+ENTGET_STR_LISP = """
 (setq t20mcp:b2-strs "")
 (foreach t20mcp:b2-p (entget (entlast))
   (if (= (type (cdr t20mcp:b2-p)) 'STR)
@@ -118,25 +133,47 @@ ENTGET_STR_LISP = '''
             (strcat t20mcp:b2-strs " (" (itoa (car t20mcp:b2-p)) " . "
                     (vl-prin1-to-string (cdr t20mcp:b2-p)) ")"))))
 (strcat "dxf-strs:" t20mcp:b2-strs)
-'''
+"""
 
 # dump 的属性行: ";   Name (RO) = value" / ";   Name = value"
 PROP_RE = re.compile(r"^;\s+(\w+)(\s+\(RO\))?\s+=\s+(.*)$")
 
 # AcadEntity 标准 RW 属性, 与天正文本无关, 不探 (省时 + 避免 Layer 等噪声报错)。
-STD_PROP_SKIP = frozenset({
-    "Layer", "Linetype", "LinetypeScale", "Lineweight", "Material",
-    "PlotStyleName", "TrueColor", "Visible", "EntityTransparency",
-    "Color", "Normal", "Thickness", "Hyperlinks",
-})
+STD_PROP_SKIP = frozenset(
+    {
+        "Layer",
+        "Linetype",
+        "LinetypeScale",
+        "Lineweight",
+        "Material",
+        "PlotStyleName",
+        "TrueColor",
+        "Visible",
+        "EntityTransparency",
+        "Color",
+        "Normal",
+        "Thickness",
+        "Hyperlinks",
+    }
+)
 
 # dump 解析失败时的后备候选 (常见天正/文字属性名, 全按字符串探)。
 FALLBACK_PROPS: list[tuple[str, str]] = [
-    ("Text", "str"), ("TextString", "str"), ("Contents", "str"),
-    ("NoteText", "str"), ("Word", "str"), ("Name", "str"),
-    ("DrawingName", "str"), ("Title", "str"), ("UpText", "str"),
-    ("DownText", "str"), ("TextStyle", "str"), ("Style", "str"),
-    ("Scale", "num"), ("Ratio", "num"), ("TextHeight", "num"),
+    ("Text", "str"),
+    ("TextString", "str"),
+    ("Contents", "str"),
+    ("NoteText", "str"),
+    ("Word", "str"),
+    ("Name", "str"),
+    ("DrawingName", "str"),
+    ("Title", "str"),
+    ("UpText", "str"),
+    ("DownText", "str"),
+    ("TextStyle", "str"),
+    ("Style", "str"),
+    ("Scale", "num"),
+    ("Ratio", "num"),
+    ("TextHeight", "num"),
 ]
 
 # 文本语义相关的属性名特征 (用于结论分级)。
@@ -198,7 +235,7 @@ def _parse_dump(log_path: str) -> tuple[list[tuple[str, str, str]], list[str]]:
     idx = max(text.rfind("Property values:"), text.rfind("特性值:"))
     if idx < 0:
         return [], []
-    seg = text[text.rfind("\n; ", 0, idx) + 1 if idx else 0:]
+    seg = text[text.rfind("\n; ", 0, idx) + 1 if idx else 0 :]
     props: list[tuple[str, str, str]] = []
     dump_lines: list[str] = []
     for line in seg.splitlines():
@@ -232,8 +269,7 @@ def _prop_probe_lisp(handle: str, probes: list[tuple[str, str]]) -> str:
     """生成一轮 COM put/get/restore 直线式探针 LISP (结尾返回汇总串)。"""
     lines = [
         "(vl-load-com)",
-        f'(setq t20mcp:b2-o (vlax-ename->vla-object (handent "{handle}"))'
-        ' t20mcp:b2-out "")',
+        f'(setq t20mcp:b2-o (vlax-ename->vla-object (handent "{handle}")) t20mcp:b2-out "")',
     ]
     for name, kind in probes:
         test = f'"{TEST_STR}"' if kind == "str" else "123.0"
@@ -338,10 +374,13 @@ async def probe_mode(backend: FileIPCBackend, mode: str) -> tuple[bool, str]:
         # A3: entget 字符串组
         eg = await backend.execute_lisp(ENTGET_STR_LISP)
         print(f"[entget-strs] {eg.payload!r}")
-        dxf_codes = sorted({
-            int(c) for c in re.findall(r"\((\d+) \. ", str(eg.payload or ""))
-            if int(c) in (1, 2, 3, 4) or 300 <= int(c) <= 309
-        })
+        dxf_codes = sorted(
+            {
+                int(c)
+                for c in re.findall(r"\((\d+) \. ", str(eg.payload or ""))
+                if int(c) in (1, 2, 3, 4) or 300 <= int(c) <= 309
+            }
+        )
 
         # B: COM put/get 探针 (分批)
         probes = _pick_probes(props) if props else list(FALLBACK_PROPS)
@@ -349,7 +388,7 @@ async def probe_mode(backend: FileIPCBackend, mode: str) -> tuple[bool, str]:
         print(f"[com-probe] {src} 候选 {len(probes)}: {[p[0] for p in probes]}")
         com_payload = ""
         for i in range(0, len(probes), PROBE_BATCH):
-            batch = probes[i:i + PROBE_BATCH]
+            batch = probes[i : i + PROBE_BATCH]
             pr = await backend.execute_lisp(_prop_probe_lisp(handle, batch))
             print(f"[com-probe {i // PROBE_BATCH + 1}] ok={pr.ok} {pr.payload!r}")
             com_payload += str(pr.payload or "")

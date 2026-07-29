@@ -40,14 +40,13 @@ from t20_mcp.backends.file_ipc import FileIPCBackend  # noqa: E402
 from t20_mcp.tools.tangent import _load_prelude  # noqa: E402
 
 RESET_ENV = (
-    '(progn (setq n 0)'
+    "(progn (setq n 0)"
     ' (while (and (< n 8) (> (getvar "CMDACTIVE") 0)) (command) (setq n (1+ n)))'
     ' (setvar "CMDDIA" 1) (setvar "FILEDIA" 1) (setvar "OSMODE" 0) "rst")'
 )
 
 START_TGCOLUMN = (
-    _load_prelude()
-    + '\n(progn (setvar "CMDECHO" 1)'
+    _load_prelude() + '\n(progn (setvar "CMDECHO" 1)'
     ' (vl-catch-all-apply (quote vl-cmdf) (list "TGCOLUMN"))'
     ' (strcat "active=" (itoa (getvar "CMDACTIVE"))))'
 )
@@ -89,16 +88,18 @@ def enum_children(parent_hwnd: int, depth: int = 2) -> list[dict]:
             except Exception as e:
                 out.append({"depth": d, "hwnd": child, "error": repr(e)})
                 return True
-            out.append({
-                "depth": d,
-                "hwnd": child,
-                "class": cls,
-                "title": title,
-                "style_hex": f"0x{styles:08X}",
-                "rect": rect,
-                "enabled": enabled,
-                "visible": visible,
-            })
+            out.append(
+                {
+                    "depth": d,
+                    "hwnd": child,
+                    "class": cls,
+                    "title": title,
+                    "style_hex": f"0x{styles:08X}",
+                    "rect": rect,
+                    "enabled": enabled,
+                    "visible": visible,
+                }
+            )
             walk(child, d + 1)
             return True
 
@@ -165,17 +166,19 @@ async def main() -> int:
             continue
         owner, owner_disabled = is_modal_owner_disabled(h)
         children = enum_children(h, depth=2)
-        inventory.append({
-            "hwnd": h,
-            "class": cls,
-            "title": title,
-            "rect": rect,
-            "enabled": enabled,
-            "owner_hwnd": owner,
-            "owner_disabled (modal-blocking?)": owner_disabled,
-            "child_count": len(children),
-            "children": children,
-        })
+        inventory.append(
+            {
+                "hwnd": h,
+                "class": cls,
+                "title": title,
+                "rect": rect,
+                "enabled": enabled,
+                "owner_hwnd": owner,
+                "owner_disabled (modal-blocking?)": owner_disabled,
+                "child_count": len(children),
+                "children": children,
+            }
+        )
 
     # --- ESC 恢复 ---
     print()
@@ -200,17 +203,23 @@ async def main() -> int:
     print("TGColumn Gate A inventory")
     print("=" * 60)
     for item in inventory:
-        print(f"\n# Modal hwnd={item.get('hwnd')} class={item.get('class')!r} title={item.get('title')!r}")
+        print(
+            f"\n# Modal hwnd={item.get('hwnd')} class={item.get('class')!r} title={item.get('title')!r}"
+        )
         print(f"  rect={item.get('rect')} enabled={item.get('enabled')}")
-        print(f"  owner_hwnd={item.get('owner_hwnd')} owner_disabled={item.get('owner_disabled (modal-blocking?)')}")
+        print(
+            f"  owner_hwnd={item.get('owner_hwnd')} owner_disabled={item.get('owner_disabled (modal-blocking?)')}"
+        )
         print(f"  children ({item.get('child_count')}):")
         for c in item.get("children", []):
             indent = "    " * c["depth"]
             if "error" in c:
                 print(f"  {indent}- err {c.get('error')}")
                 continue
-            print(f"  {indent}- [{c['depth']}] hwnd={c['hwnd']} class={c['class']!r} title={c['title']!r} "
-                  f"style={c['style_hex']} enabled={c['enabled']} visible={c['visible']} rect={c['rect']}")
+            print(
+                f"  {indent}- [{c['depth']}] hwnd={c['hwnd']} class={c['class']!r} title={c['title']!r} "
+                f"style={c['style_hex']} enabled={c['enabled']} visible={c['visible']} rect={c['rect']}"
+            )
 
     # --- verdict ---
     has_modal = any(item.get("class") == "#32770" for item in inventory)
@@ -223,7 +232,9 @@ async def main() -> int:
     print(f"  ESC 后无残留模态                           : {'YES' if no_residual else 'NO'}")
     print(f"  环境恢复 (CMDACTIVE=0)                     : {'YES' if env_clean else 'no'}")
     print(f"  无实体生成 (entity delta=0)                : {'YES' if no_entity_created else 'no'}")
-    print(f"  -> 结论: {'BLOCKED-by-#32770 (Gate A inventory captured)' if (has_modal and no_residual and env_clean and no_entity_created) else 'INDETERMINATE'}")
+    print(
+        f"  -> 结论: {'BLOCKED-by-#32770 (Gate A inventory captured)' if (has_modal and no_residual and env_clean and no_entity_created) else 'INDETERMINATE'}"
+    )
     return 0 if (has_modal and no_residual and env_clean and no_entity_created) else 2
 
 

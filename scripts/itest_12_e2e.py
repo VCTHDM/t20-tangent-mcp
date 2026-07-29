@@ -72,25 +72,47 @@ async def main() -> int:
 
     # --- 1. wall ---
     before = await count(backend)
-    code = generate_lisp("wall", {
-        "x1": 0, "y1": 0, "x2": 6000, "y2": 0,
-        "left_width": 240, "right_width": 120, "height": 3300, "wall_type": "砖",
-    })
+    code = generate_lisp(
+        "wall",
+        {
+            "x1": 0,
+            "y1": 0,
+            "x2": 6000,
+            "y2": 0,
+            "left_width": 240,
+            "right_width": 120,
+            "height": 3300,
+            "wall_type": "砖",
+        },
+    )
     r = await backend.execute_lisp(code)
     after = await count(backend)
     t = await backend.execute_lisp(LAST_TYPE)
     rb = await backend.execute_lisp(
-        READBACK.replace("{PROPS}", '"LeftWidth" "RightWidth" "Height" "Style"'))
-    ok = (after == before + 1 and t.payload == "TCH_WALL"
-          and "LeftWidth=240.0" in str(rb.payload) and "Height=3300.0" in str(rb.payload))
+        READBACK.replace("{PROPS}", '"LeftWidth" "RightWidth" "Height" "Style"')
+    )
+    ok = (
+        after == before + 1
+        and t.payload == "TCH_WALL"
+        and "LeftWidth=240.0" in str(rb.payload)
+        and "Height=3300.0" in str(rb.payload)
+    )
     results["wall"] = ok
     print(f"[wall] ok={ok} exec={r.ok} type={t.payload!r} readback={rb.payload!r}")
 
     # --- 2. dimension (标注刚画的墙两端) ---
     before = await count(backend)
-    code = generate_lisp("dimension", {
-        "p1_x": 0, "p1_y": 0, "p2_x": 6000, "p2_y": 0, "pos_x": 3000, "pos_y": 1500,
-    })
+    code = generate_lisp(
+        "dimension",
+        {
+            "p1_x": 0,
+            "p1_y": 0,
+            "p2_x": 6000,
+            "p2_y": 0,
+            "pos_x": 3000,
+            "pos_y": 1500,
+        },
+    )
     r = await backend.execute_lisp(code)
     after = await count(backend)
     t = await backend.execute_lisp(LAST_TYPE)
@@ -100,24 +122,36 @@ async def main() -> int:
 
     # --- 3. door (插在墙中段) ---
     before = await count(backend)
-    r = await execute_opening(backend, "door", {
-        "ins_x": 3000, "ins_y": 0, "width": 1000, "height": 2000, "sill_distance": 0,
-    })
+    r = await execute_opening(
+        backend,
+        "door",
+        {
+            "ins_x": 3000,
+            "ins_y": 0,
+            "width": 1000,
+            "height": 2000,
+            "sill_distance": 0,
+        },
+    )
     after = await count(backend)
     t = await backend.execute_lisp(LAST_TYPE)
     rb = await backend.execute_lisp(READBACK.replace("{PROPS}", '"Width" "Height" "DoorSill"'))
-    ok = (after == before + 1 and t.payload == "TCH_OPENING"
-          and "Width=1000.0" in str(rb.payload) and "Height=2000.0" in str(rb.payload))
+    ok = (
+        after == before + 1
+        and t.payload == "TCH_OPENING"
+        and "Width=1000.0" in str(rb.payload)
+        and "Height=2000.0" in str(rb.payload)
+    )
     results["door"] = ok
     print(f"[door] ok={ok} exec={r.ok} type={t.payload!r} readback={rb.payload!r}")
 
     # --- 3b. opening ancillary COM properties (SillHeight/OpType/Kind) ---
     extra_rb = await backend.execute_lisp(
-        READBACK.replace("{PROPS}",
-            '"SillHeight" "WindowSillHeight" "OpType" "Kind" "Type" "WinType"'))
-    results["door_extra_props"] = (
-        extra_rb.ok and "SillHeight" in str(extra_rb.payload)
+        READBACK.replace(
+            "{PROPS}", '"SillHeight" "WindowSillHeight" "OpType" "Kind" "Type" "WinType"'
+        )
     )
+    results["door_extra_props"] = extra_rb.ok and "SillHeight" in str(extra_rb.payload)
     print(f"[door_extra_props] ok={results['door_extra_props']} readback={extra_rb.payload!r}")
 
     # --- 清理与环境复位 ---
@@ -127,10 +161,10 @@ async def main() -> int:
         cleanup_guard += 1
     final_count = await count(backend)
     await backend.execute_lisp(
-        '(progn '
-        '(setq t20mcp:layers (vla-get-Layers (vla-get-ActiveDocument (vlax-get-acad-object)))) '
-        '(vl-catch-all-apply '
-        "  '(lambda () (vla-Delete (vla-Item t20mcp:layers \"T20MCP测试图层\")))) "
+        "(progn "
+        "(setq t20mcp:layers (vla-get-Layers (vla-get-ActiveDocument (vlax-get-acad-object)))) "
+        "(vl-catch-all-apply "
+        '  \'(lambda () (vla-Delete (vla-Item t20mcp:layers "T20MCP测试图层")))) '
         '"layer-cleanup")'
     )
     await backend.execute_lisp(RESET_ENV)

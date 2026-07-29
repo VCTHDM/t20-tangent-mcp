@@ -37,75 +37,89 @@ RESET_ENV = """
 CASES: list[tuple[str, str, dict, str | None, str]] = [
     # (label, subcommand, params, expected_type, delta_mode)
     # delta_mode: "1" = delta==1, ">0" = after>before, "wall" = needs wall baseline prep
-    ("elevation", "elevation",
-     {"base_x": 0, "base_y": 0, "label_x": 1000, "label_y": 1000},
-     "TCH_ELEVATION", "1"),
-    ("wall_thickness_dim", "wall_thickness_dimension",
-     {"p1_x": 1500, "p1_y": -500, "p2_x": 1500, "p2_y": 500},
-     "TCH_DIM", "wall"),
-    ("coordinate", "coordinate",
-     {"point_x": 1234, "point_y": 5678, "label_x": 1234, "label_y": 6678},
-     "TCH_COORD", "1"),
-    ("symmetry", "symmetry",
-     {"x1": 0, "y1": 0, "x2": 0, "y2": 3000},
-     "TCH_SYMMETRY", "1"),
-    ("north_arrow", "north_arrow",
-     {"pos_x": 0, "pos_y": 0, "dir_x": 0, "dir_y": 1000},
-     "TCH_NORTHTHUMB", "1"),
-    ("break_line", "break_line",
-     {"x1": 0, "y1": 0, "x2": 3000, "y2": 0},
-     "TCH_RUPTURE", "1"),
-    ("section_symbol", "section_symbol",
-     {"x1": 0, "y1": 0, "x2": 3000, "y2": 0, "dir_x": 1500, "dir_y": -1000},
-     "TCH_SYMB_SECTION", "1"),
-    ("drawing_name", "drawing_name",
-     {"ins_x": 0, "ins_y": 0},
-     "TCH_DRAWINGNAME", "1"),
-    ("rectangle", "rectangle",
-     {"x1": 0, "y1": 0, "x2": 3000, "y2": 2000},
-     "TCH_RECT", "1"),
-    ("balcony", "balcony",
-     {"points": [[0, 0], [3000, 0], [3000, 1500], [0, 1500]]},
-     "TCH_BALCONY", ">0"),
-    ("step", "step",
-     {"points": [[0, 0], [3000, 0], [3000, 600], [0, 600]]},
-     "TCH_STEP", ">0"),
-    ("ramp", "ramp",
-     {"x": 1500, "y": 800},
-     "TCH_ASCENT", "1"),
-    ("arrow", "arrow",
-     {"x1": 0, "y1": 0, "x2": 2000, "y2": 0},
-     "TCH_ARROW", "1"),
-    ("rect_roof", "rect_roof",
-     {"x1": 0, "y1": 0, "x2": 6000, "y2": 0, "x3": 6000, "y3": 4000},
-     "TCH_MOUNTROOF", "1"),
-    ("cusp_roof", "cusp_roof",
-     {"center_x": 3000, "center_y": 3000, "base_x": 6000, "base_y": 3000},
-     "TCH_CUSPROOF", "1"),
-    ("insight", "insight",
-     {"x": 1500, "y": 800},
-     "TCH_TDBINSIGHT", "1"),
-    ("tree", "tree",
-     {"x": 1500, "y": 800},
-     "INSERT", "1"),
-    ("line_stair", "line_stair",
-     {"x": 1500, "y": 800},
-     "TCH_LINESTAIR", "1"),
-    ("arc_stair", "arc_stair",
-     {"x": 1500, "y": 800},
-     "TCH_ARCSTAIR", "1"),
-    ("double_stair", "double_stair",
-     {"x": 0, "y": 0},
-     "TCH_RECTSTAIR", "1"),
-    ("multi_stair", "multi_stair",
-     {"x1": 0, "y1": 0, "x2": 0, "y2": 6000},
-     "TCH_MULTISTAIR", "1"),
-    ("line_pattern", "line_pattern",
-     {"x1": 0, "y1": 0, "x2": 3000, "y2": 0},
-     "TCH_PATH_ARRAY", "1"),
-    ("wheelchair_diameter", "wheelchair_diameter",
-     {"center_x": 0, "center_y": 0, "edge_x": 1500, "edge_y": 0},
-     "TCH_RADIUSDIM", ">0"),
+    (
+        "elevation",
+        "elevation",
+        {"base_x": 0, "base_y": 0, "label_x": 1000, "label_y": 1000},
+        "TCH_ELEVATION",
+        "1",
+    ),
+    (
+        "wall_thickness_dim",
+        "wall_thickness_dimension",
+        {"p1_x": 1500, "p1_y": -500, "p2_x": 1500, "p2_y": 500},
+        "TCH_DIM",
+        "wall",
+    ),
+    (
+        "coordinate",
+        "coordinate",
+        {"point_x": 1234, "point_y": 5678, "label_x": 1234, "label_y": 6678},
+        "TCH_COORD",
+        "1",
+    ),
+    ("symmetry", "symmetry", {"x1": 0, "y1": 0, "x2": 0, "y2": 3000}, "TCH_SYMMETRY", "1"),
+    (
+        "north_arrow",
+        "north_arrow",
+        {"pos_x": 0, "pos_y": 0, "dir_x": 0, "dir_y": 1000},
+        "TCH_NORTHTHUMB",
+        "1",
+    ),
+    ("break_line", "break_line", {"x1": 0, "y1": 0, "x2": 3000, "y2": 0}, "TCH_RUPTURE", "1"),
+    (
+        "section_symbol",
+        "section_symbol",
+        {"x1": 0, "y1": 0, "x2": 3000, "y2": 0, "dir_x": 1500, "dir_y": -1000},
+        "TCH_SYMB_SECTION",
+        "1",
+    ),
+    ("drawing_name", "drawing_name", {"ins_x": 0, "ins_y": 0}, "TCH_DRAWINGNAME", "1"),
+    ("rectangle", "rectangle", {"x1": 0, "y1": 0, "x2": 3000, "y2": 2000}, "TCH_RECT", "1"),
+    (
+        "balcony",
+        "balcony",
+        {"points": [[0, 0], [3000, 0], [3000, 1500], [0, 1500]]},
+        "TCH_BALCONY",
+        ">0",
+    ),
+    ("step", "step", {"points": [[0, 0], [3000, 0], [3000, 600], [0, 600]]}, "TCH_STEP", ">0"),
+    ("ramp", "ramp", {"x": 1500, "y": 800}, "TCH_ASCENT", "1"),
+    ("arrow", "arrow", {"x1": 0, "y1": 0, "x2": 2000, "y2": 0}, "TCH_ARROW", "1"),
+    (
+        "rect_roof",
+        "rect_roof",
+        {"x1": 0, "y1": 0, "x2": 6000, "y2": 0, "x3": 6000, "y3": 4000},
+        "TCH_MOUNTROOF",
+        "1",
+    ),
+    (
+        "cusp_roof",
+        "cusp_roof",
+        {"center_x": 3000, "center_y": 3000, "base_x": 6000, "base_y": 3000},
+        "TCH_CUSPROOF",
+        "1",
+    ),
+    ("insight", "insight", {"x": 1500, "y": 800}, "TCH_TDBINSIGHT", "1"),
+    ("tree", "tree", {"x": 1500, "y": 800}, "INSERT", "1"),
+    ("line_stair", "line_stair", {"x": 1500, "y": 800}, "TCH_LINESTAIR", "1"),
+    ("arc_stair", "arc_stair", {"x": 1500, "y": 800}, "TCH_ARCSTAIR", "1"),
+    ("double_stair", "double_stair", {"x": 0, "y": 0}, "TCH_RECTSTAIR", "1"),
+    ("multi_stair", "multi_stair", {"x1": 0, "y1": 0, "x2": 0, "y2": 6000}, "TCH_MULTISTAIR", "1"),
+    (
+        "line_pattern",
+        "line_pattern",
+        {"x1": 0, "y1": 0, "x2": 3000, "y2": 0},
+        "TCH_PATH_ARRAY",
+        "1",
+    ),
+    (
+        "wheelchair_diameter",
+        "wheelchair_diameter",
+        {"center_x": 0, "center_y": 0, "edge_x": 1500, "edge_y": 0},
+        "TCH_RADIUSDIM",
+        ">0",
+    ),
 ]
 
 
@@ -136,24 +150,38 @@ async def main() -> int:
 
     # --- opening_dimension needs a wall+door baseline ---
     # (uses pre-existing wall/door like itest_20)
-    await backend.execute_lisp(generate_lisp(
-        "wall",
-        {"x1": 0, "y1": 0, "x2": 3000, "y2": 0,
-         "left_width": 120, "right_width": 120, "height": 3000, "wall_type": "砖"},
-    ))
+    await backend.execute_lisp(
+        generate_lisp(
+            "wall",
+            {
+                "x1": 0,
+                "y1": 0,
+                "x2": 3000,
+                "y2": 0,
+                "left_width": 120,
+                "right_width": 120,
+                "height": 3000,
+                "wall_type": "砖",
+            },
+        )
+    )
     await execute_opening(
         backend,
         "door",
         {"ins_x": 1500, "ins_y": 0, "width": 1000, "height": 2000, "sill_distance": 0},
     )
     od_before = await count(backend)
-    od_result = await backend.execute_lisp(generate_lisp(
-        "opening_dimension",
-        {"p1_x": -200, "p1_y": 600, "p2_x": 3200, "p2_y": 600},
-    ))
+    od_result = await backend.execute_lisp(
+        generate_lisp(
+            "opening_dimension",
+            {"p1_x": -200, "p1_y": 600, "p2_x": 3200, "p2_y": 600},
+        )
+    )
     od_after = await count(backend)
     od_type = await backend.execute_lisp(LAST_TYPE)
-    od_ok = od_result.ok and od_after == od_before + 1 and str(od_type.payload).startswith("TCH_DIM")
+    od_ok = (
+        od_result.ok and od_after == od_before + 1 and str(od_type.payload).startswith("TCH_DIM")
+    )
     results["opening_dimension"] = od_ok
     print(f"[opening_dimension] ok={od_ok} {od_before}->{od_after} type={od_type.payload!r}")
     await cleanup_to(backend, base)
@@ -161,28 +189,65 @@ async def main() -> int:
     # --- two_point_dimension needs 3 PARALLEL walls (not collinear) ---
     # TDIMTP 的穿越线需穿过多个独立对象; 共线墙被视为一面连续墙 → "对象数目太少"。
     # 改用 3 靓平行墙 + 垂直穿越线, 使 TDIMMP 能标注墙间距。
-    await backend.execute_lisp(generate_lisp(
-        "wall", {"x1": 0, "y1": 0, "x2": 3000, "y2": 0,
-                 "left_width": 120, "right_width": 120, "height": 3000, "wall_type": "砖"},
-    ))
-    await backend.execute_lisp(generate_lisp(
-        "wall", {"x1": 0, "y1": 2000, "x2": 3000, "y2": 2000,
-                 "left_width": 120, "right_width": 120, "height": 3000, "wall_type": "砖"},
-    ))
-    await backend.execute_lisp(generate_lisp(
-        "wall", {"x1": 0, "y1": 4000, "x2": 3000, "y2": 4000,
-                 "left_width": 120, "right_width": 120, "height": 3000, "wall_type": "砖"},
-    ))
+    await backend.execute_lisp(
+        generate_lisp(
+            "wall",
+            {
+                "x1": 0,
+                "y1": 0,
+                "x2": 3000,
+                "y2": 0,
+                "left_width": 120,
+                "right_width": 120,
+                "height": 3000,
+                "wall_type": "砖",
+            },
+        )
+    )
+    await backend.execute_lisp(
+        generate_lisp(
+            "wall",
+            {
+                "x1": 0,
+                "y1": 2000,
+                "x2": 3000,
+                "y2": 2000,
+                "left_width": 120,
+                "right_width": 120,
+                "height": 3000,
+                "wall_type": "砖",
+            },
+        )
+    )
+    await backend.execute_lisp(
+        generate_lisp(
+            "wall",
+            {
+                "x1": 0,
+                "y1": 4000,
+                "x2": 3000,
+                "y2": 4000,
+                "left_width": 120,
+                "right_width": 120,
+                "height": 3000,
+                "wall_type": "砖",
+            },
+        )
+    )
     tpd_before = await count(backend)
-    tpd_result = await backend.execute_lisp(generate_lisp(
-        "two_point_dimension",
-        {"p1_x": 1500, "p1_y": -500, "p2_x": 1500, "p2_y": 4500,
-         "pos_x": 2500, "pos_y": 2000},
-    ))
+    tpd_result = await backend.execute_lisp(
+        generate_lisp(
+            "two_point_dimension",
+            {"p1_x": 1500, "p1_y": -500, "p2_x": 1500, "p2_y": 4500, "pos_x": 2500, "pos_y": 2000},
+        )
+    )
     tpd_after = await count(backend)
     tpd_type = await backend.execute_lisp(LAST_TYPE)
-    tpd_ok = (tpd_result.ok and tpd_after == tpd_before + 1
-              and str(tpd_type.payload).startswith("TCH_DIM"))
+    tpd_ok = (
+        tpd_result.ok
+        and tpd_after == tpd_before + 1
+        and str(tpd_type.payload).startswith("TCH_DIM")
+    )
     results["two_point_dimension"] = tpd_ok
     print(f"[two_point_dimension] ok={tpd_ok} {tpd_before}->{tpd_after} type={tpd_type.payload!r}")
     await cleanup_to(backend, base)
@@ -191,18 +256,51 @@ async def main() -> int:
         before = await count(backend)
         # wall-dep: create 3-wall baseline for commands that need traversing
         if mode == "wall":
-            await backend.execute_lisp(generate_lisp(
-                "wall", {"x1": -1000, "y1": 0, "x2": 0, "y2": 0,
-                         "left_width": 120, "right_width": 120, "height": 3000, "wall_type": "砖"},
-            ))
-            await backend.execute_lisp(generate_lisp(
-                "wall", {"x1": 0, "y1": 0, "x2": 3000, "y2": 0,
-                         "left_width": 120, "right_width": 120, "height": 3000, "wall_type": "砖"},
-            ))
-            await backend.execute_lisp(generate_lisp(
-                "wall", {"x1": 3000, "y1": 0, "x2": 7000, "y2": 0,
-                         "left_width": 120, "right_width": 120, "height": 3000, "wall_type": "砖"},
-            ))
+            await backend.execute_lisp(
+                generate_lisp(
+                    "wall",
+                    {
+                        "x1": -1000,
+                        "y1": 0,
+                        "x2": 0,
+                        "y2": 0,
+                        "left_width": 120,
+                        "right_width": 120,
+                        "height": 3000,
+                        "wall_type": "砖",
+                    },
+                )
+            )
+            await backend.execute_lisp(
+                generate_lisp(
+                    "wall",
+                    {
+                        "x1": 0,
+                        "y1": 0,
+                        "x2": 3000,
+                        "y2": 0,
+                        "left_width": 120,
+                        "right_width": 120,
+                        "height": 3000,
+                        "wall_type": "砖",
+                    },
+                )
+            )
+            await backend.execute_lisp(
+                generate_lisp(
+                    "wall",
+                    {
+                        "x1": 3000,
+                        "y1": 0,
+                        "x2": 7000,
+                        "y2": 0,
+                        "left_width": 120,
+                        "right_width": 120,
+                        "height": 3000,
+                        "wall_type": "砖",
+                    },
+                )
+            )
             before = await count(backend)
         r = await backend.execute_lisp(generate_lisp(sub, params))
         after = await count(backend)

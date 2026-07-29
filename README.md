@@ -5,14 +5,15 @@
 
 T20 天正建筑 V10 MCP Server — 为 AutoCAD/T20 提供 AI 可调用的建筑实体封装。
 
-基于 `autocad-mcp` 上游适配, 通过 **LISP 模板 + 参数注入** 将天正命令封装为 MCP 工具。
-所有子命令在 Python 侧完成类型/范围校验, 生成已验证的 AutoLISP 代码, 经文件 IPC 下发。
+基于 `autocad-mcp` 上游适配。常规子命令通过 **LISP 模板 + 参数注入** 封装，
+所有参数先在 Python 侧校验；`column` 与 `door/window` 使用强结构指纹约束的
+受控 Win32 编排，最终仍以实体读回结果验真。
 
 ## 快速上手
 
 ```bash
 # 安装依赖
-uv sync
+uv sync --locked
 
 # 离线测试 (无需 AutoCAD)
 uv run pytest -q
@@ -23,7 +24,7 @@ uv run -m t20_mcp
 # 真机联调 (需 AutoCAD 2024 + T20 V10 运行中)
 uv run python scripts/itest_01_bringup.py          # 引导: 窗口检测 + dispatcher 注入
 uv run python scripts/itest_12_e2e.py              # 核心 E2E: wall/dimension/door + COM 回读
-uv run python scripts/itest_e2e_suite.py           # 批量 E2E: 26 case 全部验证
+uv run python scripts/itest_e2e_suite.py           # 批量 E2E: 25 case 全部验证
 uv run python scripts/itest_19_mcp_stdio_smoke.py  # MCP stdio 冒烟 (无需 AutoCAD)
 ```
 
@@ -69,7 +70,8 @@ uv run python scripts/itest_19_mcp_stdio_smoke.py  # MCP stdio 冒烟 (无需 Au
 | `explode_read` | EXPLODE | — | handle, offset_x?, offset_y?, max_entities? |
 | `search_room` | TUpdSpace | TCH_SPACE | layer? |
 
-验证状态: 全部 33 个子命令均已 E2E 验证 (T20 V10 / AutoCAD 2024)。
+历史验证状态：全部 33 个子命令均有 T20 V10 / AutoCAD 2024 E2E 证据；
+这不表示每次代码整理都已重新执行真机回归。
 `dimension`/`door`/`window`/`elevation`/`drawing_name`/`arrow`/`column` 执行时附 warning 提示。
 `door`/`window` 会先自动驱动「门窗参数」面板切换插门/插窗模式，再创建并校验
 DXF group71 (0=门, 1=窗)。group71 仍是最终门禁；模式不符时错误实体自动删除，
@@ -81,6 +83,7 @@ DXF group71 (0=门, 1=窗)。group71 仍是最终门禁；模式不符时错误�
 ```
 src/t20_mcp/tools/tangent.py         # 核心: 子命令 generator + MCP 工具注册
 src/t20_mcp/lisp_templates/tangent/  # LISP 模板 (31 个 .lsp + _prelude)
+lisp-code/mcp_dispatch.lsp           # File IPC dispatcher (构建时作为包数据纳入 wheel)
 src/t20_mcp/backends/file_ipc.py     # 文件 IPC (编码链/窗口检测/弹框守卫)
 tests/test_tangent_lisp_gen.py       # 离线测试 (LISP 生成 + 参数校验)
 scripts/                             # 真机联调管线
@@ -89,10 +92,13 @@ docs/                                # 命令编目 + handoff 审计记录
 
 ## Handoff 索引
 
-工程决策审计记录, 按顺序:
-`docs/handoff/01..39_*.md`
+当前入口是 [`PROJECT_CLOSEOUT_TODO.md`](PROJECT_CLOSEOUT_TODO.md) 与
+[`TODO_BACKLOG.md`](TODO_BACKLOG.md)。`docs/handoff/` 保存按时间追加的真机证据，
+编号目前到 39；编号 14 的空缺以及 34/36/37 的同号多文件都按历史原样保留，
+不要把编号范围简写当成可执行的文件模式，也不要把旧 handoff 当成当前行为说明。
 
 关键节点:
+
 - 03 — 架构评审 (P0-P2)
 - 05 — 首次真机验证
 - 09 — 弹框守卫 (WPF 盲区修复)
@@ -109,12 +115,14 @@ docs/                                # 命令编目 + handoff 审计记录
 - 35 — B2 闭合: drawing_name/arrow/elevation 文本 COM 注入证实可行 (NameText/ScaleText, Text/Text2, Text 真机写入+读回精确匹配), 三子命令文本参数上线; S-4 收窄为仅门/窗模式切换
 - 36 — B1 闭合: TGColumn 面板 UI 自动化突破 (项目首例), `column` 子命令上线; WM_SETTEXT+通知补发 填参 + 命令行 WM_CHAR 打插入点, 五参数 COM 读回精确匹配; "面板命令不可脚本驱动"结论修正为"点序列不可达, 控件级可达"
 - 37 — A1 裁定: TRectAxis Gate B 机制打通 (WM_COMMAND IDOK 关框 + 打点, COUNT*SPACING 语法) 但**不封装** — 产物纯 LINE@DOTE 无 xdata/TCH_AXIS/轴号, 与 axis_lines 同类零增益; 沉淀"封装前先验产物实体类型"方法论 (机制可行 ≠ 值得封装)
-- 38 — 门窗两阶段模式门禁: 创建后校验 DXF group71; 模式错则删除错误实体并返回结构化 `OPENING_MODE_MISMATCH`，要求模型请用户切换后原参数重试
-- 39 — 门窗模式自动化闭合: 精确识别「门窗参数」+ `ToolbarWindow32` 强结构指纹，后台消息切换插门/插窗，空回车退出；window→door 双向真机验证 group71/图层/实体增量/清理全绿，Handoff 38 的人工切换降为异常兜底
+- [38](docs/handoff/38_opening_mode_gate.md) — 门窗两阶段模式门禁与错误实体回滚（历史人工切换阶段）
+- [39](docs/handoff/39_opening_mode_automation.md) — 当前门窗自动切换链路；group71 最终门禁继续保留
 
 ## 测试
 
 ```bash
+uv run ruff check src tests scripts
+uv run ruff format --check src tests scripts
 uv run pytest -q                              # 离线测试 (通常 <2s)
 uv run python scripts/itest_01_bringup.py     # 真机引导 (需 AutoCAD)
 uv run python scripts/itest_42_opening_panel_mode_auto.py  # 门窗自动切换双向门禁

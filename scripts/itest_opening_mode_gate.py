@@ -141,16 +141,12 @@ async def main(requested: str, expect: str) -> int:
         checks["requested_mode_echoed"] = status.get("requested") == requested
         if expect == "mismatch":
             checks["mismatch_detected"] = status.get("status") == "MODE-MISMATCH"
-            checks["actual_mode_is_opposite"] = (
-                status.get("actual") == str(actual_group71)
-            )
+            checks["actual_mode_is_opposite"] = status.get("actual") == str(actual_group71)
             checks["wrong_entity_rolled_back"] = status.get("rollback") == "ok"
             checks["entity_count_unchanged"] = after == before
         else:
             checks["correct_mode_accepted"] = status.get("status") == "OK"
-            checks["actual_mode_matches"] = (
-                status.get("actual") == str(actual_group71)
-            )
+            checks["actual_mode_matches"] = status.get("actual") == str(actual_group71)
             checks["entity_count_incremented"] = after == before + 1
             checks["entity_type"] = "type=TCH_OPENING" in last_payload
             checks["group71"] = f"group71={expected_group71}" in last_payload

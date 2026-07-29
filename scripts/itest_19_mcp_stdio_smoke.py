@@ -45,8 +45,15 @@ async def main() -> int:
             names = [tool.name for tool in tools.tools]
             print(f"[tools] {names}")
             expected = {
-                "tangent", "drawing", "entity", "layer", "block",
-                "annotation", "pid", "view", "system",
+                "tangent",
+                "drawing",
+                "entity",
+                "layer",
+                "block",
+                "annotation",
+                "pid",
+                "view",
+                "system",
             }
             missing = sorted(expected - set(names))
             if missing:
@@ -62,7 +69,11 @@ async def main() -> int:
                 },
             )
             texts = [content.text for content in result.content if content.type == "text"]
-            if not texts or '"operation":"axis_lines"' not in texts[0] or '"dry_run":true' not in texts[0]:
+            if (
+                not texts
+                or '"operation":"axis_lines"' not in texts[0]
+                or '"dry_run":true' not in texts[0]
+            ):
                 print(f"FAIL: unexpected tangent dry-run response: {texts!r}")
                 return 1
             print("[tangent.axis_lines dry-run] PASS")

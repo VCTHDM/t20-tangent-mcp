@@ -32,14 +32,13 @@ from t20_mcp.backends.file_ipc import FileIPCBackend  # noqa: E402
 from t20_mcp.tools.tangent import _load_prelude  # noqa: E402
 
 RESET_ENV = (
-    '(progn (setq n 0)'
+    "(progn (setq n 0)"
     ' (while (and (< n 8) (> (getvar "CMDACTIVE") 0)) (command) (setq n (1+ n)))'
     ' (setvar "CMDDIA" 1) (setvar "FILEDIA" 1) (setvar "OSMODE" 0) "rst")'
 )
 
 START_TSAVEAS = (
-    _load_prelude()
-    + '\n(progn (setvar "CMDECHO" 1) (setvar "FILEDIA" 0)'
+    _load_prelude() + '\n(progn (setvar "CMDECHO" 1) (setvar "FILEDIA" 0)'
     ' (vl-catch-all-apply (quote vl-cmdf) (list "TSAVEAS"))'
     ' (strcat "active=" (itoa (getvar "CMDACTIVE"))'
     '         " filedia=" (itoa (getvar "FILEDIA"))))'
@@ -76,7 +75,8 @@ def enum_kids(parent: int, depth: int = 3) -> list[dict]:
                 return True
             try:
                 rec = {
-                    "depth": d, "hwnd": c,
+                    "depth": d,
+                    "hwnd": c,
                     "class": win32gui.GetClassName(c),
                     "title": win32gui.GetWindowText(c),
                     "style_hex": f"0x{win32gui.GetWindowLong(c, win32con.GWL_STYLE):08X}",
@@ -165,13 +165,16 @@ async def main() -> int:
         own, owd = owner_state(h)
         kids = enum_kids(h, depth=3)
         wpf_hits = [k for k in kids if "class" in k and is_wpf(k["class"])]
-        rec.update({
-            "owner_hwnd": own, "owner_disabled": owd,
-            "child_count": len(kids),
-            "wpf_child_count": len(wpf_hits),
-            "wpf_classes": list({k["class"] for k in wpf_hits})[:8],
-            "children": kids,
-        })
+        rec.update(
+            {
+                "owner_hwnd": own,
+                "owner_disabled": owd,
+                "child_count": len(kids),
+                "wpf_child_count": len(wpf_hits),
+                "wpf_classes": list({k["class"] for k in wpf_hits})[:8],
+                "children": kids,
+            }
+        )
         inv.append(rec)
 
     print()
@@ -208,13 +211,14 @@ async def main() -> int:
             if "error" in c:
                 print(f"  {ind}- err {c.get('error')}")
                 continue
-            print(f"  {ind}- [{c['depth']}] hwnd={c['hwnd']} class={c['class']!r} title={c['title']!r} "
-                  f"style={c['style_hex']} enabled={c['enabled']} visible={c['visible']} rect={c['rect']}")
+            print(
+                f"  {ind}- [{c['depth']}] hwnd={c['hwnd']} class={c['class']!r} title={c['title']!r} "
+                f"style={c['style_hex']} enabled={c['enabled']} visible={c['visible']} rect={c['rect']}"
+            )
 
     has_modal = any(it.get("class") == "#32770" for it in inv if "error" not in it)
-    has_wpf = (
-        any((it.get("wpf_child_count") or 0) > 0 for it in inv if "error" not in it)
-        or any(is_wpf(it.get("class", "")) for it in inv if "error" not in it)
+    has_wpf = any((it.get("wpf_child_count") or 0) > 0 for it in inv if "error" not in it) or any(
+        is_wpf(it.get("class", "")) for it in inv if "error" not in it
     )
     blocked_under_filedia0 = bool(targets)
     no_residual = (not post_modals) and (not post_new_tops)
@@ -224,8 +228,12 @@ async def main() -> int:
     print("=== Step38 Gate A verdict ===")
     print(f"  TSaveAs 弹 #32770                            : {'YES' if has_modal else 'no'}")
     print(f"  WPF 内嵌存在 (HwndWrapper/...)               : {'YES' if has_wpf else 'no'}")
-    print(f"  FILEDIA=0 未拦住模态                         : {'YES' if blocked_under_filedia0 else 'no'}")
-    print(f"  ESC 后无残留 (modal+top)                     : {'YES' if no_residual else 'NO  *警告*'}")
+    print(
+        f"  FILEDIA=0 未拦住模态                         : {'YES' if blocked_under_filedia0 else 'no'}"
+    )
+    print(
+        f"  ESC 后无残留 (modal+top)                     : {'YES' if no_residual else 'NO  *警告*'}"
+    )
     print(f"  环境恢复 (CMDACTIVE=0)                       : {'YES' if env_clean else 'no'}")
     print(f"  无实体生成 (entity delta=0)                  : {'YES' if delta_zero else 'no'}")
     print(f"  baseline / final entity_count = {base_cnt} / {after_cnt}")
@@ -234,7 +242,9 @@ async def main() -> int:
         print("  *警告*: ESC 未能干净关闭 TSaveAs 模态/WPF 顶层。")
         print("         请用户手动关闭 (点取消按钮); 不要再跑本探针。")
     pass_all = has_modal and no_residual and env_clean and delta_zero
-    print(f"  -> 结论: {'BLOCKED-Win32-modal' if (pass_all and not has_wpf) else ('BLOCKED-WPF-host' if (pass_all and has_wpf) else 'INDETERMINATE')}")
+    print(
+        f"  -> 结论: {'BLOCKED-Win32-modal' if (pass_all and not has_wpf) else ('BLOCKED-WPF-host' if (pass_all and has_wpf) else 'INDETERMINATE')}"
+    )
     return 0 if pass_all else 2
 
 

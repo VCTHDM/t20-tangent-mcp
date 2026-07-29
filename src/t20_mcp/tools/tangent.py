@@ -1,11 +1,12 @@
 """Tangent (天正 T20) consolidated MCP tool — LISP 模板 + 参数注入。
 
-本模块在不改动 dispatcher / IPC 层的前提下, 新增 ``tangent`` 工具, 仿照上游
-8 个 consolidated tools 的风格, 通过 ``operation`` (子命令) 分派到各类天正建筑实体。
+本模块在不改动 dispatcher / IPC 层的前提下新增 ``tangent`` 工具，沿用上游
+8 个 consolidated tools 的 ``operation`` 分派风格，使本项目合计 9 个工具。
 
 设计要点 (遵循 PROJECT_RULES.md 铁律):
-  * 每个子命令对应 ``lisp_templates/tangent/<name>.lsp`` 模板, 仅做占位符注入,
-    绝不在 Python 侧拼接键击序列。
+  * 大多数子命令由 ``lisp_templates/tangent/<name>.lsp`` 模板生成；column
+    与 door/window 的模式切换是经强结构指纹约束的受控 Win32 编排例外。
+  * 禁止通用键击兜底与 WM_CLOSE；UI 路径必须回读实体状态，并在失败时回滚。
   * 所有参数在注入前完成 **类型 + 取值范围** 校验, 非法参数抛出 ``ParamError``。
   * 生成的 LISP 字符串经过括号平衡自检, 再经现有 ``execute_lisp`` 通道下发。
 
@@ -17,6 +18,8 @@ from __future__ import annotations
 import math
 from pathlib import Path
 from typing import Any, Callable
+
+from t20_mcp.backends.base import CommandResult
 
 # ---------------------------------------------------------------------------
 # 模板加载
@@ -54,18 +57,18 @@ def _load_prelude() -> str:
 # 取值范围常量 (单位: 毫米 / 度) —— 均为防御性上下限, 真机可再收紧
 # ---------------------------------------------------------------------------
 
-COORD_ABS_MAX: float = 1.0e9          # 坐标绝对值上限
-WALL_WIDTH_RANGE: tuple[float, float] = (1.0, 2000.0)       # 墙体单侧宽度
-HEIGHT_RANGE: tuple[float, float] = (1.0, 100_000.0)        # 墙/门/窗 高度
+COORD_ABS_MAX: float = 1.0e9  # 坐标绝对值上限
+WALL_WIDTH_RANGE: tuple[float, float] = (1.0, 2000.0)  # 墙体单侧宽度
+HEIGHT_RANGE: tuple[float, float] = (1.0, 100_000.0)  # 墙/门/窗 高度
 OPENING_WIDTH_RANGE: tuple[float, float] = (1.0, 20_000.0)  # 门窗洞口宽度
-SILL_RANGE: tuple[float, float] = (0.0, 100_000.0)          # 窗台高 / 距墙垛距离
-SPACING_RANGE: tuple[float, float] = (1.0, 100_000.0)       # 轴网单段间距
-SPACING_COUNT_MAX: int = 200          # 轴网间距段数上限
-POINT_LIST_COUNT_MAX: int = 200       # 轮廓点列点数上限 (阳台/台阶等)
+SILL_RANGE: tuple[float, float] = (0.0, 100_000.0)  # 窗台高 / 距墙垛距离
+SPACING_RANGE: tuple[float, float] = (1.0, 100_000.0)  # 轴网单段间距
+SPACING_COUNT_MAX: int = 200  # 轴网间距段数上限
+POINT_LIST_COUNT_MAX: int = 200  # 轮廓点列点数上限 (阳台/台阶等)
 ANGLE_RANGE: tuple[float, float] = (-360.0, 360.0)
 LAYER_NAME_MAX: int = 255
-COLUMN_HEIGHT_RANGE: tuple[float, float] = (1.0, 100_000.0)   # 柱高
-COLUMN_SECTION_RANGE: tuple[float, float] = (1.0, 20_000.0)   # 柱截面横向/纵向
+COLUMN_HEIGHT_RANGE: tuple[float, float] = (1.0, 100_000.0)  # 柱高
+COLUMN_SECTION_RANGE: tuple[float, float] = (1.0, 20_000.0)  # 柱截面横向/纵向
 
 
 # ---------------------------------------------------------------------------
@@ -114,7 +117,7 @@ def _require_str(value: Any, field: str, *, max_len: int) -> str:
     try:
         value.encode("gbk")
     except UnicodeEncodeError as e:
-        bad = value[e.start:e.end]
+        bad = value[e.start : e.end]
         raise ParamError(
             f"参数 {field} 含 GBK 无法编码的字符 {bad!r} (天正按 GBK 加载, 请避免 emoji/扩展区字符)"
         )
@@ -135,7 +138,9 @@ def _require_spacings(value: Any, field: str) -> list[float]:
     return out
 
 
-def _require_point_list(value: Any, field: str, *, min_points: int = 2) -> list[tuple[float, float]]:
+def _require_point_list(
+    value: Any, field: str, *, min_points: int = 2
+) -> list[tuple[float, float]]:
     """轮廓点列: [[x, y], ...]; 至少 min_points 个点, 每点坐标在范围内, 相邻点不重合。"""
     if not isinstance(value, (list, tuple)) or isinstance(value, (str, bytes)):
         raise ParamError(f"参数 {field} 必须为点列表 [[x, y], ...], 实际为 {value!r}")
@@ -341,8 +346,7 @@ def _gen_axis_lines(data: dict[str, Any]) -> str:
         segments.append((x1, y1, x2, y2))
 
     segment_code = " ".join(
-        f"(list {_num(x1)} {_num(y1)} {_num(x2)} {_num(y2)})"
-        for x1, y1, x2, y2 in segments
+        f"(list {_num(x1)} {_num(y1)} {_num(x2)} {_num(y2)})" for x1, y1, x2, y2 in segments
     )
     return _render(
         "axis_lines",
@@ -403,8 +407,8 @@ def _gen_opening(data: dict[str, Any], mode: str = "door") -> str:
     else:
         _target_layer = "WINDOW"
     _layer_fix = (
-        f'\n        (vl-catch-all-apply '
-        f"'vlax-put-property (list t20mcp:obj \"Layer\" \"{_lisp_escape(_target_layer)}\")) "
+        f"\n        (vl-catch-all-apply "
+        f'\'vlax-put-property (list t20mcp:obj "Layer" "{_lisp_escape(_target_layer)}")) '
     )
     if mode == "door":
         width = _require_range(data.get("width", 900.0), "width", *OPENING_WIDTH_RANGE)
@@ -414,7 +418,7 @@ def _gen_opening(data: dict[str, Any], mode: str = "door") -> str:
             f'(foreach pv (list (cons "Width" (float {_num(width)}))'
             f' (cons "Height" (float {_num(height)}))'
             f' (cons "DoorSill" (float {_num(sill)})))\n'
-            f'           (vl-catch-all-apply \'vlax-put-property (list t20mcp:obj (car pv) (cdr pv))))'
+            f"           (vl-catch-all-apply 'vlax-put-property (list t20mcp:obj (car pv) (cdr pv))))"
             + _layer_fix
         )
     else:
@@ -429,7 +433,7 @@ def _gen_opening(data: dict[str, Any], mode: str = "door") -> str:
             f'(foreach pv (list (cons "Width" (float {_num(width)}))'
             f' (cons "Height" (float {_num(height)}))'
             f' (cons "DoorSill" (float {_num(sill)})))\n'
-            f'           (vl-catch-all-apply \'vlax-put-property (list t20mcp:obj (car pv) (cdr pv))))'
+            f"           (vl-catch-all-apply 'vlax-put-property (list t20mcp:obj (car pv) (cdr pv))))"
             + _layer_fix
         )
     return _render(
@@ -878,9 +882,7 @@ def _column_params(data: dict[str, Any]) -> dict[str, Any]:
     if data.get("material") is not None:
         mat = data["material"]
         if not isinstance(mat, str) or mat not in COLUMN_MATERIALS:
-            raise ParamError(
-                f"参数 material={mat!r} 非法, 合法值: {list(COLUMN_MATERIALS)}"
-            )
+            raise ParamError(f"参数 material={mat!r} 非法, 合法值: {list(COLUMN_MATERIALS)}")
         out["material"] = mat
     return out
 
@@ -895,8 +897,7 @@ def _gen_column(data: dict[str, Any]) -> str:
     """
     _column_params(data)  # 仅校验; 面板驱动在 execute_column
     return (
-        _load_prelude()
-        + '\n(progn (setvar "CMDECHO" 1)'
+        _load_prelude() + '\n(progn (setvar "CMDECHO" 1)'
         ' (vl-catch-all-apply (quote vl-cmdf) (list "TGCOLUMN"))'
         ' (strcat "active=" (itoa (getvar "CMDACTIVE"))))'
     )
@@ -904,14 +905,14 @@ def _gen_column(data: dict[str, Any]) -> str:
 
 # execute_column 的环境复位 (对齐 itest 系列 RESET_ENV)。
 _COLUMN_RESET_LISP = (
-    '(progn (setq n 0)'
+    "(progn (setq n 0)"
     ' (while (and (< n 8) (> (getvar "CMDACTIVE") 0)) (command) (setq n (1+ n)))'
     ' (setvar "CMDDIA" 1) (setvar "FILEDIA" 1) (setvar "OSMODE" 0)'
     ' (strcat "rst CMDACTIVE=" (itoa (getvar "CMDACTIVE"))))'
 )
 
 # TCH_COLUMN 五属性读回 (Handoff 36 dump 确认的属性名)。
-_COLUMN_READBACK_LISP = '''
+_COLUMN_READBACK_LISP = """
 (vl-load-com)
 (setq t20mcp:col-o (vlax-ename->vla-object (entlast)))
 (strcat
@@ -922,10 +923,10 @@ _COLUMN_READBACK_LISP = '''
   " W=" (vl-prin1-to-string (vl-catch-all-apply 'vlax-get-property (list t20mcp:col-o "Width")))
   " D=" (vl-prin1-to-string (vl-catch-all-apply 'vlax-get-property (list t20mcp:col-o "Deep")))
   " S=" (vl-prin1-to-string (vl-catch-all-apply 'vlax-get-property (list t20mcp:col-o "Style"))))
-'''
+"""
 
 
-async def execute_column(backend: Any, data: dict[str, Any]) -> "Any":
+async def execute_column(backend: Any, data: dict[str, Any]) -> CommandResult:
     """tangent.column 的真机编排: 启动 TGCOLUMN → Win32 面板填参 → 打插入点
     → ESC 退出 → IPC 读回校验。失败路径撤销增量实体并复位环境。
 
@@ -936,7 +937,6 @@ async def execute_column(backend: Any, data: dict[str, Any]) -> "Any":
     import win32process
 
     from t20_mcp import dialog_automation as da
-    from t20_mcp.backends.base import CommandResult
 
     params = _column_params(data)
     launch_code = _gen_column(data)
@@ -982,7 +982,9 @@ async def execute_column(backend: Any, data: dict[str, Any]) -> "Any":
     )
     if drive != "placed":
         await _rollback(base)
-        return CommandResult(ok=False, error=f"[tangent.column] 面板驱动失败: {drive} (已 ESC 回滚)")
+        return CommandResult(
+            ok=False, error=f"[tangent.column] 面板驱动失败: {drive} (已 ESC 回滚)"
+        )
 
     await backend.execute_lisp(_COLUMN_RESET_LISP)
     after = await _count()
@@ -1212,16 +1214,16 @@ def _gen_search_room(data: dict[str, Any]) -> str:
     return _render("search_room", {"SET_LAYER": _set_layer_cmd(data.get("layer"))})
 
 
-EXPLODE_OFFSET_MIN: float = 100_000.0   # 副本暂存区最小偏移 (防重合墙对话框)
+EXPLODE_OFFSET_MIN: float = 100_000.0  # 副本暂存区最小偏移 (防重合墙对话框)
 EXPLODE_MAX_ENTITIES_RANGE: tuple[int, int] = (1, 2000)
 
 
 def _gen_explode_read(data: dict[str, Any]) -> str:
     """天正实体几何读回。data: {handle, offset_x?, offset_y?, max_entities?}
 
-    副本分解管线 (itest_23/24 真机验证): COPY 到远处暂存区 → TEXPLODE 仅
-    分解副本 → 序列化产物几何 → UNDO 回滚。execute 路径必须由调用方并发
-    驱动「分解对象」对话框 (dialog_automation.drive_texplode_dialog)。
+    副本分解管线 (itest_25 真机验证): COPY 到远处暂存区 → 原生 _.EXPLODE
+    仅分解副本 → 序列化产物几何 → UNDO 回滚。原生命令不会弹出 TEXPLODE
+    的「分解对象」模态框，因此 execute 路径无需 UI 对话框驱动。
     """
     handle = data.get("handle")
     if (
@@ -1241,8 +1243,10 @@ def _gen_explode_read(data: dict[str, Any]) -> str:
         )
     max_entities = data.get("max_entities", 200)
     lo, hi = EXPLODE_MAX_ENTITIES_RANGE
-    if isinstance(max_entities, bool) or not isinstance(max_entities, int) or not (
-        lo <= max_entities <= hi
+    if (
+        isinstance(max_entities, bool)
+        or not isinstance(max_entities, int)
+        or not (lo <= max_entities <= hi)
     ):
         raise ParamError(f"参数 max_entities 必须为 {lo}..{hi} 的整数, 实际为 {max_entities!r}")
     return _render(
@@ -1256,49 +1260,100 @@ def _gen_explode_read(data: dict[str, Any]) -> str:
     )
 
 
-def parse_explode_payload(payload: str, off_x: float, off_y: float) -> dict[str, Any]:
-    """解析 explode_read 模板返回串, 并把坐标平移回原位 (减去暂存偏移)。
-
-    输入形如: ``rc=T clean=T n=4 data=LINE|x,y|x,y;LINE|...;``
-    输出: {rc, clean, count, entities:[{type, points:[[x,y]..], props:{..}, text?}]}
-    """
-    text = payload or ""
-    head, sep, body = text.partition(" data=")
+def _parse_explode_flags(
+    head: str,
+    *,
+    has_data: bool,
+) -> tuple[dict[str, str], int, list[str]]:
     flags: dict[str, str] = {}
     for token in head.split():
         k, eq, v = token.partition("=")
         if eq:
             flags[k] = v
+
+    protocol_errors: list[str] = []
+    if not has_data:
+        protocol_errors.append("missing data delimiter")
+    for required in ("rc", "clean", "n"):
+        if required not in flags:
+            protocol_errors.append(f"missing {required}")
+    for flag in ("rc", "clean"):
+        if flag in flags and flags[flag].upper() not in {"T", "NIL"}:
+            protocol_errors.append(f"invalid {flag}={flags[flag]!r}")
+    try:
+        count = int(flags.get("n", "0") or 0)
+        if count < 0:
+            raise ValueError
+    except ValueError:
+        count = 0
+        protocol_errors.append(f"invalid n={flags.get('n')!r}")
+    return flags, count, protocol_errors
+
+
+def _parse_explode_entity(
+    item: str,
+    off_x: float,
+    off_y: float,
+) -> tuple[dict[str, Any] | None, list[str]]:
+    parts = item.split("|")
+    if not parts[0]:
+        return None, ["entity type is empty"]
+
+    protocol_errors: list[str] = []
+    entity: dict[str, Any] = {"type": parts[0], "points": [], "props": {}}
+    for token in parts[1:]:
+        if token.startswith("s="):
+            entity["text"] = token[2:]
+        elif "=" in token:
+            key, _, value = token.partition("=")
+            try:
+                entity["props"][key] = float(value)
+            except ValueError:
+                entity["props"][key] = value
+                protocol_errors.append(f"invalid property={token!r}")
+        elif "," in token:
+            x_text, _, y_text = token.partition(",")
+            try:
+                entity["points"].append([float(x_text) - off_x, float(y_text) - off_y])
+            except ValueError:
+                protocol_errors.append(f"invalid point={token!r}")
+        elif token:
+            protocol_errors.append(f"unrecognized entity token={token!r}")
+    return entity, protocol_errors
+
+
+def parse_explode_payload(payload: str, off_x: float, off_y: float) -> dict[str, Any]:
+    """解析 explode_read 模板返回串, 并把坐标平移回原位 (减去暂存偏移)。
+
+    输入形如: ``rc=T clean=T n=4 data=LINE|x,y|x,y;LINE|...;``
+    输出包含 ``rc/clean/count/entities``，以及 ``protocol_valid`` 和
+    ``protocol_error``；协议缺字段、计数不一致或坐标损坏时不抛裸异常。
+    """
+    head, separator, body = (payload or "").partition(" data=")
+    flags, count, protocol_errors = _parse_explode_flags(
+        head,
+        has_data=bool(separator),
+    )
+
     entities: list[dict[str, Any]] = []
-    if sep:
+    if separator:
         for item in body.split(";"):
             if not item:
                 continue
-            parts = item.split("|")
-            ent: dict[str, Any] = {"type": parts[0], "points": [], "props": {}}
-            for tok in parts[1:]:
-                if tok.startswith("s="):
-                    ent["text"] = tok[2:]
-                elif "=" in tok:
-                    k, _, v = tok.partition("=")
-                    try:
-                        ent["props"][k] = float(v)
-                    except ValueError:
-                        ent["props"][k] = v
-                elif "," in tok:
-                    xs, _, ys = tok.partition(",")
-                    try:
-                        ent["points"].append(
-                            [float(xs) - off_x, float(ys) - off_y]
-                        )
-                    except ValueError:
-                        pass
-            entities.append(ent)
+            entity, entity_errors = _parse_explode_entity(item, off_x, off_y)
+            protocol_errors.extend(entity_errors)
+            if entity is not None:
+                entities.append(entity)
+    if count != len(entities):
+        protocol_errors.append(f"count mismatch: n={count}, entities={len(entities)}")
+
     return {
-        "rc": flags.get("rc") == "T",
-        "clean": flags.get("clean") == "T",
-        "count": int(flags.get("n", "0") or 0),
+        "rc": flags.get("rc", "").upper() == "T",
+        "clean": flags.get("clean", "").upper() == "T",
+        "count": count,
         "entities": entities,
+        "protocol_valid": not protocol_errors,
+        "protocol_error": "; ".join(protocol_errors) if protocol_errors else None,
     }
 
 
@@ -1341,8 +1396,8 @@ _GENERATORS: dict[str, Callable[[dict[str, Any]], str]] = {
 
 SUBCOMMANDS: tuple[str, ...] = tuple(_GENERATORS)
 
-# 真机部分验证的子命令 (2026-06-12, T20 V10 / AutoCAD 2024):
-# execute=True 下发时附 warning。
+# 已有真机证据、但仍需向调用方说明适用边界的子命令；dry-run 与执行成功
+# 都附带 warning。名称沿用早期兼容常量，不表示这些命令尚未验证。
 LOW_CONFIDENCE_WARNINGS: dict[str, str] = {
     "dimension": (
         "dimension 调用天正 TDIMMP 逐点标注，会按墙体、门窗和洞口节点重新吸附，"
@@ -1402,11 +1457,102 @@ def parse_opening_status(payload: object) -> dict[str, str]:
     return status
 
 
+def _opening_status_is_valid(status: dict[str, str], operation: str) -> bool:
+    expected_mode = "0" if operation == "door" else "1"
+    if status.get("requested") != operation:
+        return False
+    if status.get("status") == "OK":
+        return status.get("actual") == expected_mode
+    if status.get("status") == "NO-ENTITY":
+        return True
+    if status.get("status") == "MODE-MISMATCH":
+        return (
+            status.get("expected") == expected_mode
+            and status.get("actual") != expected_mode
+            and status.get("rollback") in {"ok", "failed"}
+        )
+    return False
+
+
+def _normalize_opening_result(
+    result: CommandResult,
+    operation: str,
+    data: dict[str, Any],
+) -> CommandResult:
+    """Turn the opening.lsp status protocol into a fail-closed result envelope."""
+    if not result.ok:
+        return result
+
+    opening_status = parse_opening_status(result.payload)
+    status_name = opening_status.get("status")
+    if not _opening_status_is_valid(opening_status, operation):
+        return CommandResult(
+            ok=False,
+            payload={
+                "code": "OPENING_STATUS_INVALID",
+                "status": opening_status,
+                "raw_payload": result.payload,
+                "retry_operation": operation,
+                "retry_data": data,
+            },
+            error=f"[tangent.{operation}] 门窗状态协议无效: {result.payload!r}",
+        )
+    if status_name == "OK":
+        return result
+    if status_name == "MODE-MISMATCH":
+        requested = opening_status["requested"]
+        actual_code = opening_status.get("actual", "unknown")
+        actual = {"0": "door", "1": "window"}.get(actual_code, "unknown")
+        target_zh = "门" if requested == "door" else "窗"
+        rolled_back = opening_status.get("rollback") == "ok"
+        return CommandResult(
+            ok=False,
+            payload={
+                "code": "OPENING_MODE_MISMATCH",
+                "requested_mode": requested,
+                "actual_mode": actual,
+                "wrong_entity_rolled_back": rolled_back,
+                "requires_user_action": (
+                    f"自动切换到{target_zh}模式后 group71 仍不匹配；请检查"
+                    f"天正门窗面板，必要时手工切换到{target_zh}模式，再用 "
+                    "retry_operation 和 retry_data 原样重试。"
+                ),
+                "retry_operation": operation,
+                "retry_data": data,
+            },
+            error=(
+                f"[tangent.{operation}] OPENING_MODE_MISMATCH: "
+                f"requested={requested}, actual={actual}; "
+                f"wrong entity rollback={'ok' if rolled_back else 'failed'}"
+            ),
+        )
+    if status_name == "NO-ENTITY":
+        return CommandResult(
+            ok=False,
+            payload={
+                "code": "OPENING_NOT_CREATED",
+                "retry_operation": operation,
+                "retry_data": data,
+            },
+            error=f"[tangent.{operation}] 插入点未生成 TCH_OPENING，请确认点位在有效墙段上",
+        )
+    return CommandResult(
+        ok=False,
+        payload={
+            "code": "OPENING_STATUS_INVALID",
+            "status": opening_status,
+            "raw_payload": result.payload,
+            "retry_operation": operation,
+            "retry_data": data,
+        },
+        error=f"[tangent.{operation}] 未识别的门窗状态: {result.payload!r}",
+    )
+
+
 def _gen_opening_mode_launch() -> str:
     """只启动 TOpening 并让门窗参数面板浮起, 不输入插入点。"""
     return (
-        _load_prelude()
-        + '\n(progn (setvar "CMDECHO" 1)'
+        _load_prelude() + '\n(progn (setvar "CMDECHO" 1)'
         ' (vl-catch-all-apply (quote vl-cmdf) (list "TOpening"))'
         ' (strcat "active=" (itoa (getvar "CMDACTIVE"))))'
     )
@@ -1416,20 +1562,19 @@ async def execute_opening(
     backend: Any,
     operation: str,
     data: dict[str, Any],
-) -> "Any":
+) -> CommandResult:
     """门/窗真机编排: 启动面板 → 自动切模式 → 空回车退出 → 正式创建。
 
     面板切换期间 CMDACTIVE=1, 因此只用 Win32 消息, 不走 IPC。随后仍执行
     opening.lsp 的 group71 硬门禁；UI 自动化只是前置动作, 不是成功依据。
     无 Win32 HWND 的测试/替代 backend 保留原来的直接执行路径。
     """
-    from t20_mcp.backends.base import CommandResult
-
     code = generate_lisp(operation, data)
     hwnd = getattr(backend, "_hwnd", None)
     cmd_hwnd = getattr(backend, "_command_hwnd", None)
     if not hwnd or not cmd_hwnd:
-        return await backend.execute_lisp(code)
+        result = await backend.execute_lisp(code)
+        return _normalize_opening_result(result, operation, data)
 
     try:
         import win32process
@@ -1474,10 +1619,7 @@ async def execute_opening(
                 "retry_operation": operation,
                 "retry_data": data,
             },
-            error=(
-                f"[tangent.{operation}] TOpening 未进入活动状态: "
-                f"{launch.payload!r}"
-            ),
+            error=(f"[tangent.{operation}] TOpening 未进入活动状态: {launch.payload!r}"),
         )
 
     # CMDACTIVE=1 窗口期: 禁止 IPC, 直到 drive_opening_mode 空回车退出。
@@ -1503,7 +1645,8 @@ async def execute_opening(
             error=f"[tangent.{operation}] 门窗模式自动切换失败: {drive}",
         )
 
-    return await backend.execute_lisp(code)
+    result = await backend.execute_lisp(code)
+    return _normalize_opening_result(result, operation, data)
 
 
 # 所有保留子命令均可命令行驱动 (已剔除 #32770 模态对话框阻塞项)。
@@ -1517,9 +1660,7 @@ def generate_lisp(subcommand: str, data: dict[str, Any] | None = None) -> str:
         ParamError: 子命令未知, 或参数类型/范围非法, 或渲染结果异常。
     """
     if subcommand not in _GENERATORS:
-        raise ParamError(
-            f"未知 tangent 子命令: {subcommand!r}, 可用: {list(SUBCOMMANDS)}"
-        )
+        raise ParamError(f"未知 tangent 子命令: {subcommand!r}, 可用: {list(SUBCOMMANDS)}")
     return _GENERATORS[subcommand](data or {})
 
 
@@ -1531,8 +1672,13 @@ def generate_lisp(subcommand: str, data: dict[str, Any] | None = None) -> str:
 def register_tangent_tool(mcp: Any) -> None:
     """在传入的 FastMCP 实例上注册 ``tangent`` consolidated 工具。"""
     # 延迟导入, 避免与 client 的循环依赖, 并保持纯生成逻辑可离线测试。
-    from t20_mcp.backends.base import CommandResult
-    from t20_mcp.client import _json, _safe, add_screenshot_if_available, get_backend
+    from t20_mcp.client import (
+        _failure,
+        _json,
+        _safe,
+        add_screenshot_if_available,
+        get_backend,
+    )
 
     @mcp.tool(annotations={"title": "Tangent (天正 T20) Operations", "readOnlyHint": False})
     @_safe("tangent")
@@ -1549,7 +1695,8 @@ def register_tangent_tool(mcp: Any) -> None:
 
         **execute (默认 False = dry-run)**: 默认只返回渲染后的 LISP 代码而**不**
         下发到 AutoCAD (不产生任何 IPC 文件); 传 execute=True 才经 execute_lisp
-        真正执行。door/window/elevation 执行成功也会附 warning 字段。
+        真正执行。存在适用边界的子命令会附 warning；清单由
+        ``LOW_CONFIDENCE_WARNINGS`` 维护。
         door/window 会先自动驱动「门窗参数」面板切换模式，再创建并硬校验
         DXF group71 (0=门, 1=窗)。模式不符会删除错误实体，返回
         OPENING_MODE_MISMATCH 和诊断/重试数据，不会把错误类型当成功。
@@ -1597,7 +1744,7 @@ def register_tangent_tool(mcp: Any) -> None:
         try:
             code = generate_lisp(operation, data or {})
         except ParamError as e:
-            return _json({"error": f"[tangent.{operation}] {e}"})
+            return _failure(f"[tangent.{operation}] {e}")
 
         low_conf = operation in LOW_CONFIDENCE_SUBCOMMANDS
         disabled_reason = EXECUTE_DISABLED_SUBCOMMANDS.get(operation)
@@ -1605,6 +1752,7 @@ def register_tangent_tool(mcp: Any) -> None:
         # 默认 dry-run: 仅返回渲染后的 LISP, 不接触 backend / 不产生 IPC 文件。
         if not execute:
             payload: dict[str, Any] = {
+                "ok": True,
                 "operation": operation,
                 "dry_run": True,
                 "executed": False,
@@ -1619,7 +1767,7 @@ def register_tangent_tool(mcp: Any) -> None:
 
         # 真机证实的纯对话框命令: 拒绝下发, 避免阻塞 IPC / 崩溃风险。
         if disabled_reason:
-            return _json({"error": f"[tangent.{operation}] execute 已禁用: {disabled_reason}"})
+            return _failure(f"[tangent.{operation}] execute 已禁用: {disabled_reason}")
 
         backend = await get_backend()
 
@@ -1642,7 +1790,7 @@ def register_tangent_tool(mcp: Any) -> None:
             off_y = float(d.get("offset_y", 1_000_000.0))
             result = await backend.execute_lisp(code)
             if not result.ok:
-                return _json({"error": f"[tangent.explode_read] {result.error}"})
+                return _failure(f"[tangent.explode_read] {result.error}")
             parsed = parse_explode_payload(str(result.payload or ""), off_x, off_y)
             parsed.update(
                 {
@@ -1655,53 +1803,36 @@ def register_tangent_tool(mcp: Any) -> None:
                     ),
                 }
             )
-            result = CommandResult(ok=True, payload=parsed)
+            if not parsed["protocol_valid"]:
+                parsed["code"] = "EXPLODE_STATUS_INVALID"
+                result = CommandResult(
+                    ok=False,
+                    payload=parsed,
+                    error=(
+                        f"[tangent.explode_read] EXPLODE_STATUS_INVALID: {parsed['protocol_error']}"
+                    ),
+                )
+            elif not parsed["rc"] or not parsed["clean"] or parsed["count"] == 0:
+                code_name = (
+                    "EXPLODE_ROLLBACK_INCOMPLETE" if not parsed["clean"] else "EXPLODE_FAILED"
+                )
+                parsed["code"] = code_name
+                result = CommandResult(
+                    ok=False,
+                    payload=parsed,
+                    error=(
+                        f"[tangent.explode_read] {code_name}: "
+                        f"rc={parsed['rc']}, clean={parsed['clean']}"
+                    ),
+                )
+            else:
+                result = CommandResult(ok=True, payload=parsed)
             return await add_screenshot_if_available(result, include_screenshot)
 
         if operation in ("door", "window"):
             result = await execute_opening(backend, operation, data or {})
         else:
             result = await backend.execute_lisp(code)
-        if operation in ("door", "window") and result.ok:
-            opening_status = parse_opening_status(result.payload)
-            status_name = opening_status.get("status")
-            if status_name == "MODE-MISMATCH":
-                requested = opening_status.get("requested", operation)
-                actual_code = opening_status.get("actual", "unknown")
-                actual = {"0": "door", "1": "window"}.get(actual_code, "unknown")
-                target_zh = "门" if requested == "door" else "窗"
-                rolled_back = opening_status.get("rollback") == "ok"
-                result = CommandResult(
-                    ok=False,
-                    payload={
-                        "code": "OPENING_MODE_MISMATCH",
-                        "requested_mode": requested,
-                        "actual_mode": actual,
-                        "wrong_entity_rolled_back": rolled_back,
-                        "requires_user_action": (
-                            f"自动切换到{target_zh}模式后 group71 仍不匹配；请检查"
-                            f"天正门窗面板，必要时手工切换到{target_zh}模式，再用 "
-                            "retry_operation 和 retry_data 原样重试。"
-                        ),
-                        "retry_operation": operation,
-                        "retry_data": data or {},
-                    },
-                    error=(
-                        f"[tangent.{operation}] OPENING_MODE_MISMATCH: "
-                        f"requested={requested}, actual={actual}; "
-                        f"wrong entity rollback={'ok' if rolled_back else 'failed'}"
-                    ),
-                )
-            elif status_name == "NO-ENTITY":
-                result = CommandResult(
-                    ok=False,
-                    payload={
-                        "code": "OPENING_NOT_CREATED",
-                        "retry_operation": operation,
-                        "retry_data": data or {},
-                    },
-                    error=f"[tangent.{operation}] 插入点未生成 TCH_OPENING，请确认点位在有效墙段上",
-                )
         # 低置信子命令: 在成功 payload 上附 warning (失败结果保持原 error 不动)。
         if low_conf and result.ok:
             base = result.payload
