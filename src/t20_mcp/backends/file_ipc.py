@@ -106,9 +106,11 @@ def find_autocad_window() -> int | None:
     Primary criterion is the process image name (default ``acad.exe``, override
     via ``AUTOCAD_MCP_ACAD_PROCESS``): the T20 launcher may rewrite the window
     title to "T20天正建筑 Vxx…" which contains no "autocad", so a title-only
-    match is unreliable. Title ("autocad"/"天正"/"tarch") is a secondary signal
-    used only to disambiguate. When several acad.exe windows match, prefer the
-    one whose title contains ".dwg" and log a multi-instance warning.
+    match is unreliable. Prefer titled process windows, then title-only matches;
+    untitled process windows are a final fallback because AutoCAD may expose
+    visible helper windows with an empty title. When several candidates in the
+    selected tier match, prefer the one whose title contains ".dwg" and log a
+    multi-instance warning.
     """
     if sys.platform != "win32":
         return None
@@ -119,8 +121,9 @@ def find_autocad_window() -> int | None:
         return None
 
     title_hints = ("autocad", "天正", "tarch")
-    primary: list[tuple[int, str]] = []  # process-name matches: (hwnd, title)
-    secondary: list[tuple[int, str]] = []  # title-only matches (fallback)
+    titled_process: list[tuple[int, str]] = []
+    title_only: list[tuple[int, str]] = []
+    untitled_process: list[tuple[int, str]] = []
 
     def callback(hwnd, _):
         if not win32gui.IsWindowVisible(hwnd):
@@ -136,14 +139,23 @@ def find_autocad_window() -> int | None:
             pid = 0
         image = _process_image_name(pid) if pid else ""
         if image == ACAD_PROCESS_NAME:
-            primary.append((hwnd, tlow))
+            target = titled_process if title.strip() else untitled_process
+            target.append((hwnd, tlow))
         elif any(h in tlow for h in title_hints):
-            secondary.append((hwnd, tlow))
+            title_only.append((hwnd, tlow))
         return True
 
     win32gui.EnumWindows(callback, None)
 
-    candidates = primary or secondary
+    if titled_process:
+        candidates = titled_process
+        used_process_match = True
+    elif title_only:
+        candidates = title_only
+        used_process_match = False
+    else:
+        candidates = untitled_process
+        used_process_match = bool(untitled_process)
     if not candidates:
         return None
 
@@ -154,7 +166,7 @@ def find_autocad_window() -> int | None:
         log.warning(
             "multiple_autocad_windows",
             count=len(candidates),
-            used_process_match=bool(primary),
+            used_process_match=used_process_match,
             chose_dwg_title=bool(with_dwg),
             chosen_hwnd=chosen,
         )

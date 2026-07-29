@@ -154,7 +154,7 @@ def _format_result(
         ImageContent(
             type="image",
             data=screenshot_data,
-            mimeType="image/png",
+            mime_type="image/png",
         ),
     ]
 

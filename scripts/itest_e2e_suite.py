@@ -36,7 +36,20 @@ RESET_ENV = """
 
 CASES: list[tuple[str, str, dict, str | None, str]] = [
     # (label, subcommand, params, expected_type, delta_mode)
-    # delta_mode: "1" = delta==1, ">0" = after>before, "wall" = needs wall baseline prep
+    # delta_mode: decimal string = exact delta, ">0" = positive delta,
+    # "wall"/"room" = build that baseline first, then require delta==1.
+    (
+        "axis_lines",
+        "axis_lines",
+        {
+            "base_x": 200000,
+            "base_y": 200000,
+            "hspacings": [3000],
+            "vspacings": [2000],
+        },
+        "LINE",
+        "4",
+    ),
     (
         "elevation",
         "elevation",
@@ -48,7 +61,7 @@ CASES: list[tuple[str, str, dict, str | None, str]] = [
         "wall_thickness_dim",
         "wall_thickness_dimension",
         {"p1_x": 1500, "p1_y": -500, "p2_x": 1500, "p2_y": 500},
-        "TCH_DIM",
+        "TCH_DIMENSION2",
         "wall",
     ),
     (
@@ -120,6 +133,7 @@ CASES: list[tuple[str, str, dict, str | None, str]] = [
         "TCH_RADIUSDIM",
         ">0",
     ),
+    ("search_room", "search_room", {"layer": "SPACE"}, "TCH_SPACE", "room"),
 ]
 
 
@@ -254,64 +268,55 @@ async def main() -> int:
 
     for label, sub, params, expect_type, mode in CASES:
         before = await count(backend)
-        # wall-dep: create 3-wall baseline for commands that need traversing
+        setup_ok = True
+        setup_segments: tuple[tuple[float, float, float, float], ...] = ()
+        # Collinear T20 walls may merge into one entity, so validate each setup
+        # command rather than assuming a three-entity baseline.
         if mode == "wall":
-            await backend.execute_lisp(
-                generate_lisp(
-                    "wall",
-                    {
-                        "x1": -1000,
-                        "y1": 0,
-                        "x2": 0,
-                        "y2": 0,
-                        "left_width": 120,
-                        "right_width": 120,
-                        "height": 3000,
-                        "wall_type": "砖",
-                    },
-                )
+            setup_segments = (
+                (-1000, 0, 0, 0),
+                (0, 0, 3000, 0),
+                (3000, 0, 7000, 0),
             )
-            await backend.execute_lisp(
-                generate_lisp(
-                    "wall",
-                    {
-                        "x1": 0,
-                        "y1": 0,
-                        "x2": 3000,
-                        "y2": 0,
-                        "left_width": 120,
-                        "right_width": 120,
-                        "height": 3000,
-                        "wall_type": "砖",
-                    },
-                )
+        elif mode == "room":
+            x0, y0 = 100000, 100000
+            setup_segments = (
+                (x0, y0, x0 + 4000, y0),
+                (x0 + 4000, y0, x0 + 4000, y0 + 3000),
+                (x0 + 4000, y0 + 3000, x0, y0 + 3000),
+                (x0, y0 + 3000, x0, y0),
             )
-            await backend.execute_lisp(
-                generate_lisp(
-                    "wall",
-                    {
-                        "x1": 3000,
-                        "y1": 0,
-                        "x2": 7000,
-                        "y2": 0,
-                        "left_width": 120,
-                        "right_width": 120,
-                        "height": 3000,
-                        "wall_type": "砖",
-                    },
+
+        if setup_segments:
+            for x1, y1, x2, y2 in setup_segments:
+                setup = await backend.execute_lisp(
+                    generate_lisp(
+                        "wall",
+                        {
+                            "x1": x1,
+                            "y1": y1,
+                            "x2": x2,
+                            "y2": y2,
+                            "left_width": 120,
+                            "right_width": 120,
+                            "height": 3000,
+                            "wall_type": "砖",
+                        },
+                    )
                 )
-            )
+                setup_ok = setup_ok and setup.ok
             before = await count(backend)
         r = await backend.execute_lisp(generate_lisp(sub, params))
         after = await count(backend)
         t = await backend.execute_lisp(LAST_TYPE)
-        ok = r.ok
-        if mode == "1":
+        ok = r.ok and setup_ok
+        if mode.isdecimal():
+            ok = ok and after == before + int(mode)
+        elif mode in {"wall", "room"}:
             ok = ok and after == before + 1
         elif mode == ">0":
             ok = ok and after > before
-        # mode == "wall": just check r.ok (entity type may vary)
-        if expect_type and mode != "wall":
+        if expect_type:
             ok = ok and str(t.payload) == expect_type
         results[label] = ok
         print(f"[{label}] ok={ok} exec={r.ok} {before}->{after} type={t.payload!r}")

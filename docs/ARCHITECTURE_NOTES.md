@@ -21,7 +21,24 @@
 `t20_mcp/lisp_code/`；配置层优先使用已安装包数据，editable/source 运行才回退到
 仓库根文件，避免“源码可用、安装包缺 dispatcher”。
 
-## 2. File IPC 调度链路
+## 2. MCP 协议层
+
+项目使用官方 Python SDK `mcp>=2.0.0,<3` 与 `MCPServer`，服务身份继续保持
+`autocad-mcp`，服务版本来自 `t20_mcp.__version__`。默认协议是稳定版
+`2026-07-28`，SDK 同时服务 `2025-11-25` 及更早客户端。
+
+现代协议请求由 SDK 处理 `server/discover`、每请求协议/能力 `_meta`、必需的
+`resultType` 和完整 JSON Schema 2020-12。项目没有 MCP Roots、Sampling、Logging、
+Tasks、资源订阅或 Streamable HTTP 会话状态，因此本轮无需应用层迁移这些特性。
+`backend.initialize()`、`FileIPCBackend._dispatch("ping", ...)` 只属于 AutoCAD
+后端生命周期，不应与已经删除的 MCP `initialize` 握手和 MCP `ping` 方法混淆。
+
+真实 stdio 协议门禁是 `scripts/itest_19_mcp_stdio_smoke.py`：客户端使用自动协商，
+必须得到 `2026-07-28`，随后列出 9 个工具并完成 `tangent.axis_lines` dry-run。
+同一 smoke 再启动独立子进程，以 legacy 模式固定验证 `2025-11-25` 和工具列表；
+离线单元测试也覆盖这两条路径。
+
+## 3. File IPC 调度链路
 
 [`FileIPCBackend`](../src/t20_mcp/backends/file_ipc.py) 的一次正常请求按以下顺序执行：
 
@@ -48,7 +65,7 @@
 结果文件由 AutoLISP 按系统 ANSI 代码页写出。解码顺序和兼容回退集中在
 `_decode_result_bytes()`，调用方不应自行猜测编码。
 
-## 3. 窗口发现与健康检查
+## 4. 窗口发现与健康检查
 
 `find_autocad_window()` 以进程映像名为主判据，默认是 `acad.exe`，可用
 `AUTOCAD_MCP_ACAD_PROCESS` 覆盖。窗口标题中的 `autocad`、`天正`、`tarch`
@@ -57,7 +74,7 @@
 初始化成功还要求 dispatcher ping 往返通过。仅发现窗口不代表 IPC 可用；
 `mcp_dispatch.lsp not loaded`、ping timeout 或无法恢复的 `CMDACTIVE > 0` 都是停止条件。
 
-## 4. tangent 执行模型
+## 5. tangent 执行模型
 
 常规 tangent 子命令采用 LISP 模板与参数注入：
 
@@ -78,18 +95,19 @@
 GUI 指纹不匹配时必须停止并回滚；严禁 `WM_CLOSE`，严禁无边界的键鼠自动化，
 `CMDACTIVE > 0` 的面板阶段不得并发发起 File IPC。
 
-## 5. 文档与证据边界
+## 6. 文档与证据边界
 
 - 当前工具、子命令和参数语义：[`README.md`](../README.md) 与
   [`docs/T20_COMMANDS.md`](T20_COMMANDS.md)。
 - 当前交付/延后裁定：[`TODO_BACKLOG.md`](../TODO_BACKLOG.md)。
 - 当前收尾入口与验证命令：[`PROJECT_CLOSEOUT_TODO.md`](../PROJECT_CLOSEOUT_TODO.md)。
-- 真机历史证据：`docs/handoff/`，其中 Handoff 39 是门窗自动切换的最新闭合记录。
+- 真机历史证据：`docs/handoff/`，其中 Handoff 40 是最近一次完整真机回归；
+  Handoff 41 只记录 MCP 协议层迁移。
 
 历史 E2E 可以说明某条路线曾在指定 AutoCAD/T20 环境通过，但不能代替本轮真机复验。
 离线测试、compileall、Ruff 与 MCP stdio smoke 也不能被表述为新的 AutoCAD/T20 E2E。
 
-## 6. 维护入口
+## 7. 维护入口
 
 | 关注点 | 权威实现 |
 |---|---|

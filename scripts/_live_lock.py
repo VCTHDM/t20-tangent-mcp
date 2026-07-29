@@ -19,6 +19,11 @@ AutoCAD/T20 只有一条命令通道，真机 itest 并行运行会相互污染�
 
     with live_lock(__file__):
         ...
+
+Output encoding:
+    Importing this module makes a best-effort attempt to configure ``stdout``
+    and ``stderr`` as UTF-8 with replacement for unencodable text. Captured or
+    redirected streams without a usable ``reconfigure`` method are left alone.
 """
 
 from __future__ import annotations
@@ -31,6 +36,24 @@ import tempfile
 from collections.abc import Iterator
 from pathlib import Path
 from typing import BinaryIO
+
+
+def _configure_utf8_output(
+    stdout: object | None,
+    stderr: object | None,
+) -> None:
+    """Best-effort UTF-8 setup for real, captured, or redirected streams."""
+    for stream in (stdout, stderr):
+        try:
+            reconfigure = getattr(stream, "reconfigure", None)
+            if callable(reconfigure):
+                reconfigure(encoding="utf-8", errors="replace")
+        except Exception:
+            # Capture/proxy streams can expose a partial or rejecting API.
+            pass
+
+
+_configure_utf8_output(sys.stdout, sys.stderr)
 
 LOCK_PATH = Path(tempfile.gettempdir()) / "t20_mcp_live.lock"
 

@@ -1,6 +1,6 @@
 [project]
 name = "t20-mcp"
-version = "3.1.0"
+version = "3.2.0"
 description = "T20 天正建筑 MCP Server (AutoCAD + Tangent T20 on Chinese Windows)"
 readme = "README.md"
 license = { file = "LICENSE" }
@@ -8,7 +8,7 @@ requires-python = ">=3.12"
 dependencies = [
     "ezdxf>=1.4.4",
     "matplotlib>=3.11.0",
-    "mcp[cli]>=1.27.2",
+    "mcp[cli]>=2.0.0,<3",
     "pillow>=12.2.0",
     "pywin32>=312",
     "structlog>=26.1.0",

@@ -1670,7 +1670,7 @@ def generate_lisp(subcommand: str, data: dict[str, Any] | None = None) -> str:
 
 
 def register_tangent_tool(mcp: Any) -> None:
-    """在传入的 FastMCP 实例上注册 ``tangent`` consolidated 工具。"""
+    """在传入的 MCPServer 实例上注册 ``tangent`` consolidated 工具。"""
     # 延迟导入, 避免与 client 的循环依赖, 并保持纯生成逻辑可离线测试。
     from t20_mcp.client import (
         _failure,
@@ -1680,7 +1680,7 @@ def register_tangent_tool(mcp: Any) -> None:
         get_backend,
     )
 
-    @mcp.tool(annotations={"title": "Tangent (天正 T20) Operations", "readOnlyHint": False})
+    @mcp.tool(annotations={"title": "Tangent (天正 T20) Operations", "read_only_hint": False})
     @_safe("tangent")
     async def tangent(  # type: ignore[reportUnusedFunction]
         operation: str,

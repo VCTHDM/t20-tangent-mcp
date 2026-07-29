@@ -7,7 +7,7 @@ Distribution/runtime version comes from ``t20_mcp.__version__``.
 from __future__ import annotations
 
 import structlog
-from mcp.server.fastmcp import FastMCP
+from mcp.server import MCPServer
 from mcp.types import ImageContent, TextContent
 
 from t20_mcp import __version__
@@ -20,7 +20,7 @@ from t20_mcp.client import (
 )
 from t20_mcp.tools.tangent import register_tangent_tool
 
-# FastMCP validates return types via Pydantic. Tools that may return
+# MCPServer validates return types via Pydantic. Tools that may return
 # ImageContent (screenshot) alongside TextContent need a union return type.
 ToolResult = str | list[TextContent | ImageContent]
 
@@ -29,7 +29,7 @@ log = structlog.get_logger()
 # MCP protocol compatibility identifier. Existing client configurations discover
 # this server as "autocad-mcp"; the installable distribution remains "t20-mcp".
 # Changing this string is a compatibility migration, not a package-version update.
-mcp = FastMCP("autocad-mcp")
+mcp = MCPServer("autocad-mcp", version=__version__)
 
 # 天正 T20 建筑实体工具；当前操作清单见 docs/T20_COMMANDS.md，真机证据按
 # docs/handoff/ 时间顺序保留。默认 dry-run，execute=True 才进入执行链路。
@@ -41,7 +41,7 @@ register_tangent_tool(mcp)
 # ==========================================================================
 
 
-@mcp.tool(annotations={"title": "AutoCAD Drawing Operations", "readOnlyHint": False})
+@mcp.tool(annotations={"title": "AutoCAD Drawing Operations", "read_only_hint": False})
 @_safe("drawing")
 async def drawing(
     operation: str,
@@ -96,7 +96,7 @@ async def drawing(
 # ==========================================================================
 
 
-@mcp.tool(annotations={"title": "AutoCAD Entity Operations", "readOnlyHint": False})
+@mcp.tool(annotations={"title": "AutoCAD Entity Operations", "read_only_hint": False})
 @_safe("entity")
 async def entity(
     operation: str,
@@ -208,7 +208,7 @@ async def entity(
 # ==========================================================================
 
 
-@mcp.tool(annotations={"title": "AutoCAD Layer Operations", "readOnlyHint": False})
+@mcp.tool(annotations={"title": "AutoCAD Layer Operations", "read_only_hint": False})
 @_safe("layer")
 async def layer(
     operation: str,
@@ -261,7 +261,7 @@ async def layer(
 # ==========================================================================
 
 
-@mcp.tool(annotations={"title": "AutoCAD Block Operations", "readOnlyHint": False})
+@mcp.tool(annotations={"title": "AutoCAD Block Operations", "read_only_hint": False})
 @_safe("block")
 async def block(
     operation: str,
@@ -318,7 +318,7 @@ async def block(
 # ==========================================================================
 
 
-@mcp.tool(annotations={"title": "AutoCAD Annotation Operations", "readOnlyHint": False})
+@mcp.tool(annotations={"title": "AutoCAD Annotation Operations", "read_only_hint": False})
 @_safe("annotation")
 async def annotation(
     operation: str,
@@ -393,7 +393,7 @@ async def annotation(
 # ==========================================================================
 
 
-@mcp.tool(annotations={"title": "P&ID Operations (CTO Library)", "readOnlyHint": False})
+@mcp.tool(annotations={"title": "P&ID Operations (CTO Library)", "read_only_hint": False})
 @_safe("pid")
 async def pid(
     operation: str,
@@ -490,7 +490,7 @@ async def pid(
 # ==========================================================================
 
 
-@mcp.tool(annotations={"title": "AutoCAD View Operations", "readOnlyHint": False})
+@mcp.tool(annotations={"title": "AutoCAD View Operations", "read_only_hint": False})
 @_safe("view")
 async def view(
     operation: str,
@@ -521,7 +521,7 @@ async def view(
 
             return [
                 TextContent(type="text", text=_json({"ok": True, "screenshot": "attached"})),
-                ImageContent(type="image", data=result.payload, mimeType="image/png"),
+                ImageContent(type="image", data=result.payload, mime_type="image/png"),
             ]
         return _json(result.to_dict())
     else:
@@ -533,7 +533,7 @@ async def view(
 # ==========================================================================
 
 
-@mcp.tool(annotations={"title": "AutoCAD MCP System", "readOnlyHint": False})
+@mcp.tool(annotations={"title": "AutoCAD MCP System", "read_only_hint": False})
 @_safe("system")
 async def system(
     operation: str,

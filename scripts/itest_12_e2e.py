@@ -137,22 +137,24 @@ async def main() -> int:
     t = await backend.execute_lisp(LAST_TYPE)
     rb = await backend.execute_lisp(READBACK.replace("{PROPS}", '"Width" "Height" "DoorSill"'))
     ok = (
-        after == before + 1
+        r.ok
+        and after == before + 1
         and t.payload == "TCH_OPENING"
         and "Width=1000.0" in str(rb.payload)
         and "Height=2000.0" in str(rb.payload)
+        and "DoorSill=0.0" in str(rb.payload)
     )
     results["door"] = ok
     print(f"[door] ok={ok} exec={r.ok} type={t.payload!r} readback={rb.payload!r}")
 
-    # --- 3b. opening ancillary COM properties (SillHeight/OpType/Kind) ---
+    # --- 3b. Optional COM properties are diagnostic only. T20 V10 commonly
+    # exposes none of these names; their presence must not create a false PASS.
     extra_rb = await backend.execute_lisp(
         READBACK.replace(
             "{PROPS}", '"SillHeight" "WindowSillHeight" "OpType" "Kind" "Type" "WinType"'
         )
     )
-    results["door_extra_props"] = extra_rb.ok and "SillHeight" in str(extra_rb.payload)
-    print(f"[door_extra_props] ok={results['door_extra_props']} readback={extra_rb.payload!r}")
+    print(f"[door_optional_props] diagnostic_only=True readback={extra_rb.payload!r}")
 
     # --- 清理与环境复位 ---
     cleanup_guard = 0

@@ -303,7 +303,9 @@ async def main() -> int:
     await cleanup_to(backend, base)
 
     # ==================================================================
-    # 场景 5: dimension 标注值 — COM 读 Measurement (如可读)
+    # 场景 5: 12000 跨度标注必须成功生成；COM 数值属性仅作诊断。
+    # TCH_DIMENSION2 在 T20 V10 通常不暴露 Measurement/Text 属性，不能把
+    # "<no>" 回读包装成“测量值已验证”。
     # ==================================================================
     await backend.execute_lisp(
         generate_lisp(
@@ -321,7 +323,7 @@ async def main() -> int:
         )
     )
     before = await count(backend)
-    await backend.execute_lisp(
+    dim_result = await backend.execute_lisp(
         generate_lisp(
             "dimension",
             {
@@ -335,14 +337,19 @@ async def main() -> int:
         )
     )
     after = await count(backend)
+    dim_type = await backend.execute_lisp(LAST_TYPE)
     # 尝试读 Measurement / Text 属性 (天正实体可能不暴露)
     meas_rb = await backend.execute_lisp(
         READBACK.replace("{PROPS}", '"Measurement" "Text" "TextOverride"')
     )
-    results["dimension_measurement"] = after == before + 1
-    notes["dimension_measurement"] = str(meas_rb.payload)
+    case_name = "dimension_12000_span_created"
+    results[case_name] = (
+        dim_result.ok and after == before + 1 and str(dim_type.payload).startswith("TCH_DIM")
+    )
+    notes[case_name] = f"type={dim_type.payload!r}; optional_properties={meas_rb.payload!r}"
     print(
-        f"[dimension_measurement] ok={results['dimension_measurement']} readback={meas_rb.payload!r}"
+        f"[{case_name}] ok={results[case_name]} type={dim_type.payload!r} "
+        f"optional_properties={meas_rb.payload!r}"
     )
     await cleanup_to(backend, base)
 

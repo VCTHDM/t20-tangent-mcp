@@ -9,6 +9,25 @@ T20 天正建筑 V10 MCP Server — 为 AutoCAD/T20 提供 AI 可调用的建筑
 所有参数先在 Python 侧校验；`column` 与 `door/window` 使用强结构指纹约束的
 受控 Win32 编排，最终仍以实体读回结果验真。
 
+## MCP 协议兼容性
+
+当前包版本为 `3.2.0`，依赖官方 Python SDK `mcp>=2.0.0,<3`。服务器默认支持稳定版
+MCP `2026-07-28`：协议层不再使用 `initialize/notifications/initialized` 会话握手，
+由 `server/discover` 和每请求 `_meta` 完成版本与能力协商；同时保留对
+`2025-11-25` 旧客户端的兼容服务。
+
+`scripts/itest_19_mcp_stdio_smoke.py` 会通过真实 stdio 子进程自动协商，并硬断言
+协议版本为 `2026-07-28`、普通结果含 `resultType="complete"`、9 个工具均可列出；
+随后用独立 stdio 子进程固定验证 legacy `2025-11-25`。
+项目代码中的 `backend.initialize()` 与 dispatcher `ping` 是 AutoCAD/File IPC
+健康检查，不是本次规范删除的 MCP 握手或 MCP `ping` 方法。
+
+迁移依据：
+
+- [MCP 2026-07-28 官方变更清单](https://modelcontextprotocol.io/specification/2026-07-28/changelog)
+- [MCP Python SDK v2.0.0 发布说明](https://github.com/modelcontextprotocol/python-sdk/releases/tag/v2.0.0)
+- [MCP Python SDK v2 迁移指南](https://py.sdk.modelcontextprotocol.io/migration/)
+
 ## 快速上手
 
 ```bash
@@ -23,8 +42,12 @@ uv run -m t20_mcp
 
 # 真机联调 (需 AutoCAD 2024 + T20 V10 运行中)
 uv run python scripts/itest_01_bringup.py          # 引导: 窗口检测 + dispatcher 注入
+uv run python scripts/itest_dim_precision_verify.py # 尺寸/坐标精度专项
+uv run python scripts/itest_42_opening_panel_mode_auto.py # 门/窗双向模式门禁
 uv run python scripts/itest_12_e2e.py              # 核心 E2E: wall/dimension/door + COM 回读
-uv run python scripts/itest_e2e_suite.py           # 批量 E2E: 25 case 全部验证
+uv run python scripts/itest_e2e_suite.py           # 批量 E2E: 27 case
+uv run python scripts/itest_39_column_gate_b_e2e.py # column 五参数专项
+uv run python scripts/itest_25_explode_read_e2e.py  # explode_read 回滚专项
 uv run python scripts/itest_19_mcp_stdio_smoke.py  # MCP stdio 冒烟 (无需 AutoCAD)
 ```
 
@@ -70,8 +93,10 @@ uv run python scripts/itest_19_mcp_stdio_smoke.py  # MCP stdio 冒烟 (无需 Au
 | `explode_read` | EXPLODE | — | handle, offset_x?, offset_y?, max_entities? |
 | `search_room` | TUpdSpace | TCH_SPACE | layer? |
 
-历史验证状态：全部 33 个子命令均有 T20 V10 / AutoCAD 2024 E2E 证据；
-这不表示每次代码整理都已重新执行真机回归。
+历史验证状态：全部 33 个子命令均有 T20 V10 / AutoCAD 2024 E2E 证据。
+2026-07-26 的仓库收敛补丁又完成了一轮 fresh 33/33 真机覆盖；具体脚本映射、断言
+强度和恢复记录见 [Handoff 40](docs/handoff/40_repository_audit_fresh_e2e.md)。
+这表示每个子命令至少通过当前生产路径与对应门禁，不表示穷举所有可选参数组合。
 `dimension`/`door`/`window`/`elevation`/`drawing_name`/`arrow`/`column` 执行时附 warning 提示。
 `door`/`window` 会先自动驱动「门窗参数」面板切换插门/插窗模式，再创建并校验
 DXF group71 (0=门, 1=窗)。group71 仍是最终门禁；模式不符时错误实体自动删除，
@@ -94,7 +119,7 @@ docs/                                # 命令编目 + handoff 审计记录
 
 当前入口是 [`PROJECT_CLOSEOUT_TODO.md`](PROJECT_CLOSEOUT_TODO.md) 与
 [`TODO_BACKLOG.md`](TODO_BACKLOG.md)。`docs/handoff/` 保存按时间追加的真机证据，
-编号目前到 39；编号 14 的空缺以及 34/36/37 的同号多文件都按历史原样保留，
+编号目前到 41；编号 14 的空缺以及 34/36/37 的同号多文件都按历史原样保留，
 不要把编号范围简写当成可执行的文件模式，也不要把旧 handoff 当成当前行为说明。
 
 关键节点:
@@ -117,17 +142,21 @@ docs/                                # 命令编目 + handoff 审计记录
 - 37 — A1 裁定: TRectAxis Gate B 机制打通 (WM_COMMAND IDOK 关框 + 打点, COUNT*SPACING 语法) 但**不封装** — 产物纯 LINE@DOTE 无 xdata/TCH_AXIS/轴号, 与 axis_lines 同类零增益; 沉淀"封装前先验产物实体类型"方法论 (机制可行 ≠ 值得封装)
 - [38](docs/handoff/38_opening_mode_gate.md) — 门窗两阶段模式门禁与错误实体回滚（历史人工切换阶段）
 - [39](docs/handoff/39_opening_mode_automation.md) — 当前门窗自动切换链路；group71 最终门禁继续保留
+- [40](docs/handoff/40_repository_audit_fresh_e2e.md) — 仓库收敛、测试门禁加固与 fresh 33/33 真机回归
+- [41](docs/handoff/41_mcp_2026_07_28_protocol.md) — MCP 2026-07-28 / Python SDK v2 协议迁移与双版本兼容验证
 
 ## 测试
 
 ```bash
 uv run ruff check src tests scripts
 uv run ruff format --check src tests scripts
-uv run pytest -q                              # 离线测试 (通常 <2s)
+uv run pytest -q                              # 完整离线测试
 uv run python scripts/itest_01_bringup.py     # 真机引导 (需 AutoCAD)
 uv run python scripts/itest_42_opening_panel_mode_auto.py  # 门窗自动切换双向门禁
 uv run python scripts/itest_12_e2e.py         # 真机核心 E2E
-uv run python scripts/itest_e2e_suite.py      # 真机批量 E2E (25 case)
+uv run python scripts/itest_e2e_suite.py      # 真机批量 E2E (27 case)
+uv run python scripts/itest_39_column_gate_b_e2e.py  # column 参数读回
+uv run python scripts/itest_25_explode_read_e2e.py   # explode_read 回滚
 ```
 
 ## 许可

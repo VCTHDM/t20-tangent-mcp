@@ -17,6 +17,19 @@ if str(_SCRIPTS_DIR) not in sys.path:
 import _live_lock  # noqa: E402
 
 
+class _RecordingStream:
+    def __init__(self) -> None:
+        self.calls: list[dict[str, str]] = []
+
+    def reconfigure(self, **kwargs: str) -> None:
+        self.calls.append(kwargs)
+
+
+class _RejectingStream:
+    def reconfigure(self, **kwargs: str) -> None:
+        raise OSError(f"unsupported stream configuration: {kwargs}")
+
+
 def _hold_lock_in_child(lock_path: str, ready, release) -> None:
     _live_lock.LOCK_PATH = Path(lock_path)
     with _live_lock.live_lock("child_holder.py"):
@@ -29,6 +42,29 @@ def tmp_lock(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     path = tmp_path / "t20_mcp_live.lock"
     monkeypatch.setattr(_live_lock, "LOCK_PATH", path)
     return path
+
+
+def test_utf8_output_configures_both_streams() -> None:
+    stdout = _RecordingStream()
+    stderr = _RecordingStream()
+
+    _live_lock._configure_utf8_output(stdout, stderr)
+
+    expected = [{"encoding": "utf-8", "errors": "replace"}]
+    assert stdout.calls == expected
+    assert stderr.calls == expected
+
+
+def test_utf8_output_accepts_streams_without_reconfigure() -> None:
+    _live_lock._configure_utf8_output(object(), None)
+
+
+def test_utf8_output_ignores_reconfigure_errors_and_continues() -> None:
+    stderr = _RecordingStream()
+
+    _live_lock._configure_utf8_output(_RejectingStream(), stderr)
+
+    assert stderr.calls == [{"encoding": "utf-8", "errors": "replace"}]
 
 
 def test_acquire_writes_diagnostics_and_releases_os_lock(tmp_lock: Path) -> None:

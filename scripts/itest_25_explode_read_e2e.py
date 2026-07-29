@@ -50,6 +50,30 @@ async def count(backend: FileIPCBackend) -> int:
     return result.payload["count"]
 
 
+async def cleanup_to(backend: FileIPCBackend, target: int) -> tuple[bool, int, object]:
+    """Best-effort rollback that also runs after setup or protocol failures."""
+    while await count(backend) > target:
+        undo = await backend.undo()
+        if not undo.ok:
+            print(f"[cleanup] undo failed: {undo.error}")
+            break
+    reset = await backend.execute_lisp(RESET_ENV)
+    env = await backend.drawing_get_variables(["CMDACTIVE", "CMDDIA", "FILEDIA", "OSMODE"])
+    final = await count(backend)
+    env_payload = env.payload if env.ok else {}
+    clean = (
+        final == target
+        and reset.ok
+        and env.ok
+        and env_payload.get("CMDACTIVE") == 0
+        and env_payload.get("CMDDIA") == 1
+        and env_payload.get("FILEDIA") == 1
+        and env_payload.get("OSMODE") == 0
+    )
+    print(f"[cleanup] entities={final} reset={reset.ok} env={env_payload}")
+    return clean, final, env_payload
+
+
 async def main() -> int:
     backend = FileIPCBackend()
     init = await backend.initialize()
@@ -60,85 +84,80 @@ async def main() -> int:
     await backend.execute_lisp(RESET_ENV)
     before = await count(backend)
 
-    wall = await backend.execute_lisp(
-        generate_lisp(
-            "wall",
-            {
-                "x1": 0,
-                "y1": 0,
-                "x2": 3000,
-                "y2": 0,
-                "left_width": 120,
-                "right_width": 120,
-                "height": 3000,
-                "wall_type": "砖",
-            },
-        )
-    )
-    handle_r = await backend.execute_lisp(
-        '(if (entlast) (cdr (assoc 5 (entget (entlast)))) "none")'
-    )
-    handle = (handle_r.payload or "").strip('"') if handle_r.ok else "none"
-    after_wall = await count(backend)
-    print(f"[wall] ok={wall.ok} handle={handle} entities {before}->{after_wall}")
-    if not wall.ok or handle in ("none", ""):
-        print("FAIL: 墙体创建失败")
-        return 1
-
-    code = generate_lisp(
-        "explode_read",
-        {"handle": handle, "offset_x": OFF, "offset_y": OFF, "max_entities": 50},
-    )
-    result = await backend.execute_lisp(code)
-    print(f"[explode_read] ok={result.ok} error={result.error!r}")
-    if not result.ok:
-        print("FAIL: explode_read 执行失败")
-        return 1
-
-    parsed = parse_explode_payload(str(result.payload or ""), OFF, OFF)
-    print(
-        f"[parsed] rc={parsed['rc']} clean={parsed['clean']} count={parsed['count']} "
-        f"types={[e['type'] for e in parsed['entities']]}"
-    )
-    lines = [e for e in parsed["entities"] if e["type"] == "LINE"]
-    for e in lines[:6]:
-        print(f"  LINE {e['points']}")
-
-    geo_ok = parsed["rc"] and len(lines) >= 4
-
-    def point_ok(p: list[float]) -> bool:
-        in_outline = -1000 <= p[0] <= 4000 and -1000 <= p[1] <= 1000
-        known_defect_zero = p[0] == -OFF and p[1] == -OFF  # raw (0,0), T20 缺陷
-        return in_outline or known_defect_zero
-
-    coords_ok = all(point_ok(p) for e in lines for p in e["points"])
-    # 终点侧 (右端 x≈3000) 必须真实存在, 证明分解发生在暂存区且平移正确
-    right_side = [p for e in lines for p in e["points"] if abs(p[0] - 3000.0) < 1.0]
-    coords_ok = coords_ok and len(right_side) >= 3
-    after_read = await count(backend)
-    print(f"[post] entities={after_read} (期望 {after_wall}, clean={parsed['clean']})")
-
-    # 清理原墙
-    while (c := await count(backend)) > before and c >= 0:
-        undo = await backend.undo()
-        if not undo.ok:
-            print(f"[cleanup] undo failed: {undo.error}")
-            break
-    reset = await backend.execute_lisp(RESET_ENV)
-    env = await backend.drawing_get_variables(["CMDACTIVE", "CMDDIA", "FILEDIA", "OSMODE"])
-    final = await count(backend)
-    print(f"[cleanup] entities={final} reset={reset.ok} env={env.payload}")
-
     checks = {
-        "geo": geo_ok,
-        "coords_translated": coords_ok,
-        "rollback_clean": parsed["clean"] and after_read == after_wall,
-        "final_empty": final == before,
-        "env_clean": env.ok
-        and env.payload.get("CMDACTIVE") == 0
-        and env.payload.get("CMDDIA") == 1
-        and env.payload.get("FILEDIA") == 1,
+        "wall_created": False,
+        "explode_execute": False,
+        "geo": False,
+        "coords_translated": False,
+        "rollback_clean": False,
     }
+    try:
+        wall = await backend.execute_lisp(
+            generate_lisp(
+                "wall",
+                {
+                    "x1": 0,
+                    "y1": 0,
+                    "x2": 3000,
+                    "y2": 0,
+                    "left_width": 120,
+                    "right_width": 120,
+                    "height": 3000,
+                    "wall_type": "砖",
+                },
+            )
+        )
+        handle_r = await backend.execute_lisp(
+            '(if (entlast) (cdr (assoc 5 (entget (entlast)))) "none")'
+        )
+        handle = (handle_r.payload or "").strip('"') if handle_r.ok else "none"
+        after_wall = await count(backend)
+        checks["wall_created"] = wall.ok and handle not in ("none", "")
+        print(f"[wall] ok={wall.ok} handle={handle} entities {before}->{after_wall}")
+
+        if checks["wall_created"]:
+            code = generate_lisp(
+                "explode_read",
+                {"handle": handle, "offset_x": OFF, "offset_y": OFF, "max_entities": 50},
+            )
+            result = await backend.execute_lisp(code)
+            checks["explode_execute"] = result.ok
+            print(f"[explode_read] ok={result.ok} error={result.error!r}")
+
+            if result.ok:
+                parsed = parse_explode_payload(str(result.payload or ""), OFF, OFF)
+                print(
+                    f"[parsed] rc={parsed['rc']} clean={parsed['clean']} "
+                    f"count={parsed['count']} "
+                    f"types={[e['type'] for e in parsed['entities']]}"
+                )
+                lines = [e for e in parsed["entities"] if e["type"] == "LINE"]
+                for entity in lines[:6]:
+                    print(f"  LINE {entity['points']}")
+
+                checks["geo"] = parsed["rc"] and len(lines) >= 4
+
+                def point_ok(point: list[float]) -> bool:
+                    in_outline = -1000 <= point[0] <= 4000 and -1000 <= point[1] <= 1000
+                    known_defect_zero = point[0] == -OFF and point[1] == -OFF  # raw (0,0), T20 缺陷
+                    return in_outline or known_defect_zero
+
+                coords_ok = all(point_ok(point) for entity in lines for point in entity["points"])
+                # 终点侧 (右端 x≈3000) 必须真实存在，证明暂存区平移正确。
+                right_side = [
+                    point
+                    for entity in lines
+                    for point in entity["points"]
+                    if abs(point[0] - 3000.0) < 1.0
+                ]
+                checks["coords_translated"] = coords_ok and len(right_side) >= 3
+                after_read = await count(backend)
+                checks["rollback_clean"] = parsed["clean"] and after_read == after_wall
+                print(f"[post] entities={after_read} (期望 {after_wall}, clean={parsed['clean']})")
+    finally:
+        cleanup_clean, _, _ = await cleanup_to(backend, before)
+
+    checks["cleanup"] = cleanup_clean
     print(f"[verdict] {checks}")
     return 0 if all(checks.values()) else 1
 

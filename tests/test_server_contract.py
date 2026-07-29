@@ -6,8 +6,9 @@ import asyncio
 import json
 
 import pytest
+from mcp import Client
 
-from t20_mcp import server
+from t20_mcp import __version__, server
 from t20_mcp.client import _failure, _safe
 
 
@@ -25,7 +26,36 @@ def test_registered_tool_names_and_mutability_annotations_are_consistent() -> No
         "system",
         "tangent",
     }
-    assert all(tool.annotations.readOnlyHint is False for tool in tools.values())
+    assert all(tool.annotations.read_only_hint is False for tool in tools.values())
+
+
+def test_mcp_2026_protocol_and_server_identity_are_advertised() -> None:
+    async def exercise() -> None:
+        async with Client(server.mcp, mode="auto") as client:
+            assert client.protocol_version == "2026-07-28"
+            assert client.session.discover_result is not None
+            assert client.session.initialize_result is None
+            assert client.server_info is not None
+            assert client.server_info.name == "autocad-mcp"
+            assert client.server_info.version == __version__
+
+            tools = await client.list_tools()
+            assert tools.result_type == "complete"
+            assert {tool.name for tool in tools.tools} == set(server.mcp._tool_manager._tools)
+
+    asyncio.run(exercise())
+
+
+def test_mcp_legacy_clients_remain_supported() -> None:
+    async def exercise() -> None:
+        async with Client(server.mcp, mode="legacy") as client:
+            assert client.protocol_version == "2025-11-25"
+            assert client.session.discover_result is None
+            assert client.session.initialize_result is not None
+            tools = await client.list_tools()
+            assert {tool.name for tool in tools.tools} == set(server.mcp._tool_manager._tools)
+
+    asyncio.run(exercise())
 
 
 def test_failure_helper_always_emits_explicit_failure_envelope() -> None:

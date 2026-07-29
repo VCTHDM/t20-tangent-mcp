@@ -113,6 +113,7 @@ async def main() -> int:
     backend = FileIPCBackend()
     init = await backend.initialize()
     print(f"[2] initialize -> ok={init.ok} payload={init.payload!r}")
+    dispatcher_ok = init.ok
     if not init.ok:
         print(f"    error: {init.error}")
         if (
@@ -121,7 +122,8 @@ async def main() -> int:
             or "dispatcher ping failed" in (init.error or "")
             or "command-line input" in (init.error or "")
         ):
-            if not await bootstrap_dispatcher(backend):
+            dispatcher_ok = await bootstrap_dispatcher(backend)
+            if not dispatcher_ok:
                 print("FAIL: dispatcher 引导失败")
                 return 1
         else:
@@ -145,16 +147,15 @@ async def main() -> int:
     names = (
         [item.get("name") for item in (layers.payload or {}).get("layers", [])] if layers.ok else []
     )
-    roundtrip = TEST_LAYER in names
+    roundtrip = create.ok and layers.ok and TEST_LAYER in names
     print(f"[4b] layer-list 含 {TEST_LAYER!r}: {roundtrip}  (layers={names})")
 
-    ok = init.ok or roundtrip
     print()
     print("=== Step1 结果 ===")
     print(f"窗口识别(P1-1): PASS (hwnd={hwnd})")
-    print(f"ping 往返(P0-3): {'PASS' if ok else 'FAIL'}")
+    print(f"ping 往返(P0-3): {'PASS' if dispatcher_ok else 'FAIL'}")
     print(f"中文编码往返(P0-1/P2-1): {'PASS' if roundtrip else 'FAIL'}")
-    return 0 if (ok and roundtrip) else 1
+    return 0 if (dispatcher_ok and roundtrip) else 1
 
 
 if __name__ == "__main__":
