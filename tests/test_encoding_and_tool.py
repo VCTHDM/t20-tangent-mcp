@@ -184,7 +184,7 @@ def _register_with_fake_backend(monkeypatch, backend_or_exc):
     mcp = _FakeMCP()
     register_tangent_tool(mcp)
     assert mcp.fn is not None
-    return mcp.fn
+    return mcp.fn.__wrapped__
 
 
 class _FakeBackend:

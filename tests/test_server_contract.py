@@ -10,29 +10,33 @@ from mcp import Client
 
 from t20_mcp import __version__, server
 from t20_mcp.client import _failure, _safe
+from t20_mcp.mcp_runtime import LEGACY_PROTOCOL_VERSION, MODERN_PROTOCOL_VERSION
+
+EXPECTED_TOOLS = {
+    "drawing",
+    "entity",
+    "layer",
+    "block",
+    "annotation",
+    "pid",
+    "view",
+    "system",
+    "tangent",
+}
 
 
 def test_registered_tool_names_and_mutability_annotations_are_consistent() -> None:
     tools = server.mcp._tool_manager._tools
 
-    assert set(tools) == {
-        "drawing",
-        "entity",
-        "layer",
-        "block",
-        "annotation",
-        "pid",
-        "view",
-        "system",
-        "tangent",
-    }
+    assert set(tools) == EXPECTED_TOOLS
     assert all(tool.annotations.read_only_hint is False for tool in tools.values())
+    assert tuple(spec.tool_name for spec in server.TOOL_SPECS) == tuple(tools)
 
 
 def test_mcp_2026_protocol_and_server_identity_are_advertised() -> None:
     async def exercise() -> None:
         async with Client(server.mcp, mode="auto") as client:
-            assert client.protocol_version == "2026-07-28"
+            assert client.protocol_version == MODERN_PROTOCOL_VERSION
             assert client.session.discover_result is not None
             assert client.session.initialize_result is None
             assert client.server_info is not None
@@ -42,6 +46,27 @@ def test_mcp_2026_protocol_and_server_identity_are_advertised() -> None:
             tools = await client.list_tools()
             assert tools.result_type == "complete"
             assert {tool.name for tool in tools.tools} == set(server.mcp._tool_manager._tools)
+            assert all(tool.output_schema is not None for tool in tools.tools)
+            assert all(tool.output_schema["required"] == ["ok"] for tool in tools.tools)
+
+            result = await client.call_tool(
+                "tangent",
+                {
+                    "operation": "axis_lines",
+                    "data": {"hspacings": [3000], "vspacings": [2000]},
+                },
+            )
+            assert result.result_type == "complete"
+            assert result.is_error is False
+            assert result.structured_content["ok"] is True
+            assert result.structured_content["operation"] == "axis_lines"
+            assert result.structured_content["dry_run"] is True
+
+            failure = await client.call_tool("tangent", {"operation": "bogus"})
+            assert failure.result_type == "complete"
+            assert failure.is_error is True
+            assert failure.structured_content["ok"] is False
+            assert "[tangent.bogus]" in failure.structured_content["error"]
 
     asyncio.run(exercise())
 
@@ -49,11 +74,22 @@ def test_mcp_2026_protocol_and_server_identity_are_advertised() -> None:
 def test_mcp_legacy_clients_remain_supported() -> None:
     async def exercise() -> None:
         async with Client(server.mcp, mode="legacy") as client:
-            assert client.protocol_version == "2025-11-25"
+            assert client.protocol_version == LEGACY_PROTOCOL_VERSION
             assert client.session.discover_result is None
             assert client.session.initialize_result is not None
             tools = await client.list_tools()
             assert {tool.name for tool in tools.tools} == set(server.mcp._tool_manager._tools)
+            assert all(tool.output_schema is not None for tool in tools.tools)
+
+            result = await client.call_tool(
+                "tangent",
+                {
+                    "operation": "axis_lines",
+                    "data": {"hspacings": [3000], "vspacings": [2000]},
+                },
+            )
+            assert result.is_error is False
+            assert result.structured_content["ok"] is True
 
     asyncio.run(exercise())
 

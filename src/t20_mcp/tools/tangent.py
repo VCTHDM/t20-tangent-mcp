@@ -20,6 +20,7 @@ from pathlib import Path
 from typing import Any, Callable
 
 from t20_mcp.backends.base import CommandResult
+from t20_mcp.mcp_runtime import ToolSpec
 
 # ---------------------------------------------------------------------------
 # 模板加载
@@ -1669,8 +1670,8 @@ def generate_lisp(subcommand: str, data: dict[str, Any] | None = None) -> str:
 # ---------------------------------------------------------------------------
 
 
-def register_tangent_tool(mcp: Any) -> None:
-    """在传入的 MCPServer 实例上注册 ``tangent`` consolidated 工具。"""
+def tangent_tool_spec() -> ToolSpec:
+    """构造 ``tangent`` 的业务处理器与声明式 MCP 元数据。"""
     # 延迟导入, 避免与 client 的循环依赖, 并保持纯生成逻辑可离线测试。
     from t20_mcp.client import (
         _failure,
@@ -1680,9 +1681,8 @@ def register_tangent_tool(mcp: Any) -> None:
         get_backend,
     )
 
-    @mcp.tool(annotations={"title": "Tangent (天正 T20) Operations", "read_only_hint": False})
     @_safe("tangent")
-    async def tangent(  # type: ignore[reportUnusedFunction]
+    async def tangent(
         operation: str,
         data: dict | None = None,
         execute: bool = False,
@@ -1843,4 +1843,11 @@ def register_tangent_tool(mcp: Any) -> None:
             result = CommandResult(ok=True, payload=base)
         return await add_screenshot_if_available(result, include_screenshot)
 
-    return None
+    return ToolSpec(tangent, "Tangent (天正 T20) Operations")
+
+
+def register_tangent_tool(mcp: Any) -> None:
+    """兼容入口：在传入的 MCPServer 实例上注册 ``tangent`` 工具。"""
+    from t20_mcp.mcp_runtime import register_tool
+
+    register_tool(mcp, tangent_tool_spec())

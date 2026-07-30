@@ -17,10 +17,17 @@ MCP `2026-07-28`：协议层不再使用 `initialize/notifications/initialized` 
 `2025-11-25` 旧客户端的兼容服务。
 
 `scripts/itest_19_mcp_stdio_smoke.py` 会通过真实 stdio 子进程自动协商，并硬断言
-协议版本为 `2026-07-28`、普通结果含 `resultType="complete"`、9 个工具均可列出；
-随后用独立 stdio 子进程固定验证 legacy `2025-11-25`。
+协议版本为 `2026-07-28`、普通结果含 `resultType="complete"`、9 个工具均发布
+`outputSchema`；成功结果必须带 `structuredContent.ok=true`，业务失败必须同时带
+`structuredContent.ok=false` 与 `isError=true`。随后用独立 stdio 子进程固定验证
+legacy `2025-11-25` 仍保留相同的工具与结构化结果合同。
 项目代码中的 `backend.initialize()` 与 dispatcher `ping` 是 AutoCAD/File IPC
 健康检查，不是本次规范删除的 MCP 握手或 MCP `ping` 方法。
+
+MCP 协议边界集中在 `src/t20_mcp/mcp_runtime.py`：服务身份、协议版本常量、
+`ToolSpec` 声明式注册、服务器工厂和 `CallToolResult` 转换均在此维护。9 个业务
+处理器不直接依赖服务器装饰器；它们保留原有 JSON 文本/截图行为，由线路适配器
+统一补充结构化输出并判定 `isError`，旧客户端仍可读取原来的文本 content。
 
 迁移依据：
 

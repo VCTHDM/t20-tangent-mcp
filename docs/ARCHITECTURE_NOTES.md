@@ -27,6 +27,21 @@
 `autocad-mcp`，服务版本来自 `t20_mcp.__version__`。默认协议是稳定版
 `2026-07-28`，SDK 同时服务 `2025-11-25` 及更早客户端。
 
+协议边界由 [`mcp_runtime.py`](../src/t20_mcp/mcp_runtime.py) 统一维护：
+
+- `create_server()` 负责服务身份和服务器构造，协议版本字符串集中为常量。
+- `ToolSpec` 是工具目录的声明单元；业务处理器、标题、工具名和只读提示不再散落在
+  9 组服务器装饰器中。
+- `wire_handler()` 保留业务处理器的输入签名，在返回类型上使用 SDK v2 原生
+  `Annotated[CallToolResult, ToolEnvelope]`，因此工具列表自动发布 `outputSchema`。
+- `to_call_tool_result()` 保留旧 JSON 文本和截图 content，同时把 JSON envelope
+  映射到 `structuredContent`；`ok=false` 统一映射为 `isError=true`，但不升级为
+  JSON-RPC 协议错误。
+
+业务处理器只负责 operation 分派与后端调用，不应自行构造 SDK 会话对象、复制协议
+版本或重复实现线路结果转换。`client.py` 中的 `_failure()` 和 `CommandResult`
+仍是业务/后端 envelope；只有 `mcp_runtime.py` 负责把它们变成线路对象。
+
 现代协议请求由 SDK 处理 `server/discover`、每请求协议/能力 `_meta`、必需的
 `resultType` 和完整 JSON Schema 2020-12。项目没有 MCP Roots、Sampling、Logging、
 Tasks、资源订阅或 Streamable HTTP 会话状态，因此本轮无需应用层迁移这些特性。
@@ -34,8 +49,9 @@ Tasks、资源订阅或 Streamable HTTP 会话状态，因此本轮无需应用�
 后端生命周期，不应与已经删除的 MCP `initialize` 握手和 MCP `ping` 方法混淆。
 
 真实 stdio 协议门禁是 `scripts/itest_19_mcp_stdio_smoke.py`：客户端使用自动协商，
-必须得到 `2026-07-28`，随后列出 9 个工具并完成 `tangent.axis_lines` dry-run。
-同一 smoke 再启动独立子进程，以 legacy 模式固定验证 `2025-11-25` 和工具列表；
+必须得到 `2026-07-28`，随后列出 9 个带 `outputSchema` 的工具，完成
+`tangent.axis_lines` 结构化 dry-run，并验证未知子命令设置 `isError`。同一 smoke
+再启动独立子进程，以 legacy 模式固定验证 `2025-11-25`、工具列表与结构化结果；
 离线单元测试也覆盖这两条路径。
 
 ## 3. File IPC 调度链路
@@ -102,7 +118,7 @@ GUI 指纹不匹配时必须停止并回滚；严禁 `WM_CLOSE`，严禁无边�
 - 当前交付/延后裁定：[`TODO_BACKLOG.md`](../TODO_BACKLOG.md)。
 - 当前收尾入口与验证命令：[`PROJECT_CLOSEOUT_TODO.md`](../PROJECT_CLOSEOUT_TODO.md)。
 - 真机历史证据：`docs/handoff/`，其中 Handoff 40 是最近一次完整真机回归；
-  Handoff 41 只记录 MCP 协议层迁移。
+  Handoff 41 记录 MCP 协议层迁移，Handoff 42 记录其后的 MCP 运行时封装。
 
 历史 E2E 可以说明某条路线曾在指定 AutoCAD/T20 环境通过，但不能代替本轮真机复验。
 离线测试、compileall、Ruff 与 MCP stdio smoke 也不能被表述为新的 AutoCAD/T20 E2E。
@@ -111,7 +127,8 @@ GUI 指纹不匹配时必须停止并回滚；严禁 `WM_CLOSE`，严禁无边�
 
 | 关注点 | 权威实现 |
 |---|---|
-| MCP 工具注册与兼容服务名 | `src/t20_mcp/server.py` |
+| MCP 协议边界、服务器工厂与线路结果 | `src/t20_mcp/mcp_runtime.py` |
+| 9 个工具的业务目录与通用分派 | `src/t20_mcp/server.py` |
 | 包版本 | `pyproject.toml` → `t20_mcp.__version__` |
 | 后端选择与环境变量 | `src/t20_mcp/config.py` |
 | File IPC、窗口发现和模态守卫 | `src/t20_mcp/backends/file_ipc.py` |

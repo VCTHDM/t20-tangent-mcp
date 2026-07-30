@@ -19,6 +19,10 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))  # for _live_lock
 from _live_lock import live_lock_or_exit  # noqa: E402
 from mcp import Client, StdioServerParameters  # noqa: E402
 from mcp.client.stdio import stdio_client  # noqa: E402
+from t20_mcp.mcp_runtime import (  # noqa: E402
+    LEGACY_PROTOCOL_VERSION,
+    MODERN_PROTOCOL_VERSION,
+)
 
 ROOT = Path(__file__).resolve().parent.parent
 
@@ -39,9 +43,10 @@ async def main() -> int:
         env=env,
     )
     async with Client(stdio_client(params), mode="auto") as client:
-        if client.protocol_version != "2026-07-28":
+        if client.protocol_version != MODERN_PROTOCOL_VERSION:
             print(
-                f"FAIL: negotiated MCP protocol {client.protocol_version!r}, expected '2026-07-28'"
+                f"FAIL: negotiated MCP protocol {client.protocol_version!r}, "
+                f"expected {MODERN_PROTOCOL_VERSION!r}"
             )
             return 1
         if client.session.discover_result is None or client.session.initialize_result is not None:
@@ -67,6 +72,9 @@ async def main() -> int:
         if missing:
             print(f"FAIL: missing tools: {missing}")
             return 1
+        if any(tool.output_schema is None for tool in tools.tools):
+            print("FAIL: one or more tools do not advertise outputSchema")
+            return 1
 
         result = await client.call_tool(
             "tangent",
@@ -80,6 +88,10 @@ async def main() -> int:
         if (
             result.result_type != "complete"
             or result.is_error
+            or not result.structured_content
+            or result.structured_content.get("ok") is not True
+            or result.structured_content.get("operation") != "axis_lines"
+            or result.structured_content.get("dry_run") is not True
             or not texts
             or '"operation":"axis_lines"' not in texts[0]
             or '"dry_run":true' not in texts[0]
@@ -88,11 +100,22 @@ async def main() -> int:
             return 1
         print("[tangent.axis_lines dry-run] PASS")
 
+        failure = await client.call_tool("tangent", {"operation": "bogus"})
+        if (
+            failure.result_type != "complete"
+            or not failure.is_error
+            or not failure.structured_content
+            or failure.structured_content.get("ok") is not False
+        ):
+            print(f"FAIL: failure envelope did not set isError: {failure!r}")
+            return 1
+        print("[tangent.bogus structured error] PASS")
+
     async with Client(stdio_client(params), mode="legacy") as client:
-        if client.protocol_version != "2025-11-25":
+        if client.protocol_version != LEGACY_PROTOCOL_VERSION:
             print(
                 f"FAIL: negotiated legacy MCP protocol {client.protocol_version!r}, "
-                "expected '2025-11-25'"
+                f"expected {LEGACY_PROTOCOL_VERSION!r}"
             )
             return 1
         if client.session.discover_result is not None or client.session.initialize_result is None:
@@ -102,6 +125,24 @@ async def main() -> int:
         legacy_names = {tool.name for tool in legacy_tools.tools}
         if legacy_names != expected:
             print(f"FAIL: legacy tool set mismatch: {sorted(legacy_names)!r}")
+            return 1
+        if any(tool.output_schema is None for tool in legacy_tools.tools):
+            print("FAIL: legacy tool listing lost outputSchema")
+            return 1
+        legacy_result = await client.call_tool(
+            "tangent",
+            {
+                "operation": "axis_lines",
+                "data": {"hspacings": [3000], "vspacings": [2000]},
+                "execute": False,
+            },
+        )
+        if (
+            legacy_result.is_error
+            or not legacy_result.structured_content
+            or legacy_result.structured_content.get("ok") is not True
+        ):
+            print(f"FAIL: legacy structured result mismatch: {legacy_result!r}")
             return 1
         print(f"[legacy protocol] {client.protocol_version}")
     return 0

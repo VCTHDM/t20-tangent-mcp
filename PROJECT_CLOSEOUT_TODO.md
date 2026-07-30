@@ -6,7 +6,8 @@
 > 收尾前后的完整证据保存在 `docs/handoff/38_opening_mode_gate.md`、
 > `docs/handoff/39_opening_mode_automation.md`、
 > `docs/handoff/40_repository_audit_fresh_e2e.md`、
-> `docs/handoff/41_mcp_2026_07_28_protocol.md` 及 Git 历史中。
+> `docs/handoff/41_mcp_2026_07_28_protocol.md`、
+> `docs/handoff/42_mcp_runtime_encapsulation.md` 及 Git 历史中。
 
 ## 1. 当前基线
 
@@ -21,14 +22,13 @@
 - 门窗正式链路会自动切换面板模式，创建后仍以 DXF group71（门=0、窗=1）验真；
   错误实体必须删除并返回结构化失败。
 - 项目目标是安全封装高价值 T20 命令，不是覆盖官方 454 条命令表。
-- 第一批仓库收敛已提交为 `75dbc6c`；未推送远端。
-- 第二批真机测试加固与 Handoff 40 当前尚未再次提交。
-- 当前离线基线为 `269 passed`；2026-07-26 的 fresh 真机覆盖仍为 33/33 子命令，
-  证据强度和保留边界见 Handoff 40。本次协议层迁移未改 File IPC、LISP、T20
-  命令序列或 GUI 自动化，因此没有把历史真机结果冒充为 2026-07-29 新复验。
+- 当前离线基线为 `273 passed`；2026-07-26 的 fresh 真机覆盖仍为 33/33 子命令，
+  证据强度和保留边界见 Handoff 40。本次协议迁移与运行时封装未改 File IPC、
+  LISP、T20 命令序列或 GUI 自动化，因此没有把历史真机结果冒充为
+  2026-07-29 新复验。
 
-上述数字只代表 2026-07-26 本轮结果；后续修改仍以当次命令输出为准。Handoff 39
-中的测试计数只表示 2026-07-24 当次基线。
+`273 passed` 是 2026-07-29 的离线基线；33/33 只代表 2026-07-26 的真机结果。
+后续修改仍以当次命令输出为准，历史 handoff 中的旧计数只表示各自当次基线。
 
 ## 2. 权威文档
 
@@ -59,10 +59,13 @@
   并显式发布 `autocad-mcp` 服务身份和 `3.2.0` 服务版本。
 - Python 类型字段切换到 v2 snake_case；SDK 继续在线路上输出规范要求的 camelCase。
 - stdio smoke 使用 v2 高层 `Client` 自动探测 `server/discover`，硬断言
-  `2026-07-28`、`resultType="complete"`、9 个工具和 tangent dry-run，并以独立
-  stdio 子进程验证 legacy `2025-11-25`。
+  `2026-07-28`、`resultType="complete"`、9 个工具、`outputSchema`、结构化
+  tangent dry-run 和失败 `isError`，并以独立 stdio 子进程验证 legacy
+  `2025-11-25`。
 - 离线测试固定覆盖现代 `2026-07-28` 与 legacy `2025-11-25` 两条协议路径。
-- 迁移记录追加为 Handoff 41；没有回写 Handoff 40 的历史真机证据。
+- 服务构造、协议常量、声明式 `ToolSpec` 注册与 `CallToolResult` 线路转换集中到
+  `mcp_runtime.py`；业务函数不再直接绑定服务器装饰器。
+- 迁移与封装记录分别追加为 Handoff 41、42；没有回写 Handoff 40 的历史真机证据。
 
 ## 5. 后续变更顺序
 
@@ -92,7 +95,8 @@ git diff --check
 验收重点：
 
 - stdio smoke 必须协商到 `2026-07-28`、列出预期 9 个工具，并通过
-  `tangent.axis_lines` dry-run；随后必须以 legacy `2025-11-25` 再列出相同工具集。
+  `tangent.axis_lines` 结构化 dry-run 与失败 `isError`；随后必须以 legacy
+  `2025-11-25` 再验证相同工具集、`outputSchema` 和结构化结果。
 - 文档/配置变更也必须通过 Ruff、测试、compileall 和 diff check。
 - 失败先修复；不得用历史绿灯代替本轮结果。
 
